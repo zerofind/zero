@@ -7,9 +7,7 @@ use std::path::Path;
 /// Open a file or folder with the default application.
 pub fn open_path(path: &Path) {
     // Use `open` command as a simple fallback
-    let _ = std::process::Command::new("open")
-        .arg(path)
-        .spawn();
+    let _ = std::process::Command::new("open").arg(path).spawn();
 }
 
 /// Reveal a file in Finder (select it in its parent folder).

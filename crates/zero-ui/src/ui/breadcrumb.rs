@@ -71,43 +71,46 @@ impl RenderOnce for Breadcrumb {
             .items_center()
             .gap_1()
             .text_size(FONT_SIZE_BODY)
-            .children(segments.into_iter().enumerate().map(
-                move |(i, (name, full_path))| {
-                    let is_last = i == last_idx;
-                    let handler = handler.clone();
-                    let text_color = if is_last {
-                        cx.theme().foreground
-                    } else {
-                        muted
-                    };
+            .children(
+                segments
+                    .into_iter()
+                    .enumerate()
+                    .map(move |(i, (name, full_path))| {
+                        let is_last = i == last_idx;
+                        let handler = handler.clone();
+                        let text_color = if is_last {
+                            cx.theme().foreground
+                        } else {
+                            muted
+                        };
 
-                    div()
-                        .flex()
-                        .flex_row()
-                        .items_center()
-                        .gap_1()
-                        .when(i > 0, |el| {
-                            el.child(
-                                Icon::new(IconName::ChevronRight)
-                                    .with_size(px(10.0))
-                                    .text_color(muted),
-                            )
-                        })
-                        .child(
-                            div()
-                                .id(SharedString::from(format!("crumb-{i}")))
-                                .cursor_pointer()
-                                .text_color(text_color)
-                                .hover(|s| s.text_color(theme::brand_color()))
-                                .when_some(handler, |el, h| {
-                                    let path = full_path.clone();
-                                    el.on_click(move |event, window, cx| {
-                                        h(&path, event, window, cx);
+                        div()
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .gap_1()
+                            .when(i > 0, |el| {
+                                el.child(
+                                    Icon::new(IconName::ChevronRight)
+                                        .with_size(px(10.0))
+                                        .text_color(muted),
+                                )
+                            })
+                            .child(
+                                div()
+                                    .id(SharedString::from(format!("crumb-{i}")))
+                                    .cursor_pointer()
+                                    .text_color(text_color)
+                                    .hover(|s| s.text_color(theme::brand_color()))
+                                    .when_some(handler, |el, h| {
+                                        let path = full_path.clone();
+                                        el.on_click(move |event, window, cx| {
+                                            h(&path, event, window, cx);
+                                        })
                                     })
-                                })
-                                .child(SharedString::from(name)),
-                        )
-                },
-            ))
+                                    .child(SharedString::from(name)),
+                            )
+                    }),
+            )
     }
 }

@@ -1,4 +1,4 @@
-use gpui::{px, Hsla, Pixels};
+use gpui::{Hsla, Pixels, px};
 use gpui_component::ActiveTheme as _;
 
 use super::selection_color;

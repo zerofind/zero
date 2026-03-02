@@ -153,18 +153,18 @@ fn cmd_watch_latency(out: &Outputter, path: PathBuf, iterations: usize) -> anyho
                     .paths
                     .iter()
                     .any(|p| p.ends_with(".zero_latency_test"))
-                {
-                    let latency = start.elapsed();
-                    latencies.push(latency);
-                    out.info(&format!(
-                        "  Iteration {}: {:>6.2}ms ({:?})",
-                        i + 1,
-                        latency.as_secs_f64() * 1000.0,
-                        event.kind
-                    ));
-                    detected = true;
-                    break;
-                }
+            {
+                let latency = start.elapsed();
+                latencies.push(latency);
+                out.info(&format!(
+                    "  Iteration {}: {:>6.2}ms ({:?})",
+                    i + 1,
+                    latency.as_secs_f64() * 1000.0,
+                    event.kind
+                ));
+                detected = true;
+                break;
+            }
         }
 
         if !detected {
@@ -215,4 +215,3 @@ fn cmd_watch_latency(out: &Outputter, path: PathBuf, iterations: usize) -> anyho
 
     Ok(())
 }
-

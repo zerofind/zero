@@ -28,7 +28,7 @@ fn test_usage_calculation() {
     let pct = volume.usage_percent();
 
     assert!(used <= volume.size_bytes);
-    assert!(pct >= 0.0 && pct <= 100.0);
+    assert!((0.0..=100.0).contains(&pct));
 }
 
 #[test]

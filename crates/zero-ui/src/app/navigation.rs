@@ -70,8 +70,12 @@ impl ZeroApp {
         cx.notify();
     }
 
-    pub fn can_go_back(&self) -> bool { self.history_idx > 0 }
-    pub fn can_go_forward(&self) -> bool { self.history_idx + 1 < self.history.len() }
+    pub fn can_go_back(&self) -> bool {
+        self.history_idx > 0
+    }
+    pub fn can_go_forward(&self) -> bool {
+        self.history_idx + 1 < self.history.len()
+    }
 
     pub fn ensure_sidebar(
         &mut self,
@@ -100,8 +104,11 @@ impl ZeroApp {
     }
 
     fn on_sidebar_event(
-        &mut self, _: &Entity<AppSidebar>, event: &SidebarEvent,
-        window: &mut Window, cx: &mut Context<Self>,
+        &mut self,
+        _: &Entity<AppSidebar>,
+        event: &SidebarEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
     ) {
         match event {
             SidebarEvent::Navigate(view) => {
@@ -170,8 +177,11 @@ impl ZeroApp {
     }
 
     fn on_file_browser_event(
-        &mut self, _: &Entity<FileBrowserView>, event: &FileBrowserEvent,
-        _window: &mut Window, cx: &mut Context<Self>,
+        &mut self,
+        _: &Entity<FileBrowserView>,
+        event: &FileBrowserEvent,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
     ) {
         match event {
             FileBrowserEvent::NavigateToDir(path) => self.navigate_to(path.clone(), cx),
@@ -201,7 +211,9 @@ impl ZeroApp {
                     cx,
                 );
             }
-            FileBrowserEvent::PasteFinished => { self.clear_banner(cx); }
+            FileBrowserEvent::PasteFinished => {
+                self.clear_banner(cx);
+            }
             FileBrowserEvent::NewTodoFile(path) => {
                 // Open the new .todo file in the Todo view
                 self.todo = None; // Reset so it recreates fresh
@@ -269,16 +281,28 @@ impl ZeroApp {
         }
     }
 
-    pub fn ensure_cleanup(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> Entity<CleanupView> {
-        if let Some(view) = &self.cleanup { return view.clone(); }
+    pub fn ensure_cleanup(
+        &mut self,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Entity<CleanupView> {
+        if let Some(view) = &self.cleanup {
+            return view.clone();
+        }
         let search = self.services.search.clone();
         let view = cx.new(|cx| CleanupView::new(search, cx));
         self.cleanup = Some(view.clone());
         view
     }
 
-    pub fn ensure_dedup(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<DedupView> {
-        if let Some(view) = &self.dedup { return view.clone(); }
+    pub fn ensure_dedup(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Entity<DedupView> {
+        if let Some(view) = &self.dedup {
+            return view.clone();
+        }
         let view = cx.new(DedupView::new);
         let sub = cx.subscribe_in(&view, window, Self::on_dedup_event);
         self._subs.push(sub);
@@ -287,8 +311,11 @@ impl ZeroApp {
     }
 
     fn on_dedup_event(
-        &mut self, _: &Entity<DedupView>, event: &DedupEvent,
-        _window: &mut Window, cx: &mut Context<Self>,
+        &mut self,
+        _: &Entity<DedupView>,
+        event: &DedupEvent,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
     ) {
         match event {
             DedupEvent::ScanStarted(progress) => {
@@ -306,7 +333,9 @@ impl ZeroApp {
     }
 
     pub fn ensure_todo(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<TodoView> {
-        if let Some(view) = &self.todo { return view.clone(); }
+        if let Some(view) = &self.todo {
+            return view.clone();
+        }
         let view = cx.new(|cx| TodoView::new(window, cx));
         self.todo = Some(view.clone());
         view
@@ -331,8 +360,11 @@ impl ZeroApp {
     }
 
     fn on_settings_event(
-        &mut self, _: &Entity<SettingsView>, event: &SettingsEvent,
-        _window: &mut Window, cx: &mut Context<Self>,
+        &mut self,
+        _: &Entity<SettingsView>,
+        event: &SettingsEvent,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
     ) {
         match event {
             SettingsEvent::IndexRebuildStarted(progress) => {
@@ -349,15 +381,27 @@ impl ZeroApp {
         }
     }
 
-    pub fn ensure_secure_erase(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<SecureEraseView> {
-        if let Some(view) = &self.secure_erase { return view.clone(); }
+    pub fn ensure_secure_erase(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Entity<SecureEraseView> {
+        if let Some(view) = &self.secure_erase {
+            return view.clone();
+        }
         let view = cx.new(|cx| SecureEraseView::new(window, cx));
         self.secure_erase = Some(view.clone());
         view
     }
 
-    pub fn ensure_automations(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> Entity<AutomationsView> {
-        if let Some(view) = &self.automations { return view.clone(); }
+    pub fn ensure_automations(
+        &mut self,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Entity<AutomationsView> {
+        if let Some(view) = &self.automations {
+            return view.clone();
+        }
         let view = cx.new(AutomationsView::new);
         self.automations = Some(view.clone());
         view
@@ -385,8 +429,11 @@ impl ZeroApp {
     }
 
     fn on_editor_event(
-        &mut self, _: &Entity<EditorView>, event: &EditorEvent,
-        window: &mut Window, cx: &mut Context<Self>,
+        &mut self,
+        _: &Entity<EditorView>,
+        event: &EditorEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
     ) {
         match event {
             EditorEvent::Close => {
@@ -430,8 +477,11 @@ impl ZeroApp {
     }
 
     fn on_palette_event(
-        &mut self, _: &Entity<PaletteView>, event: &PaletteEvent,
-        window: &mut Window, cx: &mut Context<Self>,
+        &mut self,
+        _: &Entity<PaletteView>,
+        event: &PaletteEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
     ) {
         match event {
             PaletteEvent::Dismiss => {
@@ -450,9 +500,7 @@ impl ZeroApp {
                         return;
                     }
                     if let Some(app_path) = path_str.strip_prefix("app://") {
-                        crate::services::AppService::launch(
-                            &std::path::PathBuf::from(app_path),
-                        );
+                        crate::services::AppService::launch(&std::path::PathBuf::from(app_path));
                         self.focus_content(window, cx);
                         cx.notify();
                         return;
@@ -531,15 +579,22 @@ impl ZeroApp {
     }
 
     fn on_file_grid_event(
-        &mut self, _: &Entity<FileGridView>, event: &FileGridEvent,
-        _window: &mut Window, cx: &mut Context<Self>,
+        &mut self,
+        _: &Entity<FileGridView>,
+        event: &FileGridEvent,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
     ) {
         match event {
             FileGridEvent::NavigateToDir(path) => self.navigate_to(path.clone(), cx),
         }
     }
 
-    pub fn ensure_drives_popover(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<DrivesPopover> {
+    pub fn ensure_drives_popover(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Entity<DrivesPopover> {
         if let Some(view) = &self.drives_popover {
             view.update(cx, |v, cx| v.refresh(cx));
             return view.clone();
@@ -552,8 +607,11 @@ impl ZeroApp {
     }
 
     fn on_drives_popover_event(
-        &mut self, _: &Entity<DrivesPopover>, event: &DrivesPopoverEvent,
-        window: &mut Window, cx: &mut Context<Self>,
+        &mut self,
+        _: &Entity<DrivesPopover>,
+        event: &DrivesPopoverEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
     ) {
         match event {
             DrivesPopoverEvent::Dismiss => {
@@ -601,5 +659,4 @@ impl ZeroApp {
             }
         }
     }
-
 }

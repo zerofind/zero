@@ -2,9 +2,9 @@
 
 use std::path::Path;
 use std::time::Instant;
+use zero::cmd_success;
 use zero::differ::{DiffOptions, DiffStatus, diff_with_options};
 use zero::hasher::HashAlgorithm;
-use zero::cmd_success;
 use zero::output::*;
 use zero::scanner::{ScanOptions, scan_collect};
 use zero::transfer::compare_permissions;
@@ -145,22 +145,40 @@ pub fn cmd_diff(
             out.newline();
             out.info("Changes:");
             for entry in result.entries_by_status(DiffStatus::Added).take(20) {
-                out.indented(&format!("{} {}", entry.status.symbol(), entry.path.display()));
+                out.indented(&format!(
+                    "{} {}",
+                    entry.status.symbol(),
+                    entry.path.display()
+                ));
             }
             if result.added_count > 20 {
                 out.indented(&format!("... and {} more added", result.added_count - 20));
             }
             for entry in result.entries_by_status(DiffStatus::Removed).take(20) {
-                out.indented(&format!("{} {}", entry.status.symbol(), entry.path.display()));
+                out.indented(&format!(
+                    "{} {}",
+                    entry.status.symbol(),
+                    entry.path.display()
+                ));
             }
             if result.removed_count > 20 {
-                out.indented(&format!("... and {} more removed", result.removed_count - 20));
+                out.indented(&format!(
+                    "... and {} more removed",
+                    result.removed_count - 20
+                ));
             }
             for entry in result.entries_by_status(DiffStatus::Modified).take(20) {
-                out.indented(&format!("{} {}", entry.status.symbol(), entry.path.display()));
+                out.indented(&format!(
+                    "{} {}",
+                    entry.status.symbol(),
+                    entry.path.display()
+                ));
             }
             if result.modified_count > 20 {
-                out.indented(&format!("... and {} more modified", result.modified_count - 20));
+                out.indented(&format!(
+                    "... and {} more modified",
+                    result.modified_count - 20
+                ));
             }
         } else {
             out.newline();

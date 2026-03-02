@@ -39,8 +39,9 @@ impl DedupView {
                         if !view.scanning {
                             return false;
                         }
-                        let phase =
-                            poll_progress.phase.load(std::sync::atomic::Ordering::Acquire);
+                        let phase = poll_progress
+                            .phase
+                            .load(std::sync::atomic::Ordering::Acquire);
                         let status = match phase {
                             0 => {
                                 let files = poll_progress
@@ -80,18 +81,21 @@ impl DedupView {
 
         // Background scan
         cx.spawn(async move |this, cx| {
-            let result = cx.background_executor().spawn(async move {
-                let options = match filter {
-                    DedupFilter::All => zero::dedup::DedupOptions::default(),
-                    DedupFilter::Images => zero::dedup::DedupOptions::images(),
-                    DedupFilter::Videos => zero::dedup::DedupOptions::videos(),
-                    DedupFilter::Audio => zero::dedup::DedupOptions::audio(),
-                    DedupFilter::Documents => zero::dedup::DedupOptions::documents(),
-                    DedupFilter::Code => zero::dedup::DedupOptions::code(),
-                    DedupFilter::Archives => zero::dedup::DedupOptions::archives(),
-                };
-                zero::dedup::find_duplicates_with_progress(&path, options, Some(progress))
-            }).await;
+            let result = cx
+                .background_executor()
+                .spawn(async move {
+                    let options = match filter {
+                        DedupFilter::All => zero::dedup::DedupOptions::default(),
+                        DedupFilter::Images => zero::dedup::DedupOptions::images(),
+                        DedupFilter::Videos => zero::dedup::DedupOptions::videos(),
+                        DedupFilter::Audio => zero::dedup::DedupOptions::audio(),
+                        DedupFilter::Documents => zero::dedup::DedupOptions::documents(),
+                        DedupFilter::Code => zero::dedup::DedupOptions::code(),
+                        DedupFilter::Archives => zero::dedup::DedupOptions::archives(),
+                    };
+                    zero::dedup::find_duplicates_with_progress(&path, options, Some(progress))
+                })
+                .await;
 
             this.update(cx, |view, cx| {
                 view.scanning = false;
@@ -111,7 +115,9 @@ impl DedupView {
                                 files: if let Some(ref k) = keeper {
                                     // Reorder: put keeper first
                                     let mut files = vec![k.clone()];
-                                    files.extend(g.files.into_iter().filter(|f| Some(f) != keeper.as_ref()));
+                                    files.extend(
+                                        g.files.into_iter().filter(|f| Some(f) != keeper.as_ref()),
+                                    );
                                     files
                                 } else {
                                     g.files

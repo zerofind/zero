@@ -118,7 +118,9 @@ fn test_multiple_displays_sequential() {
     let progress2 = Arc::new(AtomicProgress::new(20, 2000));
 
     // First display
-    let display1 = ProgressDisplay::builder(progress1).with_prefix("First").start();
+    let display1 = ProgressDisplay::builder(progress1)
+        .with_prefix("First")
+        .start();
     display1.stop();
 
     // Second display

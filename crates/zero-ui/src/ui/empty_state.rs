@@ -1,6 +1,6 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
-use gpui_component::{v_flex, ActiveTheme, Icon, IconName, Sizable as _};
+use gpui_component::{ActiveTheme, Icon, IconName, Sizable as _, v_flex};
 
 use crate::theme::{FONT_SIZE_BODY, FONT_SIZE_CALLOUT};
 

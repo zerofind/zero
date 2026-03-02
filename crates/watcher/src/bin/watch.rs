@@ -9,8 +9,8 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
-use zero_watcher::{FileWatchConfig, FileWatcher, UsbWatcher};
 use tracing_subscriber::EnvFilter;
+use zero_watcher::{FileWatchConfig, FileWatcher, UsbWatcher};
 
 #[derive(Parser)]
 #[command(name = "zero-watch")]

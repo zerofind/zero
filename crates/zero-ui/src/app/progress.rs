@@ -132,8 +132,7 @@ impl ZeroApp {
                         if files > 0 {
                             let files_str = crate::ui::format_number(files);
                             let bytes_str = crate::ui::format_bytes(bytes);
-                            banner.phase =
-                                Some(format!("{} files · {}", files_str, bytes_str));
+                            banner.phase = Some(format!("{} files · {}", files_str, bytes_str));
                         }
 
                         cx.notify();
@@ -183,9 +182,10 @@ impl ZeroApp {
                         };
 
                         let phase = progress.phase.load(std::sync::atomic::Ordering::Acquire);
-                        let files = progress.files_found.load(
-                            std::sync::atomic::Ordering::Relaxed,
-                        ) as u64;
+                        let files = progress
+                            .files_found
+                            .load(std::sync::atomic::Ordering::Relaxed)
+                            as u64;
 
                         banner.files_done = files;
 
@@ -199,12 +199,12 @@ impl ZeroApp {
                             }
                             1 => {
                                 let pct = progress.hash_percent();
-                                let done = progress.bytes_hashed.load(
-                                    std::sync::atomic::Ordering::Relaxed,
-                                );
-                                let total = progress.bytes_to_hash.load(
-                                    std::sync::atomic::Ordering::Relaxed,
-                                );
+                                let done = progress
+                                    .bytes_hashed
+                                    .load(std::sync::atomic::Ordering::Relaxed);
+                                let total = progress
+                                    .bytes_to_hash
+                                    .load(std::sync::atomic::Ordering::Relaxed);
                                 banner.indeterminate = false;
                                 banner.bytes_done = done;
                                 banner.bytes_total = total;

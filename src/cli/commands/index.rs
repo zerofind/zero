@@ -122,8 +122,8 @@ pub fn cmd_index(out: &Outputter, opts: &IndexOptions<'_>) -> anyhow::Result<()>
     // All other modes need the database
     out.header(&format!("Index {}", path.display()));
 
-    let control_db = ControlDb::open()
-        .map_err(|e| anyhow::anyhow!("Failed to open control database: {}", e))?;
+    let control_db =
+        ControlDb::open().map_err(|e| anyhow::anyhow!("Failed to open control database: {}", e))?;
     out.info(&format!("Database: {}", control_db.db_path().display()));
 
     let canonical_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
@@ -165,9 +165,15 @@ pub fn cmd_index(out: &Outputter, opts: &IndexOptions<'_>) -> anyhow::Result<()>
             .map_err(|e| anyhow::anyhow!("Failed to get stats: {}", e))?;
 
         out.info("Index Statistics:");
-        out.kv("Files indexed", format_count(cache_stats.file_count as usize));
+        out.kv(
+            "Files indexed",
+            format_count(cache_stats.file_count as usize),
+        );
         out.kv("Total bytes", format_bytes(cache_stats.total_bytes as u64));
-        out.kv("Files with hash", format_count(cache_stats.hashed_count as usize));
+        out.kv(
+            "Files with hash",
+            format_count(cache_stats.hashed_count as usize),
+        );
         let coverage = if cache_stats.file_count == 0 {
             0.0
         } else {
@@ -208,7 +214,8 @@ pub fn cmd_index(out: &Outputter, opts: &IndexOptions<'_>) -> anyhow::Result<()>
         let mut total_listed = 0;
 
         loop {
-            let files = storage_db.list_files(limit, offset)
+            let files = storage_db
+                .list_files(limit, offset)
                 .map_err(|e| anyhow::anyhow!("Failed to list files: {}", e))?;
 
             if files.is_empty() {
@@ -318,7 +325,8 @@ pub fn cmd_index(out: &Outputter, opts: &IndexOptions<'_>) -> anyhow::Result<()>
                     hashed_bytes += file.size;
 
                     if batch.should_flush() {
-                        storage_db.flush_batch(&mut batch)
+                        storage_db
+                            .flush_batch(&mut batch)
                             .map_err(|e| anyhow::anyhow!("Failed to flush batch: {}", e))?;
                     }
                 }
@@ -330,14 +338,16 @@ pub fn cmd_index(out: &Outputter, opts: &IndexOptions<'_>) -> anyhow::Result<()>
             }
         }
 
-        storage_db.flush_batch(&mut batch)
+        storage_db
+            .flush_batch(&mut batch)
             .map_err(|e| anyhow::anyhow!("Failed to flush batch: {}", e))?;
 
         let hash_duration = hash_start.elapsed();
 
         let file_count = storage_db.count_files().unwrap_or(0);
         let total_bytes_cached = storage_db.total_bytes().unwrap_or(0);
-        control_db.update_storage_stats(storage.id, file_count, total_bytes_cached)
+        control_db
+            .update_storage_stats(storage.id, file_count, total_bytes_cached)
             .ok();
 
         out.newline();
@@ -362,9 +372,7 @@ pub fn cmd_index(out: &Outputter, opts: &IndexOptions<'_>) -> anyhow::Result<()>
             let rel_path = file.path.to_string_lossy().to_string();
             let mtime = file.mtime as i64;
 
-            match storage_db
-                .lookup_valid_file(&rel_path, file.size as i64, mtime)
-            {
+            match storage_db.lookup_valid_file(&rel_path, file.size as i64, mtime) {
                 Ok(Some(_)) => cache_hits += 1,
                 Ok(None) => cache_misses += 1,
                 Err(_) => cache_misses += 1,
@@ -435,18 +443,15 @@ pub fn cmd_index(out: &Outputter, opts: &IndexOptions<'_>) -> anyhow::Result<()>
                 let rel_path = file.path.to_string_lossy().to_string();
                 let mtime = file.mtime as i64;
 
-                let entry = CacheEntry::with_xxh3(
-                    rel_path,
-                    file.size as i64,
-                    mtime,
-                    result.hash.clone(),
-                );
+                let entry =
+                    CacheEntry::with_xxh3(rel_path, file.size as i64, mtime, result.hash.clone());
                 batch.add(entry);
                 hashed_count += 1;
                 hashed_bytes += file.size;
 
                 if batch.should_flush() {
-                    storage_db.flush_batch(&mut batch)
+                    storage_db
+                        .flush_batch(&mut batch)
                         .map_err(|e| anyhow::anyhow!("Failed to flush batch: {}", e))?;
                 }
             }
@@ -462,14 +467,16 @@ pub fn cmd_index(out: &Outputter, opts: &IndexOptions<'_>) -> anyhow::Result<()>
         std::io::stdout().flush().ok();
     }
 
-    storage_db.flush_batch(&mut batch)
+    storage_db
+        .flush_batch(&mut batch)
         .map_err(|e| anyhow::anyhow!("Failed to flush batch: {}", e))?;
 
     let hash_duration = hash_start.elapsed();
 
     let file_count = storage_db.count_files().unwrap_or(0);
     let total_bytes_cached = storage_db.total_bytes().unwrap_or(0);
-    control_db.update_storage_stats(storage.id, file_count, total_bytes_cached)
+    control_db
+        .update_storage_stats(storage.id, file_count, total_bytes_cached)
         .ok();
 
     out.newline();

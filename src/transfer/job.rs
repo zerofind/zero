@@ -190,9 +190,10 @@ impl TransferJob {
 
                 // Create parent directory if needed
                 if let Some(parent) = dest_path.parent()
-                    && !parent.exists() {
-                        let _ = fs::create_dir_all(parent);
-                    }
+                    && !parent.exists()
+                {
+                    let _ = fs::create_dir_all(parent);
+                }
 
                 // Pre-allocate destination file
                 if file.size > 0 {
@@ -261,9 +262,10 @@ impl TransferJob {
 /// Pre-allocate a file to the given size
 fn preallocate_file(path: &Path, size: u64) -> std::io::Result<()> {
     if let Some(parent) = path.parent()
-        && !parent.exists() {
-            fs::create_dir_all(parent)?;
-        }
+        && !parent.exists()
+    {
+        fs::create_dir_all(parent)?;
+    }
     let file = fs::File::create(path)?;
     file.set_len(size)?;
     Ok(())

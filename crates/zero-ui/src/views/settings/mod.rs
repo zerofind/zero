@@ -7,13 +7,14 @@ use std::time::Duration;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
+use gpui_component::theme::{Theme, ThemeMode};
 use gpui_component::{
+    Sizable as _,
     button::{Button, ButtonVariants as _},
     h_flex,
     input::InputState,
-    v_flex, Sizable as _,
+    v_flex,
 };
-use gpui_component::theme::{Theme, ThemeMode};
 
 use zero::scanner::CrawlProgress;
 
@@ -66,14 +67,9 @@ pub struct SettingsView {
 }
 
 impl SettingsView {
-    pub fn new(
-        search: Entity<SearchService>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Self {
-        let root_input = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("~/Documents, ~/Photos, ...")
-        });
+    pub fn new(search: Entity<SearchService>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let root_input =
+            cx.new(|cx| InputState::new(window, cx).placeholder("~/Documents, ~/Photos, ..."));
 
         let file_count = search.read(cx).file_count();
 
@@ -184,7 +180,10 @@ impl SettingsView {
     }
 
     pub(super) fn reindex_root(&mut self, idx: usize, cx: &mut Context<Self>) {
-        if self.reindexing_root.is_some() || self.reindexing_all || idx >= self.settings.search_roots.len() {
+        if self.reindexing_root.is_some()
+            || self.reindexing_all
+            || idx >= self.settings.search_roots.len()
+        {
             return;
         }
         self.reindexing_root = Some(idx);
@@ -289,11 +288,7 @@ impl SettingsView {
 // -- Render ------------------------------------------------------------------
 
 impl Render for SettingsView {
-    fn render(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let active_tab = self.active_tab;
         let tab_buttons = self.render_tab_buttons(cx).into_any_element();
         let content = match active_tab {

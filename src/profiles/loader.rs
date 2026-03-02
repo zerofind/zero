@@ -160,12 +160,13 @@ pub fn load_file_types() -> ProfileResult<&'static FileTypesProfile> {
             let user_file = user_dir.join("file_types.toml");
             if user_file.exists()
                 && let Ok(content) = fs::read_to_string(&user_file)
-                    && let Ok(user_profile) = toml::from_str::<FileTypesProfile>(&content) {
-                        // Merge user types into profile (user wins on conflicts)
-                        for (key, value) in user_profile.types {
-                            profile.types.insert(key, value);
-                        }
-                    }
+                && let Ok(user_profile) = toml::from_str::<FileTypesProfile>(&content)
+            {
+                // Merge user types into profile (user wins on conflicts)
+                for (key, value) in user_profile.types {
+                    profile.types.insert(key, value);
+                }
+            }
         }
 
         Ok(profile)
@@ -225,17 +226,19 @@ pub fn load_cleanup_for_os(os: Os) -> ProfileResult<MergedCleanupProfile> {
         let user_shared_file = cleanup_dir.join("shared.toml");
         if user_shared_file.exists()
             && let Ok(content) = fs::read_to_string(&user_shared_file)
-                && let Ok(user_shared) = toml::from_str::<CleanupProfile>(&content) {
-                    merge_user_cleanup_profile(&mut merged, user_shared, os)?;
-                }
+            && let Ok(user_shared) = toml::from_str::<CleanupProfile>(&content)
+        {
+            merge_user_cleanup_profile(&mut merged, user_shared, os)?;
+        }
 
         // Load user {os}.toml
         let user_os_file = cleanup_dir.join(os.profile_filename());
         if user_os_file.exists()
             && let Ok(content) = fs::read_to_string(&user_os_file)
-                && let Ok(user_os) = toml::from_str::<CleanupProfile>(&content) {
-                    merge_user_cleanup_profile(&mut merged, user_os, os)?;
-                }
+            && let Ok(user_os) = toml::from_str::<CleanupProfile>(&content)
+        {
+            merge_user_cleanup_profile(&mut merged, user_os, os)?;
+        }
     }
 
     Ok(merged)

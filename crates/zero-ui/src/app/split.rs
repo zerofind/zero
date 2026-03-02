@@ -70,11 +70,7 @@ impl ZeroApp {
         }
     }
 
-    pub fn render_split_pane(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
+    pub fn render_split_pane(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let view = self.ensure_split_browser(window, cx);
         div().flex_1().size_full().child(view).into_any_element()
     }

@@ -8,11 +8,11 @@ use std::time::Instant;
 
 use anyhow::{Context, Result};
 
+use super::cloud::parse_storage_path;
 use zero::output::*;
 use zero::progress::AtomicProgress;
 use zero::storage::{ListOptions, StorageBackend, StorageEntry};
 use zero::sync::{SyncJob, SyncOptions, SyncPhase};
-use super::cloud::parse_storage_path;
 
 pub struct CmdSyncOptions<'a> {
     pub source: &'a str,
@@ -168,15 +168,16 @@ fn cmd_sync_local(
         // Log transfer progress
         if progress.phase == SyncPhase::Transferring
             && let Some(ref current) = progress.current_file
-                && (progress.files_done % 10 == 0 || progress.files_done == progress.total_files) {
-                    println!(
-                        "[{}/{}] {:.1}% - {}",
-                        progress.files_done,
-                        progress.total_files,
-                        progress.percent(),
-                        current.display()
-                    );
-                }
+            && (progress.files_done % 10 == 0 || progress.files_done == progress.total_files)
+        {
+            println!(
+                "[{}/{}] {:.1}% - {}",
+                progress.files_done,
+                progress.total_files,
+                progress.percent(),
+                current.display()
+            );
+        }
     })?;
 
     let duration_ms = result.duration.as_millis() as u64;
@@ -406,9 +407,11 @@ fn matches_exclude_pattern(path: &str, patterns: &[String]) -> bool {
                 }
                 // Also check just the filename
                 if let Some(filename) = path.rsplit('/').next()
-                    && filename.starts_with(prefix) && filename.ends_with(suffix) {
-                        return true;
-                    }
+                    && filename.starts_with(prefix)
+                    && filename.ends_with(suffix)
+                {
+                    return true;
+                }
             }
         } else {
             // Exact match or path component match

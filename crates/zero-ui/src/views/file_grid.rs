@@ -53,11 +53,7 @@ impl FileGridView {
 }
 
 impl Render for FileGridView {
-    fn render(
-        &mut self,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .id("file-grid")
             .track_focus(&self.focus_handle)
@@ -84,9 +80,7 @@ impl Render for FileGridView {
                     .gap_1()
                     .rounded(RADIUS)
                     .cursor_pointer()
-                    .when(is_selected, |el| {
-                        el.bg(theme::surface_active(cx))
-                    })
+                    .when(is_selected, |el| el.bg(theme::surface_active(cx)))
                     .hover(|s| s.bg(theme::surface_hover(cx)))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.selected = vec![i];
@@ -102,10 +96,7 @@ impl Render for FileGridView {
                             .flex()
                             .items_center()
                             .justify_center()
-                            .child(FileIcon::new(
-                                entry.extension.as_deref(),
-                                entry.is_dir,
-                            )),
+                            .child(FileIcon::new(entry.extension.as_deref(), entry.is_dir)),
                     )
                     .child(
                         div()

@@ -4,11 +4,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use gpui_component::{
+    ActiveTheme, Icon, IconName, Sizable as _,
     button::{Button, ButtonVariants as _},
-    h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable as _,
+    h_flex, v_flex,
 };
 
-use crate::theme::{self, brand_color, FONT_SIZE_BODY, FONT_SIZE_CAPTION, RADIUS};
+use crate::theme::{self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, RADIUS, brand_color};
 use crate::ui::format::format_bytes;
 
 // -- Types -------------------------------------------------------------------
@@ -146,8 +147,8 @@ impl DrivesPopover {
 
     /// Fetch automations + run history from the DB on a background thread.
     fn fetch_db_data() -> Result<(Vec<DriveAutomation>, Vec<RunInfo>), String> {
-        let db = zero::cache::CacheDb::open()
-            .map_err(|e| format!("Failed to open database: {e}"))?;
+        let db =
+            zero::cache::CacheDb::open().map_err(|e| format!("Failed to open database: {e}"))?;
 
         // Load automations and build name lookup + DriveAutomation list
         let automations = db
@@ -161,15 +162,11 @@ impl DrivesPopover {
             name_by_id.push((auto.id, auto.name.clone()));
 
             // Build dest mount path from dest_path or dest_volume_name
-            let dest = auto
-                .dest_path
-                .as_deref()
-                .map(PathBuf::from)
-                .or_else(|| {
-                    auto.dest_volume_name
-                        .as_deref()
-                        .map(|v| PathBuf::from(format!("/Volumes/{v}")))
-                });
+            let dest = auto.dest_path.as_deref().map(PathBuf::from).or_else(|| {
+                auto.dest_volume_name
+                    .as_deref()
+                    .map(|v| PathBuf::from(format!("/Volumes/{v}")))
+            });
 
             if let Some(dest_mount) = dest {
                 drive_autos.push(DriveAutomation {
@@ -277,11 +274,7 @@ impl DrivesPopover {
 // -- Rendering ---------------------------------------------------------------
 
 impl Render for DrivesPopover {
-    fn render(
-        &mut self,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let muted = cx.theme().muted_foreground;
 
         let internal: Vec<_> = self.drives.iter().filter(|d| !d.is_external).collect();
@@ -367,15 +360,10 @@ impl Render for DrivesPopover {
                             .child("EXTERNAL"),
                     )
                 })
-                .children(
-                    external
-                        .iter()
-                        .enumerate()
-                        .map(|(i, d)| {
-                            let drive_autos = self.automations_for_drive(&d.mount_point);
-                            Self::render_drive_with_automations(i, d, true, &drive_autos, muted, cx)
-                        }),
-                )
+                .children(external.iter().enumerate().map(|(i, d)| {
+                    let drive_autos = self.automations_for_drive(&d.mount_point);
+                    Self::render_drive_with_automations(i, d, true, &drive_autos, muted, cx)
+                }))
                 .when(external.is_empty(), |el| {
                     el.child(
                         div()
@@ -498,17 +486,19 @@ impl DrivesPopover {
                             })
                             .when(is_external, |el| {
                                 el.child(
-                                    Button::new(SharedString::from(format!("eject-{prefix}-{idx}")))
-                                        .ghost()
-                                        .compact()
-                                        .small()
-                                        .icon(IconName::Minus)
-                                        .tooltip("Eject")
-                                        .on_click(cx.listener(move |_, _, _, cx| {
-                                            cx.emit(DrivesPopoverEvent::EjectDrive(
-                                                eject_mount.clone(),
-                                            ));
-                                        })),
+                                    Button::new(SharedString::from(format!(
+                                        "eject-{prefix}-{idx}"
+                                    )))
+                                    .ghost()
+                                    .compact()
+                                    .small()
+                                    .icon(IconName::Minus)
+                                    .tooltip("Eject")
+                                    .on_click(cx.listener(move |_, _, _, cx| {
+                                        cx.emit(DrivesPopoverEvent::EjectDrive(
+                                            eject_mount.clone(),
+                                        ));
+                                    })),
                                 )
                             }),
                     )
@@ -568,11 +558,7 @@ impl DrivesPopover {
                     .py_1()
                     .gap_2()
                     .items_center()
-                    .child(
-                        Icon::new(IconName::Folder)
-                            .size(px(12.0))
-                            .text_color(muted),
-                    )
+                    .child(Icon::new(IconName::Folder).size(px(12.0)).text_color(muted))
                     .child(
                         div()
                             .flex_1()

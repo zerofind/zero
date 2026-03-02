@@ -345,11 +345,11 @@ pub fn get_file_hash_cached(
     let mtime = file.mtime as i64;
 
     // Try cache first
-    if let Ok(Some(cached)) = db
-        .lookup_valid_file(rel_path, file.size as i64, mtime)
-        && let Some(hash) = cached.hash_xxh3_hex() {
-            return Ok((hash, true)); // Cache hit
-        }
+    if let Ok(Some(cached)) = db.lookup_valid_file(rel_path, file.size as i64, mtime)
+        && let Some(hash) = cached.hash_xxh3_hex()
+    {
+        return Ok((hash, true)); // Cache hit
+    }
 
     // Cache miss - compute hash
     let full_path = storage_path.join(rel_path);

@@ -72,10 +72,7 @@ pub mod type_index;
 mod watcher;
 
 pub use etch::{open_index_store, save_index_via_etch};
-pub use manager::{
-    IndexManager, RootStats, SharedIndexManager, default_indexes_dir,
-    hash_path,
-};
+pub use manager::{IndexManager, RootStats, SharedIndexManager, default_indexes_dir, hash_path};
 pub use node::{FileNode, NodeType};
 pub use search::{IndexError, SearchIndex, SearchOptions, SearchQuery, SearchResult, SortBy};
 pub use type_index::{FileTypeCategory, TypeIndex, TypeIndexStats};

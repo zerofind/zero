@@ -207,11 +207,7 @@ fn snapshot_preserves_bitmaps() {
                     300,
                     1700000001,
                 ));
-                tx.put_node(&FileNode::directory(
-                    "src".into(),
-                    "src".into(),
-                    1700000000,
-                ));
+                tx.put_node(&FileNode::directory("src".into(), "src".into(), 1700000000));
                 Ok(())
             })
             .unwrap();

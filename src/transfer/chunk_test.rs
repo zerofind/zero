@@ -332,7 +332,7 @@ fn test_copy_error_read_error() {
 fn test_copy_error_write_error() {
     let err = CopyError::WriteError {
         path: "/test/dest".to_string(),
-        source: std::io::Error::new(std::io::ErrorKind::Other, "write failed"),
+        source: std::io::Error::other("write failed"),
     };
     let display = format!("{}", err);
     assert!(display.contains("/test/dest"));

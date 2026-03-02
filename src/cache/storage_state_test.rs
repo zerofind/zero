@@ -5,7 +5,12 @@ use tempfile::TempDir;
 
 use super::storage_state::{CachedFileEntry, StorageState, open_storage_store};
 
-fn test_entry(path: &str, size: i64, xxh3: Option<&[u8]>, blake3: Option<&[u8]>) -> CachedFileEntry {
+fn test_entry(
+    path: &str,
+    size: i64,
+    xxh3: Option<&[u8]>,
+    blake3: Option<&[u8]>,
+) -> CachedFileEntry {
     CachedFileEntry {
         path: path.to_string(),
         size,
@@ -245,8 +250,18 @@ fn snapshot_rebuilds_indexes() {
 
         store
             .write(|tx| {
-                tx.put(&test_entry("dup1.txt", 1024, Some(&hash_xxh3), Some(&hash_blake3)));
-                tx.put(&test_entry("dup2.txt", 1024, Some(&hash_xxh3), Some(&hash_blake3)));
+                tx.put(&test_entry(
+                    "dup1.txt",
+                    1024,
+                    Some(&hash_xxh3),
+                    Some(&hash_blake3),
+                ));
+                tx.put(&test_entry(
+                    "dup2.txt",
+                    1024,
+                    Some(&hash_xxh3),
+                    Some(&hash_blake3),
+                ));
                 tx.put(&test_entry("other.txt", 2048, None, None));
                 Ok(())
             })

@@ -1,6 +1,6 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
-use gpui_component::{h_flex, ActiveTheme};
+use gpui_component::{ActiveTheme, h_flex};
 
 use crate::theme::{self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, RADIUS};
 use crate::ui::FileIcon;
@@ -53,14 +53,9 @@ impl RenderOnce for PaletteItem {
             .items_center()
             .rounded(RADIUS)
             .cursor_pointer()
-            .when(self.selected, |el| {
-                el.bg(theme::surface_active(cx))
-            })
+            .when(self.selected, |el| el.bg(theme::surface_active(cx)))
             .hover(|s| s.bg(theme::surface_hover(cx)))
-            .child(FileIcon::new(
-                self.extension.as_deref(),
-                self.is_dir,
-            ))
+            .child(FileIcon::new(self.extension.as_deref(), self.is_dir))
             .child(
                 div()
                     .flex_1()

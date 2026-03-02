@@ -136,9 +136,10 @@ impl Outputter {
             OutputMode::Human => {
                 // Human mode already printed everything, just show final status if error
                 if !response.success
-                    && let Some(ref err) = response.error {
-                        eprintln!("Error: {}", err.message);
-                    }
+                    && let Some(ref err) = response.error
+                {
+                    eprintln!("Error: {}", err.message);
+                }
             }
             OutputMode::Json => {
                 // Print the full JSON response
@@ -163,17 +164,19 @@ impl Outputter {
     /// Output a progress event (JSON mode only, for streaming)
     pub fn progress(&self, info: &ProgressInfo) {
         if self.mode == OutputMode::Json
-            && let Ok(json) = serde_json::to_string(info) {
-                println!("{{\"type\":\"progress\",{}}}", &json[1..json.len() - 1]);
-            }
+            && let Ok(json) = serde_json::to_string(info)
+        {
+            println!("{{\"type\":\"progress\",{}}}", &json[1..json.len() - 1]);
+        }
     }
 
     /// Output any serializable data as JSON (JSON mode only)
     pub fn json<T: Serialize>(&self, data: &T) {
         if self.mode == OutputMode::Json
-            && let Ok(json) = serde_json::to_string_pretty(data) {
-                println!("{}", json);
-            }
+            && let Ok(json) = serde_json::to_string_pretty(data)
+        {
+            println!("{}", json);
+        }
     }
 }
 

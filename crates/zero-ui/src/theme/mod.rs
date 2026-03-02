@@ -22,7 +22,7 @@ pub use surface::*;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use gpui::{px, Pixels};
+use gpui::{Pixels, px};
 use gpui_component::theme::{Theme, ThemeMode, ThemeRegistry, ThemeSet};
 
 // -- Zero theme JSON ----------------------------------------------------------

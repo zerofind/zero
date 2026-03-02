@@ -469,15 +469,17 @@ impl<'a> ProfileCleanupQuery<'a> {
     ) -> bool {
         // Size filter
         if let Some(min) = min_size
-            && node.size < min {
-                return false;
-            }
+            && node.size < min
+        {
+            return false;
+        }
 
         // Age filter (mtime must be older than cutoff)
         if let Some(cutoff) = cutoff_time
-            && node.mtime > cutoff {
-                return false;
-            }
+            && node.mtime > cutoff
+        {
+            return false;
+        }
 
         true
     }

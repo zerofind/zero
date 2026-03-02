@@ -1,9 +1,8 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use gpui_component::{
-    h_flex,
+    ActiveTheme, Icon, IconName, InteractiveElementExt as _, Sizable as _, h_flex,
     table::{Column, ColumnSort, TableDelegate, TableState},
-    ActiveTheme, Icon, IconName, InteractiveElementExt as _, Sizable as _,
 };
 
 use crate::models::{SortDirection, SortField};
@@ -51,8 +50,9 @@ impl FileBrowserDelegate {
             .map(|col_ix| {
                 let (field, name, width) = self.column_for_index(col_ix);
                 let name_owned = name.to_string();
-                let mut col =
-                    Column::new(name_owned.clone(), name_owned).width(width).sortable();
+                let mut col = Column::new(name_owned.clone(), name_owned)
+                    .width(width)
+                    .sortable();
                 if col_ix == 2 {
                     col = col.text_right();
                 }
@@ -142,19 +142,13 @@ impl TableDelegate for FileBrowserDelegate {
                             div()
                                 .id(("chevron", row_ix))
                                 .cursor_pointer()
-                                .child(
-                                    Icon::new(icon)
-                                        .with_size(px(10.0))
-                                        .text_color(muted),
-                                )
+                                .child(Icon::new(icon).with_size(px(10.0)).text_color(muted))
                                 .on_click(move |_, _, cx| {
                                     table.update(cx, |state, cx| {
                                         let delegate = state.delegate_mut();
                                         let was_expanded = delegate.entries[row_ix].expanded;
-                                        let count = state::toggle_expand(
-                                            &mut delegate.entries,
-                                            row_ix,
-                                        );
+                                        let count =
+                                            state::toggle_expand(&mut delegate.entries, row_ix);
 
                                         if was_expanded {
                                             // Collapsed: remove selections in removed range, shift down
@@ -181,10 +175,7 @@ impl TableDelegate for FileBrowserDelegate {
                         )
                     })
                     .when(!is_dir, |el| el.child(div().w(px(10.0))))
-                    .child(FileIcon::new(
-                        entry.extension.as_deref(),
-                        entry.is_dir,
-                    ))
+                    .child(FileIcon::new(entry.extension.as_deref(), entry.is_dir))
                     .child(
                         div()
                             .text_size(FONT_SIZE_BODY)

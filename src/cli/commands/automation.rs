@@ -146,8 +146,16 @@ fn cmd_automation_show(out: &Outputter, id: i64) -> anyhow::Result<()> {
         Some(a) => a,
         None => {
             let msg = format!("Automation not found: {}", id);
-            cmd_error!(out, "automation show", start.elapsed().as_millis() as u64, "NOT_FOUND", msg);
-            if out.is_json() { return Ok(()); }
+            cmd_error!(
+                out,
+                "automation show",
+                start.elapsed().as_millis() as u64,
+                "NOT_FOUND",
+                msg
+            );
+            if out.is_json() {
+                return Ok(());
+            }
             return Err(anyhow::anyhow!("Automation not found: {}", id));
         }
     };
@@ -421,8 +429,16 @@ fn cmd_automation_delete(out: &Outputter, id: i64) -> anyhow::Result<()> {
         Some(a) => a,
         None => {
             let msg = format!("Automation not found: {}", id);
-            cmd_error!(out, "automation delete", start.elapsed().as_millis() as u64, "NOT_FOUND", msg);
-            if out.is_json() { return Ok(()); }
+            cmd_error!(
+                out,
+                "automation delete",
+                start.elapsed().as_millis() as u64,
+                "NOT_FOUND",
+                msg
+            );
+            if out.is_json() {
+                return Ok(());
+            }
             return Err(anyhow::anyhow!("Automation not found: {}", id));
         }
     };
@@ -452,8 +468,16 @@ async fn cmd_automation_run(out: &Outputter, id: i64) -> anyhow::Result<()> {
         Some(a) => a,
         None => {
             let msg = format!("Automation not found: {}", id);
-            cmd_error!(out, "automation run", start.elapsed().as_millis() as u64, "NOT_FOUND", msg);
-            if out.is_json() { return Ok(()); }
+            cmd_error!(
+                out,
+                "automation run",
+                start.elapsed().as_millis() as u64,
+                "NOT_FOUND",
+                msg
+            );
+            if out.is_json() {
+                return Ok(());
+            }
             return Err(anyhow::anyhow!("Automation not found: {}", id));
         }
     };
@@ -472,8 +496,13 @@ async fn cmd_automation_run(out: &Outputter, id: i64) -> anyhow::Result<()> {
     let duration_ms = start.elapsed().as_millis() as u64;
 
     if run_id.is_empty() {
-        cmd_error!(out, "automation run", duration_ms, "DEST_UNAVAILABLE",
-            "Automation did not start (destination may not be available)");
+        cmd_error!(
+            out,
+            "automation run",
+            duration_ms,
+            "DEST_UNAVAILABLE",
+            "Automation did not start (destination may not be available)"
+        );
         return Ok(());
     }
 
@@ -553,8 +582,16 @@ fn cmd_automation_history(out: &Outputter, id: i64, limit: i64) -> anyhow::Resul
         Some(a) => a,
         None => {
             let msg = format!("Automation not found: {}", id);
-            cmd_error!(out, "automation history", start.elapsed().as_millis() as u64, "NOT_FOUND", msg);
-            if out.is_json() { return Ok(()); }
+            cmd_error!(
+                out,
+                "automation history",
+                start.elapsed().as_millis() as u64,
+                "NOT_FOUND",
+                msg
+            );
+            if out.is_json() {
+                return Ok(());
+            }
             return Err(anyhow::anyhow!("Automation not found: {}", id));
         }
     };

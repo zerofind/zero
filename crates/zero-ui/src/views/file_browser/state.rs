@@ -89,29 +89,23 @@ pub fn load_directory(dir: &Path) -> Vec<BrowserEntry> {
         .flatten()
         .filter(|e| {
             // Skip hidden files
-            !e.file_name()
-                .to_string_lossy()
-                .starts_with('.')
+            !e.file_name().to_string_lossy().starts_with('.')
         })
         .filter_map(|e| BrowserEntry::from_fs(&e.path(), 0))
         .collect();
 
     // Directories first, then alphabetical
     entries.sort_by(|a, b| {
-        b.is_dir.cmp(&a.is_dir).then_with(|| {
-            a.name.to_lowercase().cmp(&b.name.to_lowercase())
-        })
+        b.is_dir
+            .cmp(&a.is_dir)
+            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
     });
 
     entries
 }
 
 /// Sort entries by the given field and direction.
-pub fn sort_entries(
-    entries: &mut [BrowserEntry],
-    field: SortField,
-    direction: SortDirection,
-) {
+pub fn sort_entries(entries: &mut [BrowserEntry], field: SortField, direction: SortDirection) {
     entries.sort_by(|a, b| {
         // Directories always come first
         let dir_order = b.is_dir.cmp(&a.is_dir);

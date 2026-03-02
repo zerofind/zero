@@ -19,11 +19,7 @@ pub struct SidebarRow {
 }
 
 impl SidebarRow {
-    pub fn new(
-        id: impl Into<ElementId>,
-        label: impl Into<SharedString>,
-        icon: IconName,
-    ) -> Self {
+    pub fn new(id: impl Into<ElementId>, label: impl Into<SharedString>, icon: IconName) -> Self {
         Self {
             id: id.into(),
             label: label.into(),
@@ -81,11 +77,7 @@ impl RenderOnce for SidebarRow {
                     handler(event, window, cx);
                 })
             })
-            .child(
-                Icon::new(self.icon)
-                    .xsmall()
-                    .text_color(icon_color),
-            )
+            .child(Icon::new(self.icon).xsmall().text_color(icon_color))
             .child(
                 div()
                     .overflow_hidden()

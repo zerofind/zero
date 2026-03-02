@@ -54,7 +54,7 @@ fn test_sync_already_synced() {
 
     // First sync
     let job = SyncJob::new(&source, &dest, SyncOptions::default()).unwrap();
-    job.run(|_| {}).unwrap();
+    let _ = job.run(|_| {}).unwrap();
 
     // Second sync - should be no-op
     let job2 = SyncJob::new(&source, &dest, SyncOptions::default()).unwrap();
@@ -75,7 +75,7 @@ fn test_sync_with_changes() {
 
     // First sync
     let job = SyncJob::new(&source, &dest, SyncOptions::default()).unwrap();
-    job.run(|_| {}).unwrap();
+    let _ = job.run(|_| {}).unwrap();
 
     // Modify a file in source
     std::thread::sleep(std::time::Duration::from_millis(10)); // Ensure mtime differs
@@ -116,7 +116,7 @@ fn test_sync_delete_orphans() {
 
     // First sync
     let job = SyncJob::new(&source, &dest, SyncOptions::default()).unwrap();
-    job.run(|_| {}).unwrap();
+    let _ = job.run(|_| {}).unwrap();
 
     // Delete a file from source
     fs::remove_file(source.join("file2.txt")).unwrap();

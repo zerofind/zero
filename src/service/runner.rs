@@ -13,8 +13,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use zero_watcher::{FileWatchConfig, FileWatcher, UsbEventKind, UsbWatcher};
 use tokio::sync::mpsc;
+use zero_watcher::{FileWatchConfig, FileWatcher, UsbEventKind, UsbWatcher};
 
 use crate::automation::{AutomationEvent, Executor, ExecutorConfig};
 use crate::cache::CacheDb;
@@ -108,7 +108,9 @@ async fn async_service_loop(
     let file_count = handler.index_file_count().await;
 
     // Get automation count
-    let automations_count = handler.db().list_automations()
+    let automations_count = handler
+        .db()
+        .list_automations()
         .map(|a| a.len() as u64)
         .unwrap_or(0);
 

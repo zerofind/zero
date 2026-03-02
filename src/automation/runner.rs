@@ -10,8 +10,7 @@ use std::path::{Path, PathBuf};
 use tokio::sync::mpsc;
 
 use crate::cache::{
-    Automation, PathMapping, PathProgress, PathStatus, Progress, ResultSummary, RunResult,
-    Settings,
+    Automation, PathMapping, PathProgress, PathStatus, Progress, ResultSummary, RunResult, Settings,
 };
 use crate::hasher::HashAlgorithm;
 use crate::scanner::{ScanOptions, scan_collect};
@@ -47,11 +46,9 @@ impl Executor {
         let initial_progress = self.build_initial_progress(automation, mount_point)?;
 
         // Create run record
-        let run = self.db.start_run(
-            automation.id,
-            trigger,
-            Some(initial_progress.clone()),
-        )?;
+        let run = self
+            .db
+            .start_run(automation.id, trigger, Some(initial_progress.clone()))?;
 
         tracing::info!(
             "Started run {} for automation '{}' (trigger: {:?})",

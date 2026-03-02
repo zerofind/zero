@@ -15,12 +15,11 @@ impl Replayable for SearchIndex {
         for op in ops {
             match op {
                 Op::Put { value, .. } => {
-                    let node: FileNode = postcard::from_bytes(value).map_err(|e| {
-                        etchdb::Error::WalCorrupted {
+                    let node: FileNode =
+                        postcard::from_bytes(value).map_err(|e| etchdb::Error::WalCorrupted {
                             offset: 0,
                             reason: format!("bad file node: {e}"),
-                        }
-                    })?;
+                        })?;
                     self.insert(node);
                 }
                 Op::Delete { key, .. } => {

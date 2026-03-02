@@ -3,11 +3,12 @@ use std::path::PathBuf;
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use gpui_component::{
+    ActiveTheme, Disableable as _, Sizable as _,
     button::{Button, ButtonVariants as _},
-    h_flex, v_flex, ActiveTheme, Disableable as _, Sizable as _,
+    h_flex, v_flex,
 };
 
-use crate::theme::{self, brand_color, FONT_SIZE_BODY, FONT_SIZE_CAPTION, RADIUS_LG};
+use crate::theme::{self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, RADIUS_LG, brand_color};
 
 // -- Events ------------------------------------------------------------------
 
@@ -71,18 +72,12 @@ impl OnboardingView {
 }
 
 impl Render for OnboardingView {
-    fn render(
-        &mut self,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let muted = cx.theme().muted_foreground;
 
         let step_content: AnyElement = match self.step {
             Step::Welcome => self.render_welcome(muted, cx).into_any_element(),
-            Step::GrantAccess => {
-                self.render_grant_access(muted, cx).into_any_element()
-            }
+            Step::GrantAccess => self.render_grant_access(muted, cx).into_any_element(),
             Step::Complete => self.render_complete(muted, cx).into_any_element(),
         };
 
@@ -113,11 +108,7 @@ impl Render for OnboardingView {
 }
 
 impl OnboardingView {
-    fn render_welcome(
-        &mut self,
-        muted: Hsla,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    fn render_welcome(&mut self, muted: Hsla, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .gap_4()
             .child(
@@ -129,15 +120,10 @@ impl OnboardingView {
                             .font_weight(FontWeight::BOLD)
                             .child("Welcome to Zero"),
                     )
-                    .child(
-                        div()
-                            .text_size(FONT_SIZE_BODY)
-                            .text_color(muted)
-                            .child(
-                                "A privacy-first Finder replacement. \
+                    .child(div().text_size(FONT_SIZE_BODY).text_color(muted).child(
+                        "A privacy-first Finder replacement. \
                                  All search is 100% local \u{2014} nothing leaves your Mac.",
-                            ),
-                    ),
+                    )),
             )
             .child(
                 v_flex().gap_1().children(
@@ -151,11 +137,7 @@ impl OnboardingView {
                         h_flex()
                             .gap_2()
                             .items_center()
-                            .child(
-                                div()
-                                    .text_color(brand_color())
-                                    .child("\u{2713}"),
-                            )
+                            .child(div().text_color(brand_color()).child("\u{2713}"))
                             .child(
                                 v_flex()
                                     .child(
@@ -200,11 +182,7 @@ impl OnboardingView {
             )
     }
 
-    fn render_grant_access(
-        &mut self,
-        muted: Hsla,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    fn render_grant_access(&mut self, muted: Hsla, cx: &mut Context<Self>) -> impl IntoElement {
         let folder_rows: Vec<_> = self
             .selected_roots
             .iter()
@@ -216,11 +194,7 @@ impl OnboardingView {
                     .bg(cx.theme().secondary)
                     .gap_2()
                     .items_center()
-                    .child(
-                        div()
-                            .text_color(brand_color())
-                            .child("\u{1F4C1}"),
-                    )
+                    .child(div().text_color(brand_color()).child("\u{1F4C1}"))
                     .child(
                         div()
                             .flex_1()
@@ -244,15 +218,10 @@ impl OnboardingView {
                             .font_weight(FontWeight::BOLD)
                             .child("Choose Folders to Index"),
                     )
-                    .child(
-                        div()
-                            .text_size(FONT_SIZE_BODY)
-                            .text_color(muted)
-                            .child(
-                                "Select which folders Zero should index for instant search. \
+                    .child(div().text_size(FONT_SIZE_BODY).text_color(muted).child(
+                        "Select which folders Zero should index for instant search. \
                                  Your home directory is recommended.",
-                            ),
-                    ),
+                    )),
             )
             .when(has_folders, |el| {
                 el.child(v_flex().gap_1().children(folder_rows))
@@ -294,11 +263,7 @@ impl OnboardingView {
             )
     }
 
-    fn render_complete(
-        &mut self,
-        muted: Hsla,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    fn render_complete(&mut self, muted: Hsla, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .gap_4()
             .child(
@@ -310,15 +275,10 @@ impl OnboardingView {
                             .font_weight(FontWeight::BOLD)
                             .child("You're All Set!"),
                     )
-                    .child(
-                        div()
-                            .text_size(FONT_SIZE_BODY)
-                            .text_color(muted)
-                            .child(
-                                "Zero is indexing your files in the background. \
+                    .child(div().text_size(FONT_SIZE_BODY).text_color(muted).child(
+                        "Zero is indexing your files in the background. \
                                  You can start using the app right away.",
-                            ),
-                    ),
+                    )),
             )
             .child(
                 h_flex().justify_end().child(

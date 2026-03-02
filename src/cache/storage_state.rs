@@ -234,20 +234,20 @@ impl StorageState {
 
     /// Remove old entry from secondary indexes
     fn remove_from_indexes(&mut self, path: &str, entry: &CachedFileEntry) {
-        if let Some(ref hash) = entry.hash_xxh3 {
-            if let Some(paths) = self.by_hash_xxh3.get_mut(hash) {
-                paths.retain(|p| p != path);
-                if paths.is_empty() {
-                    self.by_hash_xxh3.remove(hash);
-                }
+        if let Some(ref hash) = entry.hash_xxh3
+            && let Some(paths) = self.by_hash_xxh3.get_mut(hash)
+        {
+            paths.retain(|p| p != path);
+            if paths.is_empty() {
+                self.by_hash_xxh3.remove(hash);
             }
         }
-        if let Some(ref hash) = entry.hash_blake3 {
-            if let Some(paths) = self.by_hash_blake3.get_mut(hash) {
-                paths.retain(|p| p != path);
-                if paths.is_empty() {
-                    self.by_hash_blake3.remove(hash);
-                }
+        if let Some(ref hash) = entry.hash_blake3
+            && let Some(paths) = self.by_hash_blake3.get_mut(hash)
+        {
+            paths.retain(|p| p != path);
+            if paths.is_empty() {
+                self.by_hash_blake3.remove(hash);
             }
         }
         if let Some(paths) = self.by_size.get_mut(&entry.size) {
@@ -265,21 +265,14 @@ impl StorageState {
 
     /// Lookup a file only if valid (size+mtime match)
     pub fn get_valid(&self, path: &str, size: i64, mtime: i64) -> Option<&CachedFileEntry> {
-        self.files
-            .get(path)
-            .filter(|e| e.is_valid_for(size, mtime))
+        self.files.get(path).filter(|e| e.is_valid_for(size, mtime))
     }
 
     /// Find files by XXH3 hash
     pub fn find_by_hash_xxh3(&self, hash: &[u8]) -> Vec<&CachedFileEntry> {
         self.by_hash_xxh3
             .get(hash)
-            .map(|paths| {
-                paths
-                    .iter()
-                    .filter_map(|p| self.files.get(p))
-                    .collect()
-            })
+            .map(|paths| paths.iter().filter_map(|p| self.files.get(p)).collect())
             .unwrap_or_default()
     }
 
@@ -287,12 +280,7 @@ impl StorageState {
     pub fn find_by_hash_blake3(&self, hash: &[u8]) -> Vec<&CachedFileEntry> {
         self.by_hash_blake3
             .get(hash)
-            .map(|paths| {
-                paths
-                    .iter()
-                    .filter_map(|p| self.files.get(p))
-                    .collect()
-            })
+            .map(|paths| paths.iter().filter_map(|p| self.files.get(p)).collect())
             .unwrap_or_default()
     }
 
@@ -300,12 +288,7 @@ impl StorageState {
     pub fn find_by_size(&self, size: i64) -> Vec<&CachedFileEntry> {
         self.by_size
             .get(&size)
-            .map(|paths| {
-                paths
-                    .iter()
-                    .filter_map(|p| self.files.get(p))
-                    .collect()
-            })
+            .map(|paths| paths.iter().filter_map(|p| self.files.get(p)).collect())
             .unwrap_or_default()
     }
 

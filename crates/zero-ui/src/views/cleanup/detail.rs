@@ -1,13 +1,14 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use gpui_component::{
+    ActiveTheme, Disableable as _, IconName, Sizable as _,
     button::{Button, ButtonVariants as _},
     checkbox::Checkbox,
-    h_flex, v_flex, ActiveTheme, Disableable as _, IconName, Sizable as _,
+    h_flex, v_flex,
 };
 
 use crate::theme::{self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, RADIUS};
-use crate::ui::{format_size, ConfirmDialog};
+use crate::ui::{ConfirmDialog, format_size};
 
 use super::view::CleanupView;
 
@@ -89,7 +90,9 @@ pub(super) fn render_detail_view(
                         .rounded(RADIUS)
                         .cursor_pointer()
                         .when(is_focused, |el| el.bg(theme::surface_hover(cx)))
-                        .when(!is_focused, |el| el.hover(|s| s.bg(theme::surface_hover(cx))))
+                        .when(!is_focused, |el| {
+                            el.hover(|s| s.bg(theme::surface_hover(cx)))
+                        })
                         .on_click(cx.listener(move |this, _, _, cx| {
                             this.detail_focused = Some(i);
                             this.toggle_detail_file(i, cx);
@@ -193,16 +196,13 @@ pub(super) fn render_detail_view(
                                         .font_weight(FontWeight::SEMIBOLD)
                                         .child(SharedString::from(cat_name)),
                                 )
-                                .child(
-                                    div()
-                                        .text_size(FONT_SIZE_CAPTION)
-                                        .text_color(muted)
-                                        .child(SharedString::from(format!(
-                                            "{} files  {}",
-                                            file_count,
-                                            format_size(total_bytes),
-                                        ))),
-                                ),
+                                .child(div().text_size(FONT_SIZE_CAPTION).text_color(muted).child(
+                                    SharedString::from(format!(
+                                        "{} files  {}",
+                                        file_count,
+                                        format_size(total_bytes),
+                                    )),
+                                )),
                         )
                         .child(
                             h_flex()

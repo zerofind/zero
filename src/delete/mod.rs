@@ -546,7 +546,7 @@ mod tests {
         let result = delete_path(&file_path, &DeleteOptions::default()).unwrap();
 
         assert!(!file_path.exists());
-        assert_eq!(result.is_dir, false);
+        assert!(!result.is_dir);
     }
 
     #[test]
@@ -561,7 +561,7 @@ mod tests {
         let result = delete_path(&sub_dir, &DeleteOptions::default()).unwrap();
 
         assert!(!sub_dir.exists());
-        assert_eq!(result.is_dir, true);
+        assert!(result.is_dir);
         assert_eq!(result.item_count, 1);
     }
 
@@ -584,7 +584,7 @@ mod tests {
         assert_eq!(preview.len(), 1);
         assert!(preview[0].exists);
         assert!(preview[0].can_delete);
-        assert_eq!(preview[0].is_dir, false);
+        assert!(!preview[0].is_dir);
     }
 
     #[test]

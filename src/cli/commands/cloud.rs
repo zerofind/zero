@@ -572,9 +572,10 @@ async fn download_single_file(
 
     // Create parent directories if needed
     if let Some(parent) = dest_path.parent()
-        && !parent.exists() {
-            std::fs::create_dir_all(parent)?;
-        }
+        && !parent.exists()
+    {
+        std::fs::create_dir_all(parent)?;
+    }
 
     // Write to local file
     std::fs::write(dest_path, &data)?;
@@ -695,9 +696,10 @@ async fn download_directory(
 
         // Create parent directories
         if let Some(parent) = file_dest_path.parent()
-            && !parent.exists() {
-                std::fs::create_dir_all(parent)?;
-            }
+            && !parent.exists()
+        {
+            std::fs::create_dir_all(parent)?;
+        }
 
         // Download file
         let data = src.read(&file_src_path).await.map_err(anyhow::Error::msg)?;

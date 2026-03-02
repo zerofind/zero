@@ -1,4 +1,4 @@
-use gpui::{hsla, Hsla};
+use gpui::{Hsla, hsla};
 use gpui_component::ActiveTheme;
 
 // -- Brand colors -------------------------------------------------------------

@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
-use gpui_component::{h_flex, v_flex, ActiveTheme};
+use gpui_component::{ActiveTheme, h_flex, v_flex};
 
 use crate::actions::{
     GoBack, GoForward, GoUp, OpenCommandPalette, PasteFiles, ToggleSidebar, ToggleSplitView,
@@ -238,11 +238,7 @@ impl ZeroApp {
         }
     }
 
-    pub fn open_command_palette(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    pub fn open_command_palette(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.command_palette_open = true;
         let palette = self.ensure_command_palette(window, cx);
         palette.update(cx, |view, cx| view.reset(window, cx));
@@ -268,11 +264,7 @@ impl ZeroApp {
         .detach();
     }
 
-    fn render_content(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
+    fn render_content(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         match &self.active_view {
             ActiveView::FileBrowser => match self.view_mode {
                 ViewMode::List => {
@@ -318,11 +310,7 @@ impl ZeroApp {
 }
 
 impl Render for ZeroApp {
-    fn render(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let sidebar_open = self.sidebar_open;
         let palette_open = self.command_palette_open;
         let banner = self.banner.clone();
@@ -409,12 +397,7 @@ impl Render for ZeroApp {
                             .when(sidebar_open, |el| el.rounded_tl(px(5.0)))
                             .overflow_hidden()
                             .child(titlebar)
-                            .child(
-                                div()
-                                    .w_full()
-                                    .h(px(2.0))
-                                    .bg(theme::selection_color()),
-                            )
+                            .child(div().w_full().h(px(2.0)).bg(theme::selection_color()))
                             .when_some(banner, |el, data| {
                                 el.child(div().px_3().py_1().child(ProgressBanner::new(data)))
                             })
@@ -424,13 +407,8 @@ impl Render for ZeroApp {
                                     .overflow_hidden()
                                     .child(content)
                                     .when_some(split_content, |el, right| {
-                                        el.child(
-                                            div()
-                                                .w(px(1.0))
-                                                .h_full()
-                                                .bg(cx.theme().border),
-                                        )
-                                        .child(right)
+                                        el.child(div().w(px(1.0)).h_full().bg(cx.theme().border))
+                                            .child(right)
                                     }),
                             ),
                     ),

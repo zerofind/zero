@@ -3,14 +3,16 @@ use std::path::PathBuf;
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use gpui_component::{
-    h_flex,
+    ActiveTheme, Icon, IconName, Sizable as _, h_flex,
     input::{Input, InputState},
-    v_flex, ActiveTheme, Icon, IconName, Sizable as _,
+    v_flex,
 };
 
-use crate::services::{AppService, SearchService};
 use crate::services::apps::AppEntry;
-use crate::theme::{self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, MODAL_PALETTE_WIDTH, RADIUS, RADIUS_LG};
+use crate::services::{AppService, SearchService};
+use crate::theme::{
+    self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, MODAL_PALETTE_WIDTH, RADIUS, RADIUS_LG,
+};
 
 use super::items::PaletteItem;
 
@@ -34,17 +36,61 @@ struct PaletteAction {
 }
 
 const DEFAULT_ACTIONS: &[PaletteAction] = &[
-    PaletteAction { name: "Settings", icon: || IconName::Settings, path: "action://settings" },
-    PaletteAction { name: "Storage Cleanup", icon: || IconName::Delete, path: "action://cleanup" },
-    PaletteAction { name: "Find Duplicates", icon: || IconName::File, path: "action://dedup" },
-    PaletteAction { name: "Tasks", icon: || IconName::Check, path: "action://todo" },
-    PaletteAction { name: "Secure Erase", icon: || IconName::Delete, path: "action://secure_erase" },
-    PaletteAction { name: "Automations", icon: || IconName::Settings, path: "action://automations" },
-    PaletteAction { name: "Search Images", icon: || IconName::Eye, path: "type://images" },
-    PaletteAction { name: "Search Videos", icon: || IconName::Eye, path: "type://videos" },
-    PaletteAction { name: "Search Audio", icon: || IconName::Search, path: "type://audio" },
-    PaletteAction { name: "Search Documents", icon: || IconName::File, path: "type://documents" },
-    PaletteAction { name: "Search Code", icon: || IconName::Search, path: "type://code" },
+    PaletteAction {
+        name: "Settings",
+        icon: || IconName::Settings,
+        path: "action://settings",
+    },
+    PaletteAction {
+        name: "Storage Cleanup",
+        icon: || IconName::Delete,
+        path: "action://cleanup",
+    },
+    PaletteAction {
+        name: "Find Duplicates",
+        icon: || IconName::File,
+        path: "action://dedup",
+    },
+    PaletteAction {
+        name: "Tasks",
+        icon: || IconName::Check,
+        path: "action://todo",
+    },
+    PaletteAction {
+        name: "Secure Erase",
+        icon: || IconName::Delete,
+        path: "action://secure_erase",
+    },
+    PaletteAction {
+        name: "Automations",
+        icon: || IconName::Settings,
+        path: "action://automations",
+    },
+    PaletteAction {
+        name: "Search Images",
+        icon: || IconName::Eye,
+        path: "type://images",
+    },
+    PaletteAction {
+        name: "Search Videos",
+        icon: || IconName::Eye,
+        path: "type://videos",
+    },
+    PaletteAction {
+        name: "Search Audio",
+        icon: || IconName::Search,
+        path: "type://audio",
+    },
+    PaletteAction {
+        name: "Search Documents",
+        icon: || IconName::File,
+        path: "type://documents",
+    },
+    PaletteAction {
+        name: "Search Code",
+        icon: || IconName::Search,
+        path: "type://code",
+    },
 ];
 
 pub struct PaletteView {
@@ -66,9 +112,7 @@ impl PaletteView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let input = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("Search files...")
-        });
+        let input = cx.new(|cx| InputState::new(window, cx).placeholder("Search files..."));
 
         let input_sub = cx.subscribe(
             &input,
@@ -213,11 +257,7 @@ impl PaletteView {
 }
 
 impl Render for PaletteView {
-    fn render(
-        &mut self,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let has_results = !self.results.is_empty();
         let has_query = !self.query.is_empty();
 
@@ -286,8 +326,7 @@ impl Render for PaletteView {
                         let ext = std::path::Path::new(&result.node.name)
                             .extension()
                             .map(|e| e.to_string_lossy().to_string());
-                        let is_dir =
-                            result.node.node_type == zero::index::NodeType::Directory;
+                        let is_dir = result.node.node_type == zero::index::NodeType::Directory;
                         let path = result.node.path.clone();
 
                         div()
@@ -412,24 +451,14 @@ impl Render for PaletteView {
                             .items_center()
                             .rounded(RADIUS)
                             .cursor_pointer()
-                            .when(selected, |el| {
-                                el.bg(crate::theme::surface_active(cx))
-                            })
+                            .when(selected, |el| el.bg(crate::theme::surface_active(cx)))
                             .hover(|s| s.bg(crate::theme::surface_hover(cx)))
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 this.selected_idx = item_idx;
                                 this.confirm_selection(cx);
                             }))
-                            .child(
-                                Icon::new((action.icon)())
-                                    .xsmall()
-                                    .text_color(muted),
-                            )
-                            .child(
-                                div()
-                                    .text_size(FONT_SIZE_BODY)
-                                    .child(action.name),
-                            )
+                            .child(Icon::new((action.icon)()).xsmall().text_color(muted))
+                            .child(div().text_size(FONT_SIZE_BODY).child(action.name))
                     })
                     .collect();
 

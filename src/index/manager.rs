@@ -172,8 +172,8 @@ impl IndexManager {
             ))
         })?;
 
-        let control_db = ControlDb::open()
-            .map_err(|e| IndexError::Io(std::io::Error::other(e.to_string())))?;
+        let control_db =
+            ControlDb::open().map_err(|e| IndexError::Io(std::io::Error::other(e.to_string())))?;
 
         Self::with_dir_and_db(indexes_dir, control_db)
     }
@@ -187,7 +187,10 @@ impl IndexManager {
     }
 
     /// Create a new IndexManager with a custom directory and ControlDb
-    pub fn with_dir_and_db(indexes_dir: PathBuf, control_db: ControlDb) -> Result<Self, IndexError> {
+    pub fn with_dir_and_db(
+        indexes_dir: PathBuf,
+        control_db: ControlDb,
+    ) -> Result<Self, IndexError> {
         fs::create_dir_all(&indexes_dir)?;
 
         Ok(Self {
@@ -212,14 +215,17 @@ impl IndexManager {
 
     /// Load the IndexManager from a specific directory
     pub fn load_from(indexes_dir: PathBuf) -> Result<Self, IndexError> {
-        let control_db = ControlDb::open()
-            .map_err(|e| IndexError::Io(std::io::Error::other(e.to_string())))?;
+        let control_db =
+            ControlDb::open().map_err(|e| IndexError::Io(std::io::Error::other(e.to_string())))?;
 
         Self::load_from_with_db(indexes_dir, control_db)
     }
 
     /// Load the IndexManager from a specific directory with a given ControlDb
-    pub fn load_from_with_db(indexes_dir: PathBuf, control_db: ControlDb) -> Result<Self, IndexError> {
+    pub fn load_from_with_db(
+        indexes_dir: PathBuf,
+        control_db: ControlDb,
+    ) -> Result<Self, IndexError> {
         fs::create_dir_all(&indexes_dir)?;
 
         // Load roots from ControlDb
@@ -1231,7 +1237,8 @@ mod tests {
         // Create and populate manager with a disk-backed ControlDb
         {
             let control_db = ControlDb::open_at(&db_dir).unwrap();
-            let mut manager = IndexManager::with_dir_and_db(indexes_dir.clone(), control_db).unwrap();
+            let mut manager =
+                IndexManager::with_dir_and_db(indexes_dir.clone(), control_db).unwrap();
             manager.add_root(test_root.to_str().unwrap()).unwrap();
         }
 
@@ -1343,6 +1350,6 @@ mod tests {
 
         // Search for documents named "zero" - should find .txt and .pdf
         let doc_results = manager.search_with_type("zero", "documents", 100);
-        assert!(doc_results.len() >= 1); // At least zero.pdf (and possibly zero.txt depending on doc extensions)
+        assert!(!doc_results.is_empty()); // At least zero.pdf (and possibly zero.txt depending on doc extensions)
     }
 }

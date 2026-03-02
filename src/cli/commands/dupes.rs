@@ -59,17 +59,24 @@ pub fn cmd_dupes(out: &Outputter, args: &DupesArgs) -> anyhow::Result<()> {
         cmd_dupes_from_stdin(out, args, start_time)
     } else {
         // No input provided
-        cmd_error!(out, "dupes", 0u64, "NO_INPUT",
-            "No input provided. Specify a path, use --from-file, or pipe paths via stdin.".to_string(), {
-            out.error("No input provided");
-            out.newline();
-            out.info("Usage:");
-            out.indented("zero dupes <path>                    # Scan directory");
-            out.indented("zero dupes <path> \"query\"            # Filter by search query");
-            out.indented("zero dupes <path> --type images      # Filter by file type");
-            out.indented("zero search ... | zero dupes       # Read from pipe");
-            out.indented("zero dupes --from-file paths.txt     # Read from file");
-        });
+        cmd_error!(
+            out,
+            "dupes",
+            0u64,
+            "NO_INPUT",
+            "No input provided. Specify a path, use --from-file, or pipe paths via stdin."
+                .to_string(),
+            {
+                out.error("No input provided");
+                out.newline();
+                out.info("Usage:");
+                out.indented("zero dupes <path>                    # Scan directory");
+                out.indented("zero dupes <path> \"query\"            # Filter by search query");
+                out.indented("zero dupes <path> --type images      # Filter by file type");
+                out.indented("zero search ... | zero dupes       # Read from pipe");
+                out.indented("zero dupes --from-file paths.txt     # Read from file");
+            }
+        );
         Ok(())
     }
 }
@@ -121,19 +128,29 @@ fn cmd_dupes_filtered(
     let index_dir = match zero::dirs::legacy_index_dir() {
         Some(p) => p,
         None => {
-            cmd_error!(out, "dupes", start_time.elapsed().as_millis() as u64,
-                "NO_CACHE_DIR", "Could not determine cache directory");
+            cmd_error!(
+                out,
+                "dupes",
+                start_time.elapsed().as_millis() as u64,
+                "NO_CACHE_DIR",
+                "Could not determine cache directory"
+            );
             return Ok(());
         }
     };
 
     if !index_dir.is_dir() {
-        cmd_error!(out, "dupes", start_time.elapsed().as_millis() as u64,
+        cmd_error!(
+            out,
+            "dupes",
+            start_time.elapsed().as_millis() as u64,
             "INDEX_NOT_FOUND",
-            "Search index not found. Run 'zero search --index <path>' first.".to_string(), {
-            out.error("Search index not found");
-            out.info("Run 'zero search --index <path>' to build the index first");
-        });
+            "Search index not found. Run 'zero search --index <path>' first.".to_string(),
+            {
+                out.error("Search index not found");
+                out.info("Run 'zero search --index <path>' to build the index first");
+            }
+        );
         return Ok(());
     }
 
@@ -142,12 +159,7 @@ fn cmd_dupes_filtered(
 
     // Search for files matching criteria
     out.info("Searching for matching files...");
-    let paths = search_files(
-        &index,
-        args.query.as_deref(),
-        args.type_filter,
-        path,
-    );
+    let paths = search_files(&index, args.query.as_deref(), args.type_filter, path);
 
     if paths.is_empty() {
         let data = DupesData {
@@ -161,10 +173,16 @@ fn cmd_dupes_filtered(
             files_deleted: None,
             bytes_reclaimed: None,
         };
-        cmd_success!(out, "dupes", start_time.elapsed().as_millis() as u64, data, {
-            out.newline();
-            out.success("No matching files found");
-        });
+        cmd_success!(
+            out,
+            "dupes",
+            start_time.elapsed().as_millis() as u64,
+            data,
+            {
+                out.newline();
+                out.success("No matching files found");
+            }
+        );
         return Ok(());
     }
 
@@ -210,14 +228,15 @@ fn cmd_dupes_from_stdin(
 
         // Try to parse as "path\tsize" format (from zero search pipe)
         if let Some((path_str, size_str)) = line.split_once('\t')
-            && let Ok(size) = size_str.parse::<u64>() {
-                let path = PathBuf::from(path_str);
-                if size >= args.min_size {
-                    entries.push((path, size));
-                    has_sizes = true;
-                }
-                continue;
+            && let Ok(size) = size_str.parse::<u64>()
+        {
+            let path = PathBuf::from(path_str);
+            if size >= args.min_size {
+                entries.push((path, size));
+                has_sizes = true;
             }
+            continue;
+        }
 
         // Fallback: path only (will need to stat later)
         paths_only.push(PathBuf::from(line));
@@ -238,8 +257,13 @@ fn cmd_dupes_from_stdin(
     let paths: Vec<PathBuf> = paths_only.into_iter().filter(|p| p.exists()).collect();
 
     if paths.is_empty() {
-        cmd_error!(out, "dupes", start_time.elapsed().as_millis() as u64,
-            "NO_VALID_PATHS", "No valid paths found in stdin");
+        cmd_error!(
+            out,
+            "dupes",
+            start_time.elapsed().as_millis() as u64,
+            "NO_VALID_PATHS",
+            "No valid paths found in stdin"
+        );
         return Ok(());
     }
 
@@ -273,8 +297,13 @@ fn cmd_dupes_from_file(
         .collect();
 
     if paths.is_empty() {
-        cmd_error!(out, "dupes", start_time.elapsed().as_millis() as u64,
-            "NO_VALID_PATHS", "No valid paths found in file");
+        cmd_error!(
+            out,
+            "dupes",
+            start_time.elapsed().as_millis() as u64,
+            "NO_VALID_PATHS",
+            "No valid paths found in file"
+        );
         return Ok(());
     }
 
@@ -427,9 +456,11 @@ fn find_duplicates_in_paths(paths: &[PathBuf], args: &DupesArgs) -> anyhow::Resu
 
     for path in paths {
         if let Ok(metadata) = path.metadata()
-            && metadata.is_file() && metadata.len() >= args.min_size {
-                size_groups.entry(metadata.len()).or_default().push(path);
-            }
+            && metadata.is_file()
+            && metadata.len() >= args.min_size
+        {
+            size_groups.entry(metadata.len()).or_default().push(path);
+        }
     }
 
     // Keep only groups with 2+ files

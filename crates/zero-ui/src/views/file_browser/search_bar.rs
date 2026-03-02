@@ -1,10 +1,10 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use gpui_component::{
+    ActiveTheme, IconName, Sizable as _,
     button::{Button, ButtonVariants as _},
     h_flex,
     input::{Input, InputState},
-    ActiveTheme, IconName, Sizable as _,
 };
 
 use crate::theme::FONT_SIZE_CAPTION;
@@ -21,9 +21,7 @@ pub(super) enum DisplayMode {
         original_entries: Vec<BrowserEntry>,
     },
     /// Showing search results from command palette.
-    SearchResults {
-        query: String,
-    },
+    SearchResults { query: String },
 }
 
 impl FileBrowserView {
@@ -59,9 +57,7 @@ impl FileBrowserView {
             self.dismiss_search(cx);
         } else {
             self.search_active = true;
-            let input = cx.new(|cx| {
-                InputState::new(window, cx).placeholder("Filter files...")
-            });
+            let input = cx.new(|cx| InputState::new(window, cx).placeholder("Filter files..."));
             // Subscribe to input changes (annotate event type to disambiguate)
             cx.subscribe(
                 &input,
@@ -83,7 +79,9 @@ impl FileBrowserView {
 
         // Restore original entries if we were filtering
         match self.display_mode.take() {
-            Some(DisplayMode::Filtered { original_entries, .. }) => {
+            Some(DisplayMode::Filtered {
+                original_entries, ..
+            }) => {
                 self.table_state.update(cx, |state, cx| {
                     let delegate = state.delegate_mut();
                     delegate.entries = original_entries;
@@ -107,8 +105,9 @@ impl FileBrowserView {
 
         if query.is_empty() {
             // Restore original entries
-            if let Some(DisplayMode::Filtered { original_entries, .. }) =
-                self.display_mode.take()
+            if let Some(DisplayMode::Filtered {
+                original_entries, ..
+            }) = self.display_mode.take()
             {
                 self.table_state.update(cx, |state, cx| {
                     let delegate = state.delegate_mut();
@@ -124,9 +123,9 @@ impl FileBrowserView {
 
         // Save original entries if transitioning from Normal
         let original = match &self.display_mode {
-            Some(DisplayMode::Filtered { original_entries, .. }) => {
-                original_entries.clone()
-            }
+            Some(DisplayMode::Filtered {
+                original_entries, ..
+            }) => original_entries.clone(),
             _ => self.table_state.read(cx).delegate().entries.clone(),
         };
 
@@ -200,10 +199,7 @@ impl FileBrowserView {
                         div()
                             .text_size(FONT_SIZE_CAPTION)
                             .text_color(muted)
-                            .child(SharedString::from(format!(
-                                "{} results",
-                                result_count
-                            ))),
+                            .child(SharedString::from(format!("{} results", result_count))),
                     )
                 })
                 .child(

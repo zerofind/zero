@@ -137,22 +137,22 @@ impl OpenDalStorage {
         match scheme {
             "s3" => {
                 let (bucket, path) = parse_bucket_and_path(rest)?;
-                let storage = Self::s3().bucket(&bucket).from_env().build()?;
+                let storage = Self::s3().bucket(&bucket).with_env().build()?;
                 Ok((storage, path))
             }
             "b2" => {
                 let (bucket, path) = parse_bucket_and_path(rest)?;
-                let storage = Self::b2().bucket(&bucket).from_env().build()?;
+                let storage = Self::b2().bucket(&bucket).with_env().build()?;
                 Ok((storage, path))
             }
             "gs" | "gcs" => {
                 let (bucket, path) = parse_bucket_and_path(rest)?;
-                let storage = Self::gcs().bucket(&bucket).from_env().build()?;
+                let storage = Self::gcs().bucket(&bucket).with_env().build()?;
                 Ok((storage, path))
             }
             "dropbox" => {
                 let path = rest.to_string();
-                let storage = Self::dropbox().from_env().build()?;
+                let storage = Self::dropbox().with_env().build()?;
                 Ok((storage, path))
             }
             "webdav" | "dav" => {
@@ -326,12 +326,10 @@ impl StorageBackend for OpenDalStorage {
     ) -> BoxFuture<'a, StorageResult<StorageMetadata>> {
         Box::pin(async move {
             // Check existence if overwrite is disabled
-            if !options.overwrite {
-                if self.exists(path).await? {
-                    return Err(StorageError::AlreadyExists {
-                        path: path.to_string(),
-                    });
-                }
+            if !options.overwrite && self.exists(path).await? {
+                return Err(StorageError::AlreadyExists {
+                    path: path.to_string(),
+                });
             }
 
             let mut writer = self.operator.write_with(path, data.to_vec());
@@ -421,10 +419,8 @@ impl StorageBackend for OpenDalStorage {
                 entries.push(StorageEntry::new(entry.path(), storage_meta));
 
                 count += 1;
-                if let Some(limit) = options.limit {
-                    if count >= limit {
-                        break;
-                    }
+                if options.limit.is_some_and(|limit| count >= limit) {
+                    break;
                 }
             }
 
@@ -514,7 +510,7 @@ impl S3Builder {
     /// - AWS_SECRET_ACCESS_KEY
     /// - AWS_REGION (optional)
     /// - AWS_ENDPOINT (optional)
-    pub fn from_env(mut self) -> Self {
+    pub fn with_env(mut self) -> Self {
         if let Ok(key) = std::env::var("AWS_ACCESS_KEY_ID") {
             self.access_key_id = Some(key);
         }
@@ -609,7 +605,7 @@ impl B2Builder {
     /// - B2_APPLICATION_KEY_ID
     /// - B2_APPLICATION_KEY
     /// - B2_BUCKET_ID (optional)
-    pub fn from_env(mut self) -> Self {
+    pub fn with_env(mut self) -> Self {
         if let Ok(key_id) = std::env::var("B2_APPLICATION_KEY_ID") {
             self.application_key_id = Some(key_id);
         }
@@ -690,7 +686,7 @@ impl GcsBuilder {
     ///
     /// Looks for:
     /// - GOOGLE_APPLICATION_CREDENTIALS (path to credentials file)
-    pub fn from_env(mut self) -> Self {
+    pub fn with_env(mut self) -> Self {
         if let Ok(path) = std::env::var("GOOGLE_APPLICATION_CREDENTIALS") {
             self.credential_path = Some(path);
         }
@@ -771,7 +767,7 @@ impl DropboxBuilder {
     /// - DROPBOX_REFRESH_TOKEN (optional)
     /// - DROPBOX_CLIENT_ID (optional)
     /// - DROPBOX_CLIENT_SECRET (optional)
-    pub fn from_env(mut self) -> Self {
+    pub fn with_env(mut self) -> Self {
         if let Ok(token) = std::env::var("DROPBOX_ACCESS_TOKEN") {
             self.access_token = Some(token);
         }
@@ -858,7 +854,7 @@ impl WebDavBuilder {
     /// - WEBDAV_ENDPOINT
     /// - WEBDAV_USERNAME
     /// - WEBDAV_PASSWORD
-    pub fn from_env(mut self) -> Self {
+    pub fn with_env(mut self) -> Self {
         if let Ok(endpoint) = std::env::var("WEBDAV_ENDPOINT") {
             self.endpoint = Some(endpoint);
         }

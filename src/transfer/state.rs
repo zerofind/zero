@@ -131,13 +131,13 @@ impl Replayable for TransferJobState {
                     value,
                 } => match *collection {
                     JOB => {
-                        let job: JobState = postcard::from_bytes(value)
-                            .map_err(etchdb::Error::Postcard)?;
+                        let job: JobState =
+                            postcard::from_bytes(value).map_err(etchdb::Error::Postcard)?;
                         self.job = Some(job);
                     }
                     COMPLETED => {
-                        let entry: CompletedEntry = postcard::from_bytes(value)
-                            .map_err(etchdb::Error::Postcard)?;
+                        let entry: CompletedEntry =
+                            postcard::from_bytes(value).map_err(etchdb::Error::Postcard)?;
                         self.completed.push(entry);
                     }
                     _ => {
@@ -158,6 +158,7 @@ impl Replayable for TransferJobState {
 
 /// Transaction type for TransferJobState
 pub struct TransferTx<'a> {
+    #[allow(dead_code)]
     pub state: &'a TransferJobState,
     overlay: TransferOverlay,
 }
@@ -174,8 +175,7 @@ pub struct TransferOverlay {
 impl<'a> TransferTx<'a> {
     /// Set the job metadata
     pub fn set_job(&mut self, job: &JobState) {
-        let value =
-            postcard::to_allocvec(job).expect("JobState serialization should not fail");
+        let value = postcard::to_allocvec(job).expect("JobState serialization should not fail");
         self.overlay.ops.push(Op::Put {
             collection: JOB,
             key: 0u64.to_bytes(),
@@ -185,6 +185,7 @@ impl<'a> TransferTx<'a> {
     }
 
     /// Clear the job metadata
+    #[allow(dead_code)]
     pub fn clear_job(&mut self) {
         self.overlay.ops.push(Op::Delete {
             collection: JOB,
@@ -253,10 +254,9 @@ impl TransferState {
 
         std::fs::create_dir_all(&state_dir).map_err(StateError::CreateDirError)?;
 
-        let store = Store::<TransferJobState, WalBackend<TransferJobState>>::open_wal(
-            state_dir.clone(),
-        )
-        .map_err(|e| StateError::Etch(e.to_string()))?;
+        let store =
+            Store::<TransferJobState, WalBackend<TransferJobState>>::open_wal(state_dir.clone())
+                .map_err(|e| StateError::Etch(e.to_string()))?;
 
         Ok(Self { store, state_dir })
     }

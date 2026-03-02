@@ -67,7 +67,10 @@ fn automation_crud() {
 
     let state = store.read();
     assert_eq!(state.list_automations().len(), 1);
-    assert_eq!(state.get_automation(automation.id).unwrap().name, "Backup photos");
+    assert_eq!(
+        state.get_automation(automation.id).unwrap().name,
+        "Backup photos"
+    );
     assert_eq!(state.find_automations_by_serial("USB123").len(), 1);
 }
 
@@ -144,7 +147,10 @@ fn wal_replay() {
                     dest_device_serial: Some("SER1".into()),
                     dest_volume_name: None,
                     dest_path: None,
-                    triggers: Triggers { on_mount: true, ..Default::default() },
+                    triggers: Triggers {
+                        on_mount: true,
+                        ..Default::default()
+                    },
                     paths: vec![],
                     settings: Settings::default(),
                     enabled: true,
@@ -238,10 +244,7 @@ fn id_counters_survive_replay() {
     {
         let store = open_control_store(&path).unwrap();
         let mut state = store.read().clone();
-        let new = state.get_or_create_storage(
-            std::path::Path::new("/new"),
-            None,
-        );
+        let new = state.get_or_create_storage(std::path::Path::new("/new"), None);
         // New ID must be > 5
         assert!(new.id > 5);
     }

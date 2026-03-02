@@ -55,13 +55,26 @@ use std::collections::HashMap;
 /// File type categories for filtering
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
 pub enum FileTypeCategory {
-    #[value(alias = "image", alias = "img", alias = "picture", alias = "pictures", alias = "photo", alias = "photos")]
+    #[value(
+        alias = "image",
+        alias = "img",
+        alias = "picture",
+        alias = "pictures",
+        alias = "photo",
+        alias = "photos"
+    )]
     Images,
     #[value(alias = "video", alias = "vid", alias = "movie", alias = "movies")]
     Videos,
     #[value(alias = "music", alias = "sound", alias = "song", alias = "songs")]
     Audio,
-    #[value(alias = "docs", alias = "doc", alias = "document", alias = "text", alias = "office")]
+    #[value(
+        alias = "docs",
+        alias = "doc",
+        alias = "document",
+        alias = "text",
+        alias = "office"
+    )]
     Documents,
     #[value(alias = "source", alias = "src", alias = "dev")]
     Code,
@@ -69,7 +82,15 @@ pub enum FileTypeCategory {
     Archives,
     #[value(alias = "configs", alias = "configuration")]
     Config,
-    #[value(alias = "executable", alias = "exe", alias = "exec", alias = "program", alias = "programs", alias = "app", alias = "apps")]
+    #[value(
+        alias = "executable",
+        alias = "exe",
+        alias = "exec",
+        alias = "program",
+        alias = "programs",
+        alias = "app",
+        alias = "apps"
+    )]
     Executables,
     #[value(alias = "font")]
     Fonts,
@@ -77,7 +98,13 @@ pub enum FileTypeCategory {
     #[value(alias = "file")]
     Files,
     /// All directories
-    #[value(alias = "directory", alias = "dirs", alias = "dir", alias = "folders", alias = "folder")]
+    #[value(
+        alias = "directory",
+        alias = "dirs",
+        alias = "dir",
+        alias = "folders",
+        alias = "folder"
+    )]
     Directories,
     // Quick language-specific types
     #[value(alias = "rs")]
@@ -389,10 +416,9 @@ impl TypeIndex {
     ///
     /// Attempts to load from profile first, falls back to constants.
     pub fn ensure_extension_map(&mut self) {
-        if self.extension_map.is_empty()
-            && !self.try_load_from_profile() {
-                self.build_extension_map_from_constants();
-            }
+        if self.extension_map.is_empty() && !self.try_load_from_profile() {
+            self.build_extension_map_from_constants();
+        }
     }
 
     /// Get the number of extensions mapped

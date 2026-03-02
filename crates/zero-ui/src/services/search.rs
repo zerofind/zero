@@ -4,9 +4,7 @@ use std::time::Duration;
 
 use gpui::*;
 
-use zero::prelude::{
-    IndexManager, SearchIndex, SearchResult, hash_path, save_index_via_etch,
-};
+use zero::prelude::{IndexManager, SearchIndex, SearchResult, hash_path, save_index_via_etch};
 use zero::scanner::CrawlProgress;
 
 // -- Events ------------------------------------------------------------------
@@ -60,11 +58,7 @@ impl SearchService {
     }
 
     #[allow(dead_code)]
-    pub fn search_by_type(
-        &self,
-        file_type: &str,
-        limit: usize,
-    ) -> Vec<SearchResult> {
+    pub fn search_by_type(&self, file_type: &str, limit: usize) -> Vec<SearchResult> {
         self.manager.search_by_type(file_type, limit)
     }
 
@@ -101,7 +95,11 @@ impl SearchService {
 
     // -- Mutations (async, background) ----------------------------------------
 
-    pub fn rebuild(&mut self, settings_roots: Vec<PathBuf>, cx: &mut Context<Self>) -> Arc<CrawlProgress> {
+    pub fn rebuild(
+        &mut self,
+        settings_roots: Vec<PathBuf>,
+        cx: &mut Context<Self>,
+    ) -> Arc<CrawlProgress> {
         self.indexing = true;
         self.file_count = 0;
         cx.notify();
@@ -118,7 +116,8 @@ impl SearchService {
         cx.spawn(async move |this, cx| {
             // Get roots from the manager if settings_roots is empty
             let roots = if roots_strings.is_empty() {
-                this.update(cx, |svc, _| svc.manager.roots()).unwrap_or_default()
+                this.update(cx, |svc, _| svc.manager.roots())
+                    .unwrap_or_default()
             } else {
                 roots_strings
             };
@@ -129,7 +128,8 @@ impl SearchService {
                     svc.indexing = false;
                     cx.emit(SearchEvent::IndexingFinished);
                     cx.notify();
-                }).ok();
+                })
+                .ok();
                 return;
             }
 
@@ -143,29 +143,36 @@ impl SearchService {
                     svc.manager.remove_root(root);
                     svc.manager.indexes_dir().to_path_buf()
                 });
-                let Ok(indexes_dir) = indexes_dir else { continue };
+                let Ok(indexes_dir) = indexes_dir else {
+                    continue;
+                };
 
                 // Build index on background thread
                 let root_clone = root.clone();
                 let progress_clone = p.clone();
-                let build_result = cx.background_executor().spawn(async move {
-                    let root_path = std::path::Path::new(&root_clone);
-                    let mut index = SearchIndex::new();
-                    index.build_from_path_with_progress(root_path, Some(progress_clone))?;
-                    let count = index.file_count();
-                    let hash = hash_path(&root_clone);
-                    let etch_dir = indexes_dir.join(&hash);
-                    save_index_via_etch(&index, &etch_dir)?;
-                    Ok::<_, zero::index::IndexError>((root_clone, index, count))
-                }).await;
+                let build_result = cx
+                    .background_executor()
+                    .spawn(async move {
+                        let root_path = std::path::Path::new(&root_clone);
+                        let mut index = SearchIndex::new();
+                        index.build_from_path_with_progress(root_path, Some(progress_clone))?;
+                        let count = index.file_count();
+                        let hash = hash_path(&root_clone);
+                        let etch_dir = indexes_dir.join(&hash);
+                        save_index_via_etch(&index, &etch_dir)?;
+                        Ok::<_, zero::index::IndexError>((root_clone, index, count))
+                    })
+                    .await;
 
                 // Apply result on main thread (fast memory insert)
                 match build_result {
                     Ok((root_str, index, count)) => {
                         eprintln!("[zero-ui] rebuild: {} — {} files", root_str, count);
                         this.update(cx, |svc, _| {
-                            svc.manager.insert_index_memory_only(&root_str, index, count);
-                        }).ok();
+                            svc.manager
+                                .insert_index_memory_only(&root_str, index, count);
+                        })
+                        .ok();
                     }
                     Err(e) => {
                         eprintln!("[zero-ui] rebuild: {} — error: {}", root, e);
@@ -178,7 +185,8 @@ impl SearchService {
                 svc.indexing = false;
                 cx.emit(SearchEvent::IndexingFinished);
                 cx.notify();
-            }).ok();
+            })
+            .ok();
         })
         .detach();
 
@@ -195,23 +203,27 @@ impl SearchService {
 
         cx.spawn(async move |this, cx| {
             // Build index on background thread
-            let build_result = cx.background_executor().spawn(async move {
-                let root_path = std::path::Path::new(&path_owned);
-                let mut index = SearchIndex::new();
-                index.build_from_path_with_progress(root_path, None)?;
-                let count = index.file_count();
-                let hash = hash_path(&path_owned);
-                let etch_dir = indexes_dir.join(&hash);
-                save_index_via_etch(&index, &etch_dir)?;
-                Ok::<_, zero::index::IndexError>((path_owned, index, count))
-            }).await;
+            let build_result = cx
+                .background_executor()
+                .spawn(async move {
+                    let root_path = std::path::Path::new(&path_owned);
+                    let mut index = SearchIndex::new();
+                    index.build_from_path_with_progress(root_path, None)?;
+                    let count = index.file_count();
+                    let hash = hash_path(&path_owned);
+                    let etch_dir = indexes_dir.join(&hash);
+                    save_index_via_etch(&index, &etch_dir)?;
+                    Ok::<_, zero::index::IndexError>((path_owned, index, count))
+                })
+                .await;
 
             // Apply result on main thread
             this.update(cx, |svc, cx| {
                 match build_result {
                     Ok((root_str, index, count)) => {
                         eprintln!("[zero-ui] add_root: {} — {} files", root_str, count);
-                        svc.manager.insert_index_memory_only(&root_str, index, count);
+                        svc.manager
+                            .insert_index_memory_only(&root_str, index, count);
                     }
                     Err(e) => {
                         eprintln!("[zero-ui] add_root: error: {}", e);
@@ -221,13 +233,20 @@ impl SearchService {
                 svc.indexing = false;
                 cx.emit(SearchEvent::IndexingFinished);
                 cx.notify();
-            }).ok();
-        }).detach();
+            })
+            .ok();
+        })
+        .detach();
     }
 
     pub fn remove_root(&mut self, path: &str, cx: &mut Context<Self>) {
         self.manager.remove_root(path);
-        self.roots = self.manager.roots().into_iter().map(PathBuf::from).collect();
+        self.roots = self
+            .manager
+            .roots()
+            .into_iter()
+            .map(PathBuf::from)
+            .collect();
         cx.notify();
     }
 
@@ -257,13 +276,15 @@ impl SearchService {
                     eprintln!("[zero-ui] index loaded: {} root(s)", root_count);
                     cx.emit(SearchEvent::IndexLoaded);
                     cx.notify();
-                }).ok();
+                })
+                .ok();
             } else {
                 this.update(cx, |svc, cx| {
                     svc.loading = false;
                     cx.emit(SearchEvent::IndexLoaded);
                     cx.notify();
-                }).ok();
+                })
+                .ok();
             }
 
             // Check if we already have indexed roots
@@ -304,25 +325,30 @@ impl SearchService {
 
             // Build index on background thread
             let home_clone = home_str.clone();
-            let build_result = cx.background_executor().spawn(async move {
-                let root_path = std::path::Path::new(&home_clone);
-                let mut index = SearchIndex::new();
-                index.build_from_path_with_progress(root_path, Some(p))?;
-                let count = index.file_count();
-                let hash = hash_path(&home_clone);
-                let etch_dir = indexes_dir.join(&hash);
-                save_index_via_etch(&index, &etch_dir)?;
-                Ok::<_, zero::index::IndexError>((home_clone, index, count))
-            }).await;
+            let build_result = cx
+                .background_executor()
+                .spawn(async move {
+                    let root_path = std::path::Path::new(&home_clone);
+                    let mut index = SearchIndex::new();
+                    index.build_from_path_with_progress(root_path, Some(p))?;
+                    let count = index.file_count();
+                    let hash = hash_path(&home_clone);
+                    let etch_dir = indexes_dir.join(&hash);
+                    save_index_via_etch(&index, &etch_dir)?;
+                    Ok::<_, zero::index::IndexError>((home_clone, index, count))
+                })
+                .await;
 
             // Apply result on main thread
             match build_result {
                 Ok((root_str, index, count)) => {
                     eprintln!("[zero-ui] auto-index complete: {} files", count);
                     this.update(cx, |svc, _| {
-                        svc.manager.insert_index_memory_only(&root_str, index, count);
+                        svc.manager
+                            .insert_index_memory_only(&root_str, index, count);
                         svc.roots = svc.manager.roots().into_iter().map(PathBuf::from).collect();
-                    }).ok();
+                    })
+                    .ok();
                 }
                 Err(e) => {
                     eprintln!("[zero-ui] auto-index error: {}", e);
@@ -333,7 +359,8 @@ impl SearchService {
                 svc.indexing = false;
                 cx.emit(SearchEvent::IndexingFinished);
                 cx.notify();
-            }).ok();
+            })
+            .ok();
         })
         .detach();
     }
@@ -384,7 +411,8 @@ impl SearchService {
             eprintln!("[zero-ui] watcher: started");
 
             // Collect changed roots, rebuild after quiet period
-            let mut dirty_roots: std::collections::HashSet<String> = std::collections::HashSet::new();
+            let mut dirty_roots: std::collections::HashSet<String> =
+                std::collections::HashSet::new();
             let mut last_event_time: Option<std::time::Instant> = None;
 
             loop {
@@ -421,27 +449,34 @@ impl SearchService {
                                 svc.manager.remove_root(root);
                                 svc.manager.indexes_dir().to_path_buf()
                             });
-                            let Ok(indexes_dir) = indexes_dir else { continue };
+                            let Ok(indexes_dir) = indexes_dir else {
+                                continue;
+                            };
 
                             // Build on background thread
                             let root_clone = root.clone();
-                            let build_result = cx.background_executor().spawn(async move {
-                                let root_path = std::path::Path::new(&root_clone);
-                                let mut index = SearchIndex::new();
-                                index.build_from_path_with_progress(root_path, None)?;
-                                let count = index.file_count();
-                                let hash = hash_path(&root_clone);
-                                let etch_dir = indexes_dir.join(&hash);
-                                save_index_via_etch(&index, &etch_dir)?;
-                                Ok::<_, zero::index::IndexError>((root_clone, index, count))
-                            }).await;
+                            let build_result = cx
+                                .background_executor()
+                                .spawn(async move {
+                                    let root_path = std::path::Path::new(&root_clone);
+                                    let mut index = SearchIndex::new();
+                                    index.build_from_path_with_progress(root_path, None)?;
+                                    let count = index.file_count();
+                                    let hash = hash_path(&root_clone);
+                                    let etch_dir = indexes_dir.join(&hash);
+                                    save_index_via_etch(&index, &etch_dir)?;
+                                    Ok::<_, zero::index::IndexError>((root_clone, index, count))
+                                })
+                                .await;
 
                             // Apply on main thread
                             match build_result {
                                 Ok((root_str, index, count)) => {
                                     this.update(cx, |svc, _| {
-                                        svc.manager.insert_index_memory_only(&root_str, index, count);
-                                    }).ok();
+                                        svc.manager
+                                            .insert_index_memory_only(&root_str, index, count);
+                                    })
+                                    .ok();
                                 }
                                 Err(e) => {
                                     eprintln!("[zero-ui] watcher: rebuild {} — error: {}", root, e);
@@ -450,7 +485,8 @@ impl SearchService {
                         }
 
                         this.update(cx, |svc, cx| {
-                            svc.roots = svc.manager.roots().into_iter().map(PathBuf::from).collect();
+                            svc.roots =
+                                svc.manager.roots().into_iter().map(PathBuf::from).collect();
                             cx.emit(SearchEvent::IndexUpdated(()));
                             cx.notify();
                         })

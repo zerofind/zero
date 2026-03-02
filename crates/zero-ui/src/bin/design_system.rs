@@ -1,6 +1,7 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use gpui_component::{
+    ActiveTheme, Icon, IconName, Root, Sizable as _, TitleBar,
     button::{Button, ButtonVariants as _},
     checkbox::Checkbox,
     h_flex,
@@ -8,11 +9,11 @@ use gpui_component::{
     switch::Switch,
     tag::Tag,
     theme::{Theme, ThemeMode},
-    v_flex, ActiveTheme, Icon, IconName, Root, Sizable as _, TitleBar,
+    v_flex,
 };
 use zero_ui::theme::{
-    self, brand_color, card_border, content_bg, sidebar_bg, surface_hover, FONT_SIZE_BODY,
-    FONT_SIZE_CALLOUT, FONT_SIZE_CAPTION, FONT_SIZE_TITLE, RADIUS, RADIUS_LG,
+    self, FONT_SIZE_BODY, FONT_SIZE_CALLOUT, FONT_SIZE_CAPTION, FONT_SIZE_TITLE, RADIUS, RADIUS_LG,
+    brand_color, card_border, content_bg, sidebar_bg, surface_hover,
 };
 use zero_ui::ui::{
     BannerData, BannerKind, Breadcrumb, EmptyState, FileIcon, ProgressBanner, SectionHeader,
@@ -55,11 +56,7 @@ fn main() {
     app.run(move |cx| {
         gpui_component::init(cx);
         theme::init_zero_theme(cx);
-        gpui_component::theme::Theme::change(
-            gpui_component::theme::ThemeMode::Dark,
-            None,
-            cx,
-        );
+        gpui_component::theme::Theme::change(gpui_component::theme::ThemeMode::Dark, None, cx);
 
         cx.bind_keys([
             #[cfg(target_os = "macos")]
@@ -112,9 +109,8 @@ struct DesignSystem {
 
 impl DesignSystem {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let search_input = cx.new(|cx| {
-            InputState::new(window, cx).default_value("/Users/demo/Documents")
-        });
+        let search_input =
+            cx.new(|cx| InputState::new(window, cx).default_value("/Users/demo/Documents"));
 
         Self {
             section: ShowcaseSection::FileBrowser,
@@ -234,26 +230,18 @@ impl DesignSystem {
             )
             // Scrollable body
             .child(
-                v_flex()
-                    .id("ds-scroll")
-                    .flex_1()
-                    .overflow_y_scroll()
-                    .child(
-                        div()
+                v_flex().id("ds-scroll").flex_1().overflow_y_scroll().child(
+                    div().w_full().flex().justify_center().child(
+                        v_flex()
                             .w_full()
-                            .flex()
-                            .justify_center()
-                            .child(
-                                v_flex()
-                                    .w_full()
-                                    .max_w(px(680.0))
-                                    .px_6()
-                                    .pt_2()
-                                    .pb_12()
-                                    .gap_6()
-                                    .child(self.render_section(cx)),
-                            ),
+                            .max_w(px(680.0))
+                            .px_6()
+                            .pt_2()
+                            .pb_12()
+                            .gap_6()
+                            .child(self.render_section(cx)),
                     ),
+                ),
             )
     }
 
@@ -275,42 +263,31 @@ impl DesignSystem {
             .gap_6()
             // File icons
             .child(
-                v_flex()
-                    .gap_3()
-                    .child(group_label("File Icons", fg))
-                    .child(
-                        h_flex()
-                            .gap_4()
-                            .flex_wrap()
-                            .children(
-                                [
-                                    (Some("rs"), false, "main.rs"),
-                                    (Some("py"), false, "script.py"),
-                                    (Some("jpg"), false, "photo.jpg"),
-                                    (Some("mp4"), false, "video.mp4"),
-                                    (Some("pdf"), false, "report.pdf"),
-                                    (Some("zip"), false, "archive.zip"),
-                                    (None, true, "Documents"),
-                                ]
-                                .into_iter()
-                                .map(|(ext, is_dir, name)| {
-                                    h_flex()
-                                        .gap_2()
-                                        .items_center()
-                                        .py_1()
-                                        .px_2()
-                                        .rounded(RADIUS)
-                                        .bg(surface_hover(cx))
-                                        .child(FileIcon::new(ext, is_dir))
-                                        .child(
-                                            div()
-                                                .text_size(FONT_SIZE_BODY)
-                                                .text_color(fg)
-                                                .child(name),
-                                        )
-                                }),
-                            ),
+                v_flex().gap_3().child(group_label("File Icons", fg)).child(
+                    h_flex().gap_4().flex_wrap().children(
+                        [
+                            (Some("rs"), false, "main.rs"),
+                            (Some("py"), false, "script.py"),
+                            (Some("jpg"), false, "photo.jpg"),
+                            (Some("mp4"), false, "video.mp4"),
+                            (Some("pdf"), false, "report.pdf"),
+                            (Some("zip"), false, "archive.zip"),
+                            (None, true, "Documents"),
+                        ]
+                        .into_iter()
+                        .map(|(ext, is_dir, name)| {
+                            h_flex()
+                                .gap_2()
+                                .items_center()
+                                .py_1()
+                                .px_2()
+                                .rounded(RADIUS)
+                                .bg(surface_hover(cx))
+                                .child(FileIcon::new(ext, is_dir))
+                                .child(div().text_size(FONT_SIZE_BODY).text_color(fg).child(name))
+                        }),
                     ),
+                ),
             )
             // Status pills
             .child(
@@ -321,26 +298,11 @@ impl DesignSystem {
                         h_flex()
                             .gap_2()
                             .flex_wrap()
-                            .child(StatusPill::new(
-                                "Synced",
-                                theme::success_color(),
-                            ))
-                            .child(StatusPill::new(
-                                "Pending",
-                                hsla(0.130, 0.80, 0.50, 1.0),
-                            ))
-                            .child(StatusPill::new(
-                                "Error",
-                                hsla(0.000, 0.70, 0.55, 1.0),
-                            ))
-                            .child(StatusPill::new(
-                                "2 copies",
-                                brand_color(),
-                            ))
-                            .child(StatusPill::new(
-                                "Duplicate",
-                                hsla(0.830, 0.60, 0.55, 1.0),
-                            )),
+                            .child(StatusPill::new("Synced", theme::success_color()))
+                            .child(StatusPill::new("Pending", hsla(0.130, 0.80, 0.50, 1.0)))
+                            .child(StatusPill::new("Error", hsla(0.000, 0.70, 0.55, 1.0)))
+                            .child(StatusPill::new("2 copies", brand_color()))
+                            .child(StatusPill::new("Duplicate", hsla(0.830, 0.60, 0.55, 1.0))),
                     ),
             )
             // Breadcrumb
@@ -414,19 +376,10 @@ impl DesignSystem {
                             .gap_0p5()
                             .w(px(260.0))
                             .child(
-                                SidebarRow::new("ds-fav", "Favorites", IconName::Star)
-                                    .active(true),
+                                SidebarRow::new("ds-fav", "Favorites", IconName::Star).active(true),
                             )
-                            .child(SidebarRow::new(
-                                "ds-docs",
-                                "Documents",
-                                IconName::File,
-                            ))
-                            .child(SidebarRow::new(
-                                "ds-dl",
-                                "Downloads",
-                                IconName::ArrowDown,
-                            ))
+                            .child(SidebarRow::new("ds-docs", "Documents", IconName::File))
+                            .child(SidebarRow::new("ds-dl", "Downloads", IconName::ArrowDown))
                             .child(SidebarRow::new(
                                 "ds-desktop",
                                 "Desktop",
@@ -445,14 +398,9 @@ impl DesignSystem {
                             .w(px(260.0))
                             .child(SectionHeader::new("FAVORITES"))
                             .child(
-                                SidebarRow::new("ds-h-home", "Home", IconName::Globe)
-                                    .active(true),
+                                SidebarRow::new("ds-h-home", "Home", IconName::Globe).active(true),
                             )
-                            .child(SidebarRow::new(
-                                "ds-h-recent",
-                                "Recents",
-                                IconName::Redo,
-                            ))
+                            .child(SidebarRow::new("ds-h-recent", "Recents", IconName::Redo))
                             .child(SectionHeader::new("DEVICES"))
                             .child(SidebarRow::new(
                                 "ds-h-ssd",
@@ -572,21 +520,9 @@ impl DesignSystem {
                         h_flex()
                             .gap_3()
                             .child(color_swatch("Brand", brand_color(), cx))
-                            .child(color_swatch(
-                                "Success",
-                                theme::success_color(),
-                                cx,
-                            ))
-                            .child(color_swatch(
-                                "Selection",
-                                theme::selection_color(),
-                                cx,
-                            ))
-                            .child(color_swatch(
-                                "Positive",
-                                theme::positive_color(),
-                                cx,
-                            )),
+                            .child(color_swatch("Success", theme::success_color(), cx))
+                            .child(color_swatch("Selection", theme::selection_color(), cx))
+                            .child(color_swatch("Positive", theme::positive_color(), cx)),
                     ),
             )
     }
@@ -638,11 +574,9 @@ impl DesignSystem {
                                 "Show desktop notifications for sync events.",
                                 Checkbox::new("ds-notifs")
                                     .checked(notifications)
-                                    .on_click(cx.listener(
-                                        |this, checked: &bool, _window, _cx| {
-                                            this.notifications = *checked;
-                                        },
-                                    ))
+                                    .on_click(cx.listener(|this, checked: &bool, _window, _cx| {
+                                        this.notifications = *checked;
+                                    }))
                                     .into_any_element(),
                                 label_color,
                                 value_color,
@@ -845,12 +779,7 @@ fn color_swatch(name: &str, color: Hsla, cx: &App) -> impl IntoElement {
     v_flex()
         .gap_1()
         .items_center()
-        .child(
-            div()
-                .size(px(40.0))
-                .rounded(RADIUS)
-                .bg(color),
-        )
+        .child(div().size(px(40.0)).rounded(RADIUS).bg(color))
         .child(
             div()
                 .text_size(FONT_SIZE_CAPTION)

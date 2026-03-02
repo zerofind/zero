@@ -77,7 +77,7 @@ fn test_display() {
 #[test]
 fn test_clone_and_copy() {
     let algo = HashAlgorithm::Blake3;
-    let cloned = algo.clone();
+    let cloned = algo;
     let copied = algo;
 
     assert_eq!(algo, cloned);

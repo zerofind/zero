@@ -84,7 +84,9 @@ pub fn cmd_drives(out: &Outputter) -> anyhow::Result<()> {
 
     let duration_ms = start.elapsed().as_millis() as u64;
 
-    let data = DrivesData { drives: drives.clone() };
+    let data = DrivesData {
+        drives: drives.clone(),
+    };
     cmd_success!(out, "drives", duration_ms, data, {
         out.header("Connected Drives");
         if drives.is_empty() {
@@ -100,8 +102,14 @@ pub fn cmd_drives(out: &Outputter) -> anyhow::Result<()> {
                 drive.device_name.as_deref().unwrap_or("Unknown")
             ));
             if let Some(ref usb) = drive.usb {
-                out.println(&format!("├─ Vendor: {} (ID: 0x{:04x})", usb.vendor_name, usb.vendor_id));
-                out.println(&format!("├─ Product: {} (ID: 0x{:04x})", usb.product_name, usb.product_id));
+                out.println(&format!(
+                    "├─ Vendor: {} (ID: 0x{:04x})",
+                    usb.vendor_name, usb.vendor_id
+                ));
+                out.println(&format!(
+                    "├─ Product: {} (ID: 0x{:04x})",
+                    usb.product_name, usb.product_id
+                ));
                 out.println(&format!("├─ Speed: {} ({})", usb.speed, usb.max_throughput));
                 out.println(&format!("├─ Realistic: {}", usb.realistic_throughput));
                 out.println(&format!("├─ Serial: {}", usb.serial_number));
@@ -109,12 +117,24 @@ pub fn cmd_drives(out: &Outputter) -> anyhow::Result<()> {
                     out.println(&format!("├─ Power: {} mA", power));
                 }
             } else {
-                out.println(&format!("├─ Protocol: {}", drive.protocol.as_deref().unwrap_or("Unknown")));
+                out.println(&format!(
+                    "├─ Protocol: {}",
+                    drive.protocol.as_deref().unwrap_or("Unknown")
+                ));
             }
-            out.println(&format!("├─ Capacity: {} ({} free, {:.0}% used)", total_str, free_str, drive.used_percent));
-            out.println(&format!("├─ File System: {}", drive.file_system.as_deref().unwrap_or("Unknown")));
+            out.println(&format!(
+                "├─ Capacity: {} ({} free, {:.0}% used)",
+                total_str, free_str, drive.used_percent
+            ));
+            out.println(&format!(
+                "├─ File System: {}",
+                drive.file_system.as_deref().unwrap_or("Unknown")
+            ));
             out.println(&format!("├─ Mount Point: {}", drive.path));
-            out.println(&format!("└─ BSD Device: /dev/{}", drive.bsd_name.as_deref().unwrap_or("unknown")));
+            out.println(&format!(
+                "└─ BSD Device: /dev/{}",
+                drive.bsd_name.as_deref().unwrap_or("unknown")
+            ));
             out.newline();
         }
     });
@@ -129,8 +149,13 @@ pub fn cmd_disk(out: &Outputter, path: &std::path::Path) -> anyhow::Result<()> {
     let disk_info = match DiskInfo::for_path(path) {
         Ok(info) => info,
         Err(e) => {
-            cmd_error!(out, "disk", start.elapsed().as_millis() as u64,
-                "DISK_ERROR", format!("Failed to get disk info: {}", e));
+            cmd_error!(
+                out,
+                "disk",
+                start.elapsed().as_millis() as u64,
+                "DISK_ERROR",
+                format!("Failed to get disk info: {}", e)
+            );
             return Ok(());
         }
     };

@@ -12,12 +12,12 @@ use tokio::sync::RwLock;
 
 use crate::automation::{AutomationEvent, Executor, ExecutorConfig};
 use crate::cache::CacheDb;
-use crate::index::{FileTypeCategory, SearchIndex, SearchQuery, open_index_store, save_index_via_etch};
+use crate::index::{
+    FileTypeCategory, SearchIndex, SearchQuery, open_index_store, save_index_via_etch,
+};
 
 use super::logging::ServiceLogger;
 use super::protocol::{JsonRpcError, JsonRpcRequest, JsonRpcResponse};
-
-
 
 /// Service handler that processes JSON-RPC requests
 pub struct ServiceHandler {
@@ -184,7 +184,9 @@ impl ServiceHandler {
         let index_loaded = self.is_index_loaded().await;
         let file_count = self.index_file_count().await;
 
-        let automations = self.db.list_automations()
+        let automations = self
+            .db
+            .list_automations()
             .map_err(|e| JsonRpcError::database_error(e.to_string()))?;
 
         Ok(serde_json::json!({
@@ -207,12 +209,9 @@ impl ServiceHandler {
         let index = guard.as_ref().ok_or_else(JsonRpcError::index_not_ready)?;
 
         // Build unified search query
-        let type_category = type_filter
-            .as_deref()
-            .and_then(FileTypeCategory::parse_str);
+        let type_category = type_filter.as_deref().and_then(FileTypeCategory::parse_str);
 
-        let q = SearchQuery::text(&query, limit)
-            .with_type_opt(type_category);
+        let q = SearchQuery::text(&query, limit).with_type_opt(type_category);
         let results = index.query(q);
 
         let total_indexed = index.file_count();
@@ -344,7 +343,9 @@ impl ServiceHandler {
         &self,
         _request: &JsonRpcRequest,
     ) -> Result<Value, JsonRpcError> {
-        let list = self.db.list_automations()
+        let list = self
+            .db
+            .list_automations()
             .map_err(|e| JsonRpcError::database_error(e.to_string()))?;
 
         let automations: Vec<Value> = list
@@ -380,7 +381,9 @@ impl ServiceHandler {
             .require_param("id")
             .map_err(JsonRpcError::invalid_params)?;
 
-        let automation = self.db.get_automation(id)
+        let automation = self
+            .db
+            .get_automation(id)
             .map_err(|e| JsonRpcError::database_error(e.to_string()))?
             .ok_or_else(|| JsonRpcError::not_found(format!("Automation {}", id)))?;
 
@@ -456,7 +459,9 @@ impl ServiceHandler {
             },
         };
 
-        let automation = self.db.create_automation(new_automation)
+        let automation = self
+            .db
+            .create_automation(new_automation)
             .map_err(|e| JsonRpcError::database_error(e.to_string()))?;
 
         self.logger.info(
@@ -482,11 +487,14 @@ impl ServiceHandler {
             .map_err(JsonRpcError::invalid_params)?;
 
         // Get automation name before deleting
-        let automation = self.db.get_automation(id)
+        let automation = self
+            .db
+            .get_automation(id)
             .map_err(|e| JsonRpcError::database_error(e.to_string()))?
             .ok_or_else(|| JsonRpcError::not_found(format!("Automation {}", id)))?;
 
-        self.db.delete_automation(id)
+        self.db
+            .delete_automation(id)
             .map_err(|e| JsonRpcError::database_error(e.to_string()))?;
 
         self.logger.info(
@@ -538,11 +546,15 @@ impl ServiceHandler {
             .map_err(JsonRpcError::invalid_params)?;
         let limit: usize = request.get_param("limit").unwrap_or(10);
 
-        let automation = self.db.get_automation(id)
+        let automation = self
+            .db
+            .get_automation(id)
             .map_err(|e| JsonRpcError::database_error(e.to_string()))?
             .ok_or_else(|| JsonRpcError::not_found(format!("Automation {}", id)))?;
 
-        let history = self.db.list_runs_for_automation(id, limit)
+        let history = self
+            .db
+            .list_runs_for_automation(id, limit)
             .map_err(|e| JsonRpcError::database_error(e.to_string()))?;
 
         let runs: Vec<Value> = history

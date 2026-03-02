@@ -72,20 +72,36 @@ pub fn cmd_erase(out: &Outputter, args: &EraseArgs) -> anyhow::Result<()> {
                                 device_info.volume_name.as_deref().unwrap_or_default(),
                                 device_path
                             );
-                            cmd_error!(out, "erase", start.elapsed().as_millis() as u64, "DEVICE_CHANGED", msg, {
-                                out.error("Device appears to have been reformatted with a new name");
-                                out.println(&format!(
-                                    "  Original name: {}",
-                                    pending_state.device().volume_name.as_deref().unwrap_or("(none)")
-                                ));
-                                out.println(&format!(
-                                    "  Current name:  {}",
-                                    device_info.volume_name.as_deref().unwrap_or("(none)")
-                                ));
-                                out.newline();
-                                out.info("If you're sure this is the same device, use the device path directly:");
-                                out.println(&format!("  zero erase {} --level {}", device_path, args.level));
-                            });
+                            cmd_error!(
+                                out,
+                                "erase",
+                                start.elapsed().as_millis() as u64,
+                                "DEVICE_CHANGED",
+                                msg,
+                                {
+                                    out.error(
+                                        "Device appears to have been reformatted with a new name",
+                                    );
+                                    out.println(&format!(
+                                        "  Original name: {}",
+                                        pending_state
+                                            .device()
+                                            .volume_name
+                                            .as_deref()
+                                            .unwrap_or("(none)")
+                                    ));
+                                    out.println(&format!(
+                                        "  Current name:  {}",
+                                        device_info.volume_name.as_deref().unwrap_or("(none)")
+                                    ));
+                                    out.newline();
+                                    out.info("If you're sure this is the same device, use the device path directly:");
+                                    out.println(&format!(
+                                        "  zero erase {} --level {}",
+                                        device_path, args.level
+                                    ));
+                                }
+                            );
                             return Ok(());
                         }
 
@@ -97,37 +113,59 @@ pub fn cmd_erase(out: &Outputter, args: &EraseArgs) -> anyhow::Result<()> {
                             ));
                             out.println(&format!(
                                 "  Device:      {} ({})",
-                                device_path, pending_state.device().bsd_name
+                                device_path,
+                                pending_state.device().bsd_name
                             ));
                             out.println(&format!("  Progress:    {}", pending_state.summary()));
                             out.newline();
                         }
 
                         // Resume the erase - pass skip_confirmation=true since we've verified
-                        return cmd_erase_device_resume(out, args, &device_path, level, verify, &control_db);
+                        return cmd_erase_device_resume(
+                            out,
+                            args,
+                            &device_path,
+                            level,
+                            verify,
+                            &control_db,
+                        );
                     }
                     Err(device_err) => {
                         // Device no longer exists
                         let msg = format!(
                             "Found pending erase for '{}' on device {}, but device is no longer available: {}",
-                            path_str, pending_state.device().bsd_name, device_err
+                            path_str,
+                            pending_state.device().bsd_name,
+                            device_err
                         );
-                        cmd_error!(out, "erase", start.elapsed().as_millis() as u64, "DEVICE_NOT_FOUND", msg, {
-                            out.error(&format!("Volume not found: {}", e));
-                            out.warn(&format!(
+                        cmd_error!(
+                            out,
+                            "erase",
+                            start.elapsed().as_millis() as u64,
+                            "DEVICE_NOT_FOUND",
+                            msg,
+                            {
+                                out.error(&format!("Volume not found: {}", e));
+                                out.warn(&format!(
                                 "Found interrupted erase for this volume on device {}, but device is no longer connected",
                                 pending_state.device().bsd_name
                             ));
-                            out.info("Reconnect the device and try again.");
-                        });
+                                out.info("Reconnect the device and try again.");
+                            }
+                        );
                         return Ok(());
                     }
                 }
             }
 
             // No pending state found - just report the error
-            cmd_error!(out, "erase", start.elapsed().as_millis() as u64,
-                "VOLUME_ERROR", format!("Failed to get volume info: {}", e));
+            cmd_error!(
+                out,
+                "erase",
+                start.elapsed().as_millis() as u64,
+                "VOLUME_ERROR",
+                format!("Failed to get volume info: {}", e)
+            );
             return Ok(());
         }
     };
@@ -141,17 +179,34 @@ pub fn cmd_erase(out: &Outputter, args: &EraseArgs) -> anyhow::Result<()> {
                  Refusing to erase to prevent accidental data loss.",
                 name
             );
-            cmd_error!(out, "erase", start.elapsed().as_millis() as u64, "SYSTEM_DISK", msg);
+            cmd_error!(
+                out,
+                "erase",
+                start.elapsed().as_millis() as u64,
+                "SYSTEM_DISK",
+                msg
+            );
             return Ok(());
         }
         Err(EraseError::NotWritable(name)) => {
             let msg = format!("Volume '{}' is not writable", name);
-            cmd_error!(out, "erase", start.elapsed().as_millis() as u64, "NOT_WRITABLE", msg);
+            cmd_error!(
+                out,
+                "erase",
+                start.elapsed().as_millis() as u64,
+                "NOT_WRITABLE",
+                msg
+            );
             return Ok(());
         }
         Err(e) => {
-            cmd_error!(out, "erase", start.elapsed().as_millis() as u64,
-                "PREPARE_ERROR", format!("Failed to prepare erase: {}", e));
+            cmd_error!(
+                out,
+                "erase",
+                start.elapsed().as_millis() as u64,
+                "PREPARE_ERROR",
+                format!("Failed to prepare erase: {}", e)
+            );
             return Ok(());
         }
     };
@@ -350,12 +405,13 @@ pub fn cmd_erase(out: &Outputter, args: &EraseArgs) -> anyhow::Result<()> {
 
     // Unmount and open device manually since we're using run_wipe_with_resume
     if let Some(ref mount_point) = target.mount_point
-        && let Err(e) = platform::unmount_volume(mount_point) {
-            if !out.is_json() {
-                out.error(&format!("Failed to unmount: {}", e));
-            }
-            return Ok(());
+        && let Err(e) = platform::unmount_volume(mount_point)
+    {
+        if !out.is_json() {
+            out.error(&format!("Failed to unmount: {}", e));
         }
+        return Ok(());
+    }
 
     if !out.is_json() {
         print!("\r  [2/3] Opening device for direct I/O...    \n");
@@ -498,12 +554,27 @@ pub fn cmd_erase(out: &Outputter, args: &EraseArgs) -> anyhow::Result<()> {
                 out.success(&format!("Secure erase of '{}' complete!", target.name));
                 out.newline();
                 out.info("Summary:");
-                out.println(&format!("  Duration:      {:.1}s", erase_result.duration.as_secs_f64()));
-                out.println(&format!("  Data written:  {}", format_bytes(erase_result.bytes_written)));
-                out.println(&format!("  Avg speed:     {}/s", format_bytes(erase_result.average_speed_bps)));
-                out.println(&format!("  Verified:      {}", if erase_result.verified { "Yes" } else { "No" }));
+                out.println(&format!(
+                    "  Duration:      {:.1}s",
+                    erase_result.duration.as_secs_f64()
+                ));
+                out.println(&format!(
+                    "  Data written:  {}",
+                    format_bytes(erase_result.bytes_written)
+                ));
+                out.println(&format!(
+                    "  Avg speed:     {}/s",
+                    format_bytes(erase_result.average_speed_bps)
+                ));
+                out.println(&format!(
+                    "  Verified:      {}",
+                    if erase_result.verified { "Yes" } else { "No" }
+                ));
                 if erase_result.bad_blocks > 0 {
-                    out.warn(&format!("  Bad blocks:    {} (skipped)", erase_result.bad_blocks));
+                    out.warn(&format!(
+                        "  Bad blocks:    {} (skipped)",
+                        erase_result.bad_blocks
+                    ));
                 }
                 if !erase_result.warnings.is_empty() {
                     out.newline();
@@ -625,10 +696,17 @@ fn cmd_erase_device(
         Ok(size) => size,
         Err(e) => {
             let msg = format!("Failed to get device size: {}", e);
-            cmd_error!(out, "erase", start.elapsed().as_millis() as u64, "DEVICE_ERROR", msg, {
-                out.error(&msg);
-                out.info("Make sure the device path is correct (e.g., /dev/rdisk24s1)");
-            });
+            cmd_error!(
+                out,
+                "erase",
+                start.elapsed().as_millis() as u64,
+                "DEVICE_ERROR",
+                msg,
+                {
+                    out.error(&msg);
+                    out.info("Make sure the device path is correct (e.g., /dev/rdisk24s1)");
+                }
+            );
             return Ok(());
         }
     };
@@ -914,13 +992,28 @@ fn cmd_erase_device(
             });
             cmd_success!(out, "erase", duration_ms, data, {
                 out.newline();
-                out.success(&format!("Secure erase of '{}' complete!", target.device_path));
+                out.success(&format!(
+                    "Secure erase of '{}' complete!",
+                    target.device_path
+                ));
                 out.newline();
                 out.info("Summary:");
-                out.println(&format!("  Duration:      {:.1}s", erase_result.duration.as_secs_f64()));
-                out.println(&format!("  Data written:  {}", format_bytes(erase_result.bytes_written)));
-                out.println(&format!("  Avg speed:     {}/s", format_bytes(erase_result.average_speed_bps)));
-                out.println(&format!("  Verified:      {}", if erase_result.verified { "Yes" } else { "No" }));
+                out.println(&format!(
+                    "  Duration:      {:.1}s",
+                    erase_result.duration.as_secs_f64()
+                ));
+                out.println(&format!(
+                    "  Data written:  {}",
+                    format_bytes(erase_result.bytes_written)
+                ));
+                out.println(&format!(
+                    "  Avg speed:     {}/s",
+                    format_bytes(erase_result.average_speed_bps)
+                ));
+                out.println(&format!(
+                    "  Verified:      {}",
+                    if erase_result.verified { "Yes" } else { "No" }
+                ));
                 out.newline();
                 out.info("The device is now safe to dispose of, recycle, or repurpose.");
             });

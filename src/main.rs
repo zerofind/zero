@@ -20,13 +20,37 @@ static PANICKING: AtomicBool = AtomicBool::new(false);
 
 /// All known CLI commands and flags (used by preprocess_args and looks_like_path)
 const KNOWN_COMMANDS: &[&str] = &[
-    "automation", "completions", "cp", "copy", "delete", "diff",
-    "disk", "download", "drives", "dupes", "erase",
-    "get", "help", "index", "ls", "list", "rm",
-    "scan", "search", "service", "sync", "templates",
-    "todo", "verify", "watch", "wipe",
+    "automation",
+    "completions",
+    "cp",
+    "copy",
+    "delete",
+    "diff",
+    "disk",
+    "download",
+    "drives",
+    "dupes",
+    "erase",
+    "get",
+    "help",
+    "index",
+    "ls",
+    "list",
+    "rm",
+    "scan",
+    "search",
+    "service",
+    "sync",
+    "templates",
+    "todo",
+    "verify",
+    "watch",
+    "wipe",
     // flags
-    "--help", "-h", "--version", "-V",
+    "--help",
+    "-h",
+    "--version",
+    "-V",
 ];
 
 /// Set up a panic handler that ensures clean process exit
@@ -97,10 +121,7 @@ fn looks_like_path(s: &str) -> bool {
     }
     // Could be a relative path that doesn't exist yet (destination)
     // If it doesn't start with '-' and contains a path separator or extension dot
-    if !s.starts_with('-')
-        && (s.contains('/') || s.contains('.'))
-        && !KNOWN_COMMANDS.contains(&s)
-    {
+    if !s.starts_with('-') && (s.contains('/') || s.contains('.')) && !KNOWN_COMMANDS.contains(&s) {
         return true;
     }
     false
@@ -488,7 +509,6 @@ fn main() -> anyhow::Result<()> {
         Commands::Todo { todo_cmd } => {
             cli::commands::cmd_todo(&out, todo_cmd.as_ref())?;
         }
-
     }
 
     Ok(())

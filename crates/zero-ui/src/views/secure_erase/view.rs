@@ -1,6 +1,6 @@
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 
 use gpui::*;
 use gpui_component::input::InputState;
@@ -122,16 +122,18 @@ impl SecureEraseView {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let volumes = Self::discover_volumes();
 
-        let confirm_input = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("Type volume name to confirm")
-        });
+        let confirm_input =
+            cx.new(|cx| InputState::new(window, cx).placeholder("Type volume name to confirm"));
 
-        cx.subscribe(&confirm_input, |this, _entity, ev: &gpui_component::input::InputEvent, cx| {
-            if matches!(ev, gpui_component::input::InputEvent::Change) {
-                this.confirm_name_value = _entity.read(cx).value().to_string();
-                cx.notify();
-            }
-        })
+        cx.subscribe(
+            &confirm_input,
+            |this, _entity, ev: &gpui_component::input::InputEvent, cx| {
+                if matches!(ev, gpui_component::input::InputEvent::Change) {
+                    this.confirm_name_value = _entity.read(cx).value().to_string();
+                    cx.notify();
+                }
+            },
+        )
         .detach();
 
         Self {
@@ -173,9 +175,10 @@ impl SecureEraseView {
         // Try to enrich with VolumeInfo if available
         if let Ok(all) = zero::disk::VolumeInfo::all() {
             for vol in &all {
-                if let Some(entry) = volumes.iter_mut().find(|v| {
-                    v.mount_point.to_string_lossy() == vol.mount_point
-                }) {
+                if let Some(entry) = volumes
+                    .iter_mut()
+                    .find(|v| v.mount_point.to_string_lossy() == vol.mount_point)
+                {
                     entry.size_bytes = vol.size_bytes;
                     entry.file_system = vol.file_system.clone();
                     entry.is_external = vol.is_external();
@@ -338,8 +341,8 @@ impl SecureEraseView {
         let volume = zero::disk::VolumeInfo::for_path(&mount_point)
             .map_err(|e| format!("Failed to get volume info: {e}"))?;
 
-        let _target = zero::disk::erase::prepare_erase(&volume)
-            .map_err(|e| format!("Cannot erase: {e}"))?;
+        let _target =
+            zero::disk::erase::prepare_erase(&volume).map_err(|e| format!("Cannot erase: {e}"))?;
 
         let level = match level_idx {
             0 => zero::disk::erase::EraseLevel::Quick,
@@ -363,9 +366,7 @@ impl SecureEraseView {
                     .store(p.total_passes, Ordering::Relaxed);
                 progress.bad_blocks.store(p.bad_blocks, Ordering::Relaxed);
                 progress.speed_bps.store(p.speed_bps, Ordering::Relaxed);
-                progress
-                    .eta_seconds
-                    .store(p.eta_seconds, Ordering::Relaxed);
+                progress.eta_seconds.store(p.eta_seconds, Ordering::Relaxed);
                 progress.verifying.store(p.verifying, Ordering::Relaxed);
             },
             move || cancelled.load(Ordering::Relaxed),

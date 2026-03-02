@@ -4,14 +4,13 @@ use std::path::PathBuf;
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use gpui_component::{
-    button::Button,
-    checkbox::Checkbox,
-    h_flex, v_flex, ActiveTheme, Disableable as _, IconName, Sizable as _,
+    ActiveTheme, Disableable as _, IconName, Sizable as _, button::Button, checkbox::Checkbox,
+    h_flex, v_flex,
 };
 
 use crate::services::SearchService;
 use crate::theme::{self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, RADIUS};
-use crate::ui::{format_size, ConfirmDialog, EmptyState};
+use crate::ui::{ConfirmDialog, EmptyState, format_size};
 
 use super::detail::render_detail_view;
 use super::{CategoryFileItem, CategoryResult};
@@ -69,40 +68,45 @@ impl CleanupView {
             let manager_clone = this
                 .update(cx, |_, cx| search.read(cx).clone_manager())
                 .ok();
-            let Some(manager_clone) = manager_clone else { return };
+            let Some(manager_clone) = manager_clone else {
+                return;
+            };
 
             // Scan on background thread (heavy I/O)
-            let result = cx.background_executor().spawn(async move {
-                let Ok(summary) = zero::prelude::execute_full_cleanup_scan(&manager_clone)
-                else {
-                    return Vec::new();
-                };
-                summary
-                    .groups
-                    .into_iter()
-                    .flat_map(|g| {
-                        let group_name = format!("{:?}", g.group);
-                        g.categories.into_iter().map(move |cat| {
-                            let files: Vec<CategoryFileItem> = cat
-                                .items
-                                .iter()
-                                .map(|item| CategoryFileItem {
-                                    path: PathBuf::from(&item.node.path),
-                                    name: item.node.name.clone(),
-                                    size: item.node.size,
-                                })
-                                .collect();
-                            CategoryResult {
-                                name: cat.category_name,
-                                group: group_name.clone(),
-                                file_count: cat.count,
-                                total_bytes: cat.total_bytes,
-                                files,
-                            }
+            let result = cx
+                .background_executor()
+                .spawn(async move {
+                    let Ok(summary) = zero::prelude::execute_full_cleanup_scan(&manager_clone)
+                    else {
+                        return Vec::new();
+                    };
+                    summary
+                        .groups
+                        .into_iter()
+                        .flat_map(|g| {
+                            let group_name = format!("{:?}", g.group);
+                            g.categories.into_iter().map(move |cat| {
+                                let files: Vec<CategoryFileItem> = cat
+                                    .items
+                                    .iter()
+                                    .map(|item| CategoryFileItem {
+                                        path: PathBuf::from(&item.node.path),
+                                        name: item.node.name.clone(),
+                                        size: item.node.size,
+                                    })
+                                    .collect();
+                                CategoryResult {
+                                    name: cat.category_name,
+                                    group: group_name.clone(),
+                                    file_count: cat.count,
+                                    total_bytes: cat.total_bytes,
+                                    files,
+                                }
+                            })
                         })
-                    })
-                    .collect::<Vec<_>>()
-            }).await;
+                        .collect::<Vec<_>>()
+                })
+                .await;
 
             // Apply results on main thread (fast)
             this.update(cx, |view, cx| {
@@ -258,7 +262,9 @@ impl CleanupView {
     /// Move focus up in the detail view.
     pub(super) fn detail_focus_prev(&mut self, cx: &mut Context<Self>) {
         let count = self.detail_file_count();
-        if count == 0 { return; }
+        if count == 0 {
+            return;
+        }
         self.detail_focused = Some(match self.detail_focused {
             Some(0) | None => 0,
             Some(i) => i - 1,
@@ -269,7 +275,9 @@ impl CleanupView {
     /// Move focus down in the detail view.
     pub(super) fn detail_focus_next(&mut self, cx: &mut Context<Self>) {
         let count = self.detail_file_count();
-        if count == 0 { return; }
+        if count == 0 {
+            return;
+        }
         let max = count.saturating_sub(1);
         self.detail_focused = Some(match self.detail_focused {
             None => 0,
@@ -288,10 +296,18 @@ impl CleanupView {
 
     /// Open the focused item (context-aware).
     pub(super) fn detail_open_focused(&mut self, _cx: &mut Context<Self>) {
-        let Some(focused) = self.detail_focused else { return };
-        let Some(cat_idx) = self.detail_category else { return };
-        let Some(cat) = self.categories.get(cat_idx) else { return };
-        let Some(file) = cat.files.get(focused) else { return };
+        let Some(focused) = self.detail_focused else {
+            return;
+        };
+        let Some(cat_idx) = self.detail_category else {
+            return;
+        };
+        let Some(cat) = self.categories.get(cat_idx) else {
+            return;
+        };
+        let Some(file) = cat.files.get(focused) else {
+            return;
+        };
         let path = &file.path;
 
         if path.extension().map(|e| e == "todo").unwrap_or(false) {
@@ -315,19 +331,33 @@ impl CleanupView {
     /// Reveal the focused item in Finder.
     #[allow(dead_code)]
     pub(super) fn detail_reveal_focused(&mut self, _cx: &mut Context<Self>) {
-        let Some(focused) = self.detail_focused else { return };
-        let Some(cat_idx) = self.detail_category else { return };
-        let Some(cat) = self.categories.get(cat_idx) else { return };
-        let Some(file) = cat.files.get(focused) else { return };
+        let Some(focused) = self.detail_focused else {
+            return;
+        };
+        let Some(cat_idx) = self.detail_category else {
+            return;
+        };
+        let Some(cat) = self.categories.get(cat_idx) else {
+            return;
+        };
+        let Some(file) = cat.files.get(focused) else {
+            return;
+        };
         #[cfg(target_os = "macos")]
         crate::platform::open::reveal_in_finder(&file.path);
     }
 
     /// Reveal a specific item by index in Finder.
     pub(super) fn detail_reveal_item(&self, idx: usize) {
-        let Some(cat_idx) = self.detail_category else { return };
-        let Some(cat) = self.categories.get(cat_idx) else { return };
-        let Some(file) = cat.files.get(idx) else { return };
+        let Some(cat_idx) = self.detail_category else {
+            return;
+        };
+        let Some(cat) = self.categories.get(cat_idx) else {
+            return;
+        };
+        let Some(file) = cat.files.get(idx) else {
+            return;
+        };
         #[cfg(target_os = "macos")]
         crate::platform::open::reveal_in_finder(&file.path);
     }
@@ -355,11 +385,7 @@ impl CleanupView {
 }
 
 impl Render for CleanupView {
-    fn render(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // Drill-in detail view
         if self.detail_category.is_some() {
             return render_detail_view(self, window, cx).into_any_element();
@@ -405,166 +431,168 @@ impl Render for CleanupView {
         div()
             .relative()
             .size_full()
-            .child(v_flex()
-            .size_full()
-            .bg(theme::content_bg(cx))
-            .p_4()
-            .gap_3()
-            // Header
             .child(
-                h_flex()
-                    .items_center()
-                    .justify_between()
-                    .child(
-                        div()
-                            .text_size(FONT_SIZE_BODY)
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .child("Storage Cleanup"),
-                    )
+                v_flex()
+                    .size_full()
+                    .bg(theme::content_bg(cx))
+                    .p_4()
+                    .gap_3()
+                    // Header
                     .child(
                         h_flex()
-                            .gap_2()
-                            .when(self.cleaning, |el| {
-                                el.child(
-                                    Button::new("clean-btn")
-                                        .label("Cleaning...")
-                                        .compact()
-                                        .small()
-                                        .disabled(true),
-                                )
-                            })
-                            .when(!self.selected.is_empty() && !self.cleaning, |el| {
-                                el.child(
-                                    Button::new("clean-btn")
-                                        .label(SharedString::from(format!(
-                                            "Clean {} ({} files)",
-                                            format_size(self.selected_bytes()),
-                                            self.selected_file_count(),
-                                        )))
-                                        .compact()
-                                        .small()
-                                        .on_click(cx.listener(|this, _, _, cx| {
-                                            this.confirm_clean = true;
-                                            cx.notify();
-                                        })),
-                                )
-                            })
+                            .items_center()
+                            .justify_between()
                             .child(
-                                Button::new("scan-btn")
-                                    .label(if self.scanning {
-                                        "Scanning..."
-                                    } else {
-                                        "Scan"
-                                    })
-                                    .compact()
-                                    .small()
-                                    .disabled(self.scanning || self.cleaning)
-                                    .on_click(cx.listener(|this, _, _, cx| {
-                                        this.start_scan(cx);
-                                    })),
-                            ),
-                    ),
-            )
-            // Content
-            .when(!self.scan_complete && !self.scanning, |el| {
-                el.child(
-                    EmptyState::new(IconName::Delete, "Run a scan to find cleanable files")
-                        .subtitle("Analyzes categories like caches, logs, and temporary files"),
-                )
-            })
-            .when(self.scanning, |el| {
-                let status = self
-                    .scan_status
-                    .clone()
-                    .unwrap_or_else(|| "Scanning...".to_string());
-                el.child(
-                    EmptyState::new(IconName::Search, SharedString::from(status))
-                        .subtitle("Analyzing your files by category"),
-                )
-            })
-            .when(self.scan_complete && !self.scanning, |el| {
-                let total_bytes: u64 = self.categories.iter().map(|c| c.total_bytes).sum();
-                let total_files: usize = self.categories.iter().map(|c| c.file_count).sum();
-
-                el.child(
-                    div()
-                        .text_size(FONT_SIZE_CAPTION)
-                        .text_color(muted)
-                        .child(SharedString::from(format!(
-                            "Found {} in {} files across {} categories",
-                            format_size(total_bytes),
-                            total_files,
-                            self.categories.len(),
-                        ))),
-                )
-                .child(
-                    v_flex()
-                        .id("cleanup-list")
-                        .flex_1()
-                        .overflow_y_scroll()
-                        .gap_0p5()
-                        .children(
-                            self.categories.iter().enumerate().map(|(i, cat)| {
-                                let checked = self.selected.contains(&i);
+                                div()
+                                    .text_size(FONT_SIZE_BODY)
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .child("Storage Cleanup"),
+                            )
+                            .child(
                                 h_flex()
-                                    .id(SharedString::from(format!("cat-{i}")))
-                                    .w_full()
-                                    .px_3()
-                                    .py_2()
-                                    .gap_3()
-                                    .items_center()
-                                    .rounded(RADIUS)
-                                    .cursor_pointer()
-                                    .hover(|s| s.bg(theme::surface_hover(cx)))
-                                    .on_click(cx.listener(move |this, _, _, cx| {
-                                        this.toggle_category(i, cx);
-                                    }))
-                                    .child(Checkbox::new(SharedString::from(
-                                        format!("chk-{i}"),
-                                    )).checked(checked))
+                                    .gap_2()
+                                    .when(self.cleaning, |el| {
+                                        el.child(
+                                            Button::new("clean-btn")
+                                                .label("Cleaning...")
+                                                .compact()
+                                                .small()
+                                                .disabled(true),
+                                        )
+                                    })
+                                    .when(!self.selected.is_empty() && !self.cleaning, |el| {
+                                        el.child(
+                                            Button::new("clean-btn")
+                                                .label(SharedString::from(format!(
+                                                    "Clean {} ({} files)",
+                                                    format_size(self.selected_bytes()),
+                                                    self.selected_file_count(),
+                                                )))
+                                                .compact()
+                                                .small()
+                                                .on_click(cx.listener(|this, _, _, cx| {
+                                                    this.confirm_clean = true;
+                                                    cx.notify();
+                                                })),
+                                        )
+                                    })
                                     .child(
-                                        div()
-                                            .id(SharedString::from(format!("cat-name-{i}")))
-                                            .flex_1()
-                                            .min_w_0()
-                                            .cursor_pointer()
-                                            .on_click(cx.listener(move |this, _, _, cx| {
-                                                this.drill_into(i, cx);
-                                            }))
-                                            .child(
-                                                div()
-                                                    .text_size(FONT_SIZE_BODY)
-                                                    .child(SharedString::from(cat.name.clone())),
-                                            )
-                                            .child(
-                                                div()
-                                                    .text_size(FONT_SIZE_CAPTION)
-                                                    .text_color(muted)
-                                                    .child(SharedString::from(cat.group.clone())),
-                                            ),
-                                    )
-                                    .child(
-                                        div()
-                                            .text_size(FONT_SIZE_CAPTION)
-                                            .text_color(muted)
-                                            .child(SharedString::from(format!(
-                                                "{} files",
-                                                cat.file_count
-                                            ))),
-                                    )
-                                    .child(
-                                        div()
-                                            .text_size(FONT_SIZE_BODY)
-                                            .min_w(px(80.0))
-                                            .text_right()
-                                            .child(SharedString::from(format_size(
-                                                cat.total_bytes,
-                                            ))),
-                                    )
-                            }),
-                        ),
-                )
-            }))
+                                        Button::new("scan-btn")
+                                            .label(if self.scanning {
+                                                "Scanning..."
+                                            } else {
+                                                "Scan"
+                                            })
+                                            .compact()
+                                            .small()
+                                            .disabled(self.scanning || self.cleaning)
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.start_scan(cx);
+                                            })),
+                                    ),
+                            ),
+                    )
+                    // Content
+                    .when(!self.scan_complete && !self.scanning, |el| {
+                        el.child(
+                            EmptyState::new(IconName::Delete, "Run a scan to find cleanable files")
+                                .subtitle(
+                                    "Analyzes categories like caches, logs, and temporary files",
+                                ),
+                        )
+                    })
+                    .when(self.scanning, |el| {
+                        let status = self
+                            .scan_status
+                            .clone()
+                            .unwrap_or_else(|| "Scanning...".to_string());
+                        el.child(
+                            EmptyState::new(IconName::Search, SharedString::from(status))
+                                .subtitle("Analyzing your files by category"),
+                        )
+                    })
+                    .when(self.scan_complete && !self.scanning, |el| {
+                        let total_bytes: u64 = self.categories.iter().map(|c| c.total_bytes).sum();
+                        let total_files: usize = self.categories.iter().map(|c| c.file_count).sum();
+
+                        el.child(div().text_size(FONT_SIZE_CAPTION).text_color(muted).child(
+                            SharedString::from(format!(
+                                "Found {} in {} files across {} categories",
+                                format_size(total_bytes),
+                                total_files,
+                                self.categories.len(),
+                            )),
+                        ))
+                        .child(
+                            v_flex()
+                                .id("cleanup-list")
+                                .flex_1()
+                                .overflow_y_scroll()
+                                .gap_0p5()
+                                .children(self.categories.iter().enumerate().map(|(i, cat)| {
+                                    let checked = self.selected.contains(&i);
+                                    h_flex()
+                                        .id(SharedString::from(format!("cat-{i}")))
+                                        .w_full()
+                                        .px_3()
+                                        .py_2()
+                                        .gap_3()
+                                        .items_center()
+                                        .rounded(RADIUS)
+                                        .cursor_pointer()
+                                        .hover(|s| s.bg(theme::surface_hover(cx)))
+                                        .on_click(cx.listener(move |this, _, _, cx| {
+                                            this.toggle_category(i, cx);
+                                        }))
+                                        .child(
+                                            Checkbox::new(SharedString::from(format!("chk-{i}")))
+                                                .checked(checked),
+                                        )
+                                        .child(
+                                            div()
+                                                .id(SharedString::from(format!("cat-name-{i}")))
+                                                .flex_1()
+                                                .min_w_0()
+                                                .cursor_pointer()
+                                                .on_click(cx.listener(move |this, _, _, cx| {
+                                                    this.drill_into(i, cx);
+                                                }))
+                                                .child(
+                                                    div().text_size(FONT_SIZE_BODY).child(
+                                                        SharedString::from(cat.name.clone()),
+                                                    ),
+                                                )
+                                                .child(
+                                                    div()
+                                                        .text_size(FONT_SIZE_CAPTION)
+                                                        .text_color(muted)
+                                                        .child(SharedString::from(
+                                                            cat.group.clone(),
+                                                        )),
+                                                ),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_size(FONT_SIZE_CAPTION)
+                                                .text_color(muted)
+                                                .child(SharedString::from(format!(
+                                                    "{} files",
+                                                    cat.file_count
+                                                ))),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_size(FONT_SIZE_BODY)
+                                                .min_w(px(80.0))
+                                                .text_right()
+                                                .child(SharedString::from(format_size(
+                                                    cat.total_bytes,
+                                                ))),
+                                        )
+                                })),
+                        )
+                    }),
+            )
             .when_some(confirm_dialog, |el, dialog| el.child(dialog))
             .into_any_element()
     }

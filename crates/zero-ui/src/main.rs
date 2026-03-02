@@ -10,15 +10,14 @@ mod views;
 
 use gpui::*;
 use gpui_component::{
-    theme::{Theme, ThemeMode},
     Root,
+    theme::{Theme, ThemeMode},
 };
 
 use actions::{
     CopyFiles, CopyPath, CutFiles, DuplicateFiles, FindInBrowser, GoBack, GoForward, GoUp,
-    MoveToTrash, NewFolder, OpenCommandPalette, OpenSelected, PasteFiles, QuickLook, Quit,
-    Refresh, Rename, SelectAll, SelectNext, SelectPrev, ToggleSidebar, ToggleSplitView,
-    ToggleViewMode,
+    MoveToTrash, NewFolder, OpenCommandPalette, OpenSelected, PasteFiles, QuickLook, Quit, Refresh,
+    Rename, SelectAll, SelectNext, SelectPrev, ToggleSidebar, ToggleSplitView, ToggleViewMode,
 };
 use app::ZeroApp;
 
@@ -40,7 +39,11 @@ fn main() {
                         .output();
                     if output
                         .ok()
-                        .map(|o| String::from_utf8_lossy(&o.stdout).trim().eq_ignore_ascii_case("dark"))
+                        .map(|o| {
+                            String::from_utf8_lossy(&o.stdout)
+                                .trim()
+                                .eq_ignore_ascii_case("dark")
+                        })
                         .unwrap_or(false)
                     {
                         ThemeMode::Dark

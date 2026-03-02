@@ -116,9 +116,7 @@ pub fn phase_scan(
 
         let scan_result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
             rayon::join(
-                || {
-                    scan_collect_with_progress(&source_path, scan_opts_source, Some(src_progress))
-                },
+                || scan_collect_with_progress(&source_path, scan_opts_source, Some(src_progress)),
                 || scan_collect_with_progress(&dest_path, scan_opts_dest, Some(dst_progress)),
             )
         }));
@@ -191,10 +189,7 @@ pub struct TransferContext<'a> {
 ///
 /// Returns the number of files transferred, bytes transferred, errors,
 /// and collected hashes (for cache insertion when verify is enabled).
-pub fn phase_transfer(
-    ctx: &TransferContext<'_>,
-    files_to_copy: &[&FileEntry],
-) -> TransferResult {
+pub fn phase_transfer(ctx: &TransferContext<'_>, files_to_copy: &[&FileEntry]) -> TransferResult {
     let files_transferred = AtomicUsize::new(0);
     let bytes_transferred = AtomicU64::new(0);
     let errors = AtomicUsize::new(0);
@@ -230,10 +225,7 @@ pub fn phase_transfer(
     let start_time_transfer = Instant::now();
 
     // Create atomic progress tracker for real-time byte updates
-    let atomic_progress = Arc::new(AtomicProgress::new(
-        total_files_to_copy,
-        grand_total_bytes,
-    ));
+    let atomic_progress = Arc::new(AtomicProgress::new(total_files_to_copy, grand_total_bytes));
 
     // Track consecutive errors to detect drive disconnection
     let consecutive_errors = AtomicUsize::new(0);
@@ -247,27 +239,29 @@ pub fn phase_transfer(
         }
 
         if let Some(ref sp) = sync_progress_for_copy
-            && sp.is_cancelled() {
-                return;
-            }
+            && sp.is_cancelled()
+        {
+            return;
+        }
 
         let dest_path = ctx.dest.join(&file.path);
 
         // Create parent directory if needed
         if let Some(parent) = dest_path.parent()
-            && !parent.exists() {
-                let _ = fs::create_dir_all(parent);
-            }
+            && !parent.exists()
+        {
+            let _ = fs::create_dir_all(parent);
+        }
 
-        let use_chunked =
-            ctx.chunked && should_use_chunked(file.size, ctx.chunk_threshold);
+        let use_chunked = ctx.chunked && should_use_chunked(file.size, ctx.chunk_threshold);
 
         // For non-chunked transfers: remove partial files and pre-allocate
         if !use_chunked {
             if let Some(partial_size) = get_partial_size(&dest_path)
-                && partial_size < file.size {
-                    let _ = remove_partial(&dest_path);
-                }
+                && partial_size < file.size
+            {
+                let _ = remove_partial(&dest_path);
+            }
 
             if file.size > 0 {
                 let _ = super::job::preallocate_file(&dest_path, file.size);
@@ -322,17 +316,17 @@ pub fn phase_transfer(
         match copy_result {
             Ok((_, hash, mtime)) => {
                 // Collect hash for cache insertion
-                if let (Some(h), Some(m), Some(hashes_mutex)) =
-                    (&hash, mtime, &collected_hashes)
+                if let (Some(h), Some(m), Some(hashes_mutex)) = (&hash, mtime, &collected_hashes)
                     && let Ok(hash_bytes) = super::job::hex_to_bytes(h)
-                        && let Ok(mut hashes) = hashes_mutex.lock() {
-                            hashes.push((
-                                file.path.to_string_lossy().to_string(),
-                                file.size as i64,
-                                m,
-                                hash_bytes,
-                            ));
-                        }
+                    && let Ok(mut hashes) = hashes_mutex.lock()
+                {
+                    hashes.push((
+                        file.path.to_string_lossy().to_string(),
+                        file.size as i64,
+                        m,
+                        hash_bytes,
+                    ));
+                }
 
                 let done = files_transferred.fetch_add(1, Ordering::Relaxed) + 1;
                 let _ = bytes_transferred.fetch_add(file.size, Ordering::Relaxed);
@@ -557,7 +551,14 @@ fn print_transfer_progress(
 
     eprint!(
         "\r  [{}/{}] {:.1}% ({:.1}/{:.1} {}) {} {} | {}        ",
-        done, total_files, percent, done_size, total_size, unit, speed_str, eta_str,
+        done,
+        total_files,
+        percent,
+        done_size,
+        total_size,
+        unit,
+        speed_str,
+        eta_str,
         filename_display
     );
     let _ = std::io::stderr().flush();
@@ -583,7 +584,7 @@ pub fn phase_cache_flush(
     eprint!("Caching {} checksums...", hashes.len());
     let _ = std::io::stderr().flush();
 
-    let cache_result = (|| -> Result<(), ()> {
+    let cache_result: Result<(), ()> = {
         let mut source_batch = ChecksumBatch::new();
         let mut dest_batch = ChecksumBatch::new();
 
@@ -592,8 +593,7 @@ pub fn phase_cache_flush(
                 CacheEntry::with_xxh3(path.clone(), *size, *mtime, hash_bytes.clone());
             source_batch.add(source_entry);
 
-            let dest_entry =
-                CacheEntry::with_xxh3(path.clone(), *size, *mtime, hash_bytes.clone());
+            let dest_entry = CacheEntry::with_xxh3(path.clone(), *size, *mtime, hash_bytes.clone());
             dest_batch.add(dest_entry);
 
             if source_batch.should_flush() {
@@ -609,16 +609,14 @@ pub fn phase_cache_flush(
 
         let source_count = source_db.count_files().unwrap_or(0);
         let source_bytes = source_db.total_bytes().unwrap_or(0);
-        let _ = control_db
-            .update_storage_stats(source_id, source_count, source_bytes);
+        let _ = control_db.update_storage_stats(source_id, source_count, source_bytes);
 
         let dest_count = dest_db.count_files().unwrap_or(0);
         let dest_bytes = dest_db.total_bytes().unwrap_or(0);
-        let _ = control_db
-            .update_storage_stats(dest_id, dest_count, dest_bytes);
+        let _ = control_db.update_storage_stats(dest_id, dest_count, dest_bytes);
 
         Ok(())
-    })();
+    };
 
     if cache_result.is_ok() {
         eprintln!(" done");

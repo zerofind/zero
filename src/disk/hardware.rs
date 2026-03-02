@@ -255,71 +255,74 @@ fn parse_ioreg_output(output: &str) -> Result<Vec<UsbDeviceInfo>, DiskError> {
         if trimmed.contains("IOUSBHostDevice") && trimmed.contains("<class") {
             // Save previous device if complete
             if let Some(builder) = current_device.take()
-                && let Some(device) = builder.build() {
-                    devices.push(device);
-                }
+                && let Some(device) = builder.build()
+            {
+                devices.push(device);
+            }
             current_device = Some(UsbDeviceBuilder::new());
         }
 
         // Parse properties within device block
         if let Some(ref mut builder) = current_device
-            && let Some((key, value)) = parse_ioreg_property(trimmed) {
-                match key {
-                    "USB Product Name" | "kUSBProductString" => {
-                        if builder.product_name.is_none() {
-                            builder.product_name = Some(value.trim().to_string());
-                        }
+            && let Some((key, value)) = parse_ioreg_property(trimmed)
+        {
+            match key {
+                "USB Product Name" | "kUSBProductString" => {
+                    if builder.product_name.is_none() {
+                        builder.product_name = Some(value.trim().to_string());
                     }
-                    "USB Vendor Name" | "kUSBVendorString" => {
-                        if builder.vendor_name.is_none() {
-                            builder.vendor_name = Some(value.trim().to_string());
-                        }
-                    }
-                    "idVendor" => {
-                        if let Ok(id) = value.parse::<u32>() {
-                            builder.vendor_id = Some(id);
-                        }
-                    }
-                    "idProduct" => {
-                        if let Ok(id) = value.parse::<u32>() {
-                            builder.product_id = Some(id);
-                        }
-                    }
-                    "USB Serial Number" | "kUSBSerialNumberString" => {
-                        if builder.serial_number.is_none() {
-                            builder.serial_number = Some(value.to_string());
-                        }
-                    }
-                    "Device Speed" => {
-                        if let Ok(speed) = value.parse::<u32>() {
-                            builder.speed = Some(speed);
-                        }
-                    }
-                    "bcdUSB" => {
-                        if let Ok(version) = value.parse::<u32>() {
-                            builder.usb_version = Some(bcd_to_version(version));
-                        }
-                    }
-                    "locationID" => {
-                        if let Ok(loc) = value.parse::<u32>() {
-                            builder.location_id = Some(loc);
-                        }
-                    }
-                    "UsbPowerSinkAllocation" => {
-                        if let Ok(power) = value.parse::<u32>() {
-                            builder.power_ma = Some(power);
-                        }
-                    }
-                    _ => {}
                 }
+                "USB Vendor Name" | "kUSBVendorString" => {
+                    if builder.vendor_name.is_none() {
+                        builder.vendor_name = Some(value.trim().to_string());
+                    }
+                }
+                "idVendor" => {
+                    if let Ok(id) = value.parse::<u32>() {
+                        builder.vendor_id = Some(id);
+                    }
+                }
+                "idProduct" => {
+                    if let Ok(id) = value.parse::<u32>() {
+                        builder.product_id = Some(id);
+                    }
+                }
+                "USB Serial Number" | "kUSBSerialNumberString" => {
+                    if builder.serial_number.is_none() {
+                        builder.serial_number = Some(value.to_string());
+                    }
+                }
+                "Device Speed" => {
+                    if let Ok(speed) = value.parse::<u32>() {
+                        builder.speed = Some(speed);
+                    }
+                }
+                "bcdUSB" => {
+                    if let Ok(version) = value.parse::<u32>() {
+                        builder.usb_version = Some(bcd_to_version(version));
+                    }
+                }
+                "locationID" => {
+                    if let Ok(loc) = value.parse::<u32>() {
+                        builder.location_id = Some(loc);
+                    }
+                }
+                "UsbPowerSinkAllocation" => {
+                    if let Ok(power) = value.parse::<u32>() {
+                        builder.power_ma = Some(power);
+                    }
+                }
+                _ => {}
             }
+        }
     }
 
     // Don't forget the last device
     if let Some(builder) = current_device
-        && let Some(device) = builder.build() {
-            devices.push(device);
-        }
+        && let Some(device) = builder.build()
+    {
+        devices.push(device);
+    }
 
     // Filter to only storage devices (have product name suggesting storage)
     let storage_devices: Vec<_> = devices

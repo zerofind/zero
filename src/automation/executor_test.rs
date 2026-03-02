@@ -48,8 +48,9 @@ async fn test_handle_usb_mount_with_automation() {
     std::fs::create_dir(&dest_dir).unwrap();
 
     // Create an automation
-    let _automation = executor.db().create_automation(
-        NewAutomation {
+    let _automation = executor
+        .db()
+        .create_automation(NewAutomation {
             name: "Test Backup".to_string(),
             dest_device_serial: Some("TEST123".to_string()),
             dest_volume_name: Some("TestDrive".to_string()),
@@ -70,9 +71,8 @@ async fn test_handle_usb_mount_with_automation() {
                 notify: false,
                 debounce_ms: 5000,
             },
-        },
-    )
-    .unwrap();
+        })
+        .unwrap();
 
     // Trigger USB mount
     let run_ids = executor
@@ -125,8 +125,9 @@ async fn test_recover_interrupted_runs() {
     let (executor, _temp) = setup_test_executor();
 
     // Create an automation
-    let automation = executor.db().create_automation(
-        NewAutomation {
+    let automation = executor
+        .db()
+        .create_automation(NewAutomation {
             name: "Test".to_string(),
             dest_device_serial: None,
             dest_volume_name: None,
@@ -134,17 +135,14 @@ async fn test_recover_interrupted_runs() {
             triggers: Triggers::default(),
             paths: vec![],
             settings: Settings::default(),
-        },
-    )
-    .unwrap();
+        })
+        .unwrap();
 
     // Start a run (simulating a running state)
-    let run = executor.db().start_run(
-        automation.id,
-        crate::cache::runs::TriggerType::Manual,
-        None,
-    )
-    .unwrap();
+    let run = executor
+        .db()
+        .start_run(automation.id, crate::cache::runs::TriggerType::Manual, None)
+        .unwrap();
 
     assert_eq!(run.status, RunStatus::Running);
 
@@ -170,8 +168,9 @@ async fn test_manual_trigger() {
     std::fs::write(source_dir.join("file.txt"), "content").unwrap();
 
     // Create automation with direct dest_path
-    let automation = executor.db().create_automation(
-        NewAutomation {
+    let automation = executor
+        .db()
+        .create_automation(NewAutomation {
             name: "Manual Test".to_string(),
             dest_device_serial: None,
             dest_volume_name: None,
@@ -188,9 +187,8 @@ async fn test_manual_trigger() {
                 notify: false,
                 debounce_ms: 5000,
             },
-        },
-    )
-    .unwrap();
+        })
+        .unwrap();
 
     // Run manually
     let run_id = executor

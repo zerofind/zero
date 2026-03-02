@@ -263,10 +263,7 @@ fn test_resolved_template_estimate_size() {
     // Size estimation may return 0 if no sources exist, or error if paths don't exist
     let size_result = resolved.estimate_size();
     // Just verify it returns a result (Ok or Err is fine)
-    match size_result {
-        Ok(_size) => {} // Any size is valid
-        Err(_) => {}    // Error is acceptable if paths don't exist
-    }
+    let _ = size_result;
 }
 
 // ============================================================================

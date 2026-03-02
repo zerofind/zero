@@ -3,8 +3,9 @@ use std::path::PathBuf;
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use gpui_component::{
+    ActiveTheme, Icon, IconName, Sizable as _,
     button::{Button, ButtonVariants as _},
-    h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable as _,
+    h_flex, v_flex,
 };
 
 use crate::models::ActiveView;
@@ -203,11 +204,7 @@ impl AppSidebar {
                     .on_click(cx.listener(move |_, _, _, cx| {
                         cx.emit(SidebarEvent::OpenPath(p.clone()));
                     }))
-                    .child(
-                        Icon::new(icon)
-                            .with_size(px(20.0))
-                            .text_color(icon_color),
-                    )
+                    .child(Icon::new(icon).with_size(px(20.0)).text_color(icon_color))
                     // Remove button (visible on hover, only for non-system bookmarks)
                     .when(!is_system, |el| {
                         el.child(
@@ -216,10 +213,9 @@ impl AppSidebar {
                                 .top_0()
                                 .right_0()
                                 .invisible()
-                                .group_hover(
-                                    SharedString::from(format!("bm-group-{i}")),
-                                    |s| s.visible(),
-                                )
+                                .group_hover(SharedString::from(format!("bm-group-{i}")), |s| {
+                                    s.visible()
+                                })
                                 .child(
                                     Button::new(SharedString::from(format!("rm-bm-{i}")))
                                         .ghost()
@@ -280,10 +276,9 @@ impl AppSidebar {
                                 .top(px(4.0))
                                 .right(px(4.0))
                                 .invisible()
-                                .group_hover(
-                                    SharedString::from(format!("drv-group-{i}")),
-                                    |s| s.visible(),
-                                )
+                                .group_hover(SharedString::from(format!("drv-group-{i}")), |s| {
+                                    s.visible()
+                                })
                                 .child(
                                     Button::new(SharedString::from(format!("eject-{i}")))
                                         .ghost()
@@ -292,9 +287,7 @@ impl AppSidebar {
                                         .icon(IconName::Minus)
                                         .tooltip("Eject")
                                         .on_click(cx.listener(move |_, _, _, cx| {
-                                            cx.emit(SidebarEvent::EjectDrive(
-                                                eject_path.clone(),
-                                            ));
+                                            cx.emit(SidebarEvent::EjectDrive(eject_path.clone()));
                                         })),
                                 ),
                         )
@@ -310,11 +303,7 @@ impl AppSidebar {
 }
 
 impl Render for AppSidebar {
-    fn render(
-        &mut self,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .id("sidebar")
             .w(px(220.0))

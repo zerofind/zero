@@ -1,11 +1,12 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use gpui_component::{
+    ActiveTheme, Sizable as _,
     button::{Button, ButtonVariants as _},
-    h_flex, v_flex, ActiveTheme, Sizable as _,
+    h_flex, v_flex,
 };
 
-use crate::theme::{self, brand_color, FONT_SIZE_BODY, FONT_SIZE_CAPTION, RADIUS};
+use crate::theme::{self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, RADIUS, brand_color};
 use crate::ui::EmptyState;
 use gpui_component::IconName;
 
@@ -79,10 +80,11 @@ impl AutomationsView {
     }
 
     async fn fetch_automations() -> Result<Vec<AutomationCard>, String> {
-        let db = zero::cache::CacheDb::open()
-            .map_err(|e| format!("Failed to open database: {e}"))?;
+        let db =
+            zero::cache::CacheDb::open().map_err(|e| format!("Failed to open database: {e}"))?;
 
-        let automations = db.list_automations()
+        let automations = db
+            .list_automations()
             .map_err(|e| format!("Failed to list automations: {e}"))?;
 
         let mut cards = Vec::new();
@@ -111,9 +113,7 @@ impl AutomationsView {
             let dest_raw = auto.dest_path.clone().unwrap_or_default();
             let sources: Vec<String> = auto.paths.iter().map(|p| p.source.clone()).collect();
 
-            let latest = db.get_latest_run(auto.id)
-                .ok()
-                .flatten();
+            let latest = db.get_latest_run(auto.id).ok().flatten();
 
             let last_run = latest.map(|r| format!("Last run: {}", r.status.as_str()));
 
@@ -175,10 +175,8 @@ impl AutomationsView {
             let result = cx
                 .background_executor()
                 .spawn(async move {
-                    let db = zero::cache::CacheDb::open()
-                        .map_err(|e| format!("{e}"))?;
-                    db.delete_automation(id)
-                        .map_err(|e| format!("{e}"))
+                    let db = zero::cache::CacheDb::open().map_err(|e| format!("{e}"))?;
+                    db.delete_automation(id).map_err(|e| format!("{e}"))
                 })
                 .await;
 
@@ -214,11 +212,7 @@ impl AutomationsView {
 }
 
 impl Render for AutomationsView {
-    fn render(
-        &mut self,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let muted = cx.theme().muted_foreground;
         let modal_view = self.modal.clone();
 
@@ -269,22 +263,15 @@ impl Render for AutomationsView {
                                             .compact()
                                             .small()
                                             .primary()
-                                            .on_click(cx.listener(
-                                                |this, _, window, cx| {
-                                                    this.open_new_modal(window, cx);
-                                                },
-                                            )),
+                                            .on_click(cx.listener(|this, _, window, cx| {
+                                                this.open_new_modal(window, cx);
+                                            })),
                                     ),
                             ),
                     )
-                    .child(
-                        div()
-                            .text_size(FONT_SIZE_BODY)
-                            .text_color(muted)
-                            .child(
-                                "Automated sync tasks that run when drives connect or files change.",
-                            ),
-                    )
+                    .child(div().text_size(FONT_SIZE_BODY).text_color(muted).child(
+                        "Automated sync tasks that run when drives connect or files change.",
+                    ))
                     .when(self.loading, |el| {
                         el.child(
                             div()
@@ -305,11 +292,8 @@ impl Render for AutomationsView {
                         !self.loading && self.automations.is_empty() && self.error.is_none(),
                         |el| {
                             el.child(
-                                EmptyState::new(
-                                    IconName::Settings,
-                                    "No automations configured",
-                                )
-                                .subtitle("Click \"New\" to create your first automation."),
+                                EmptyState::new(IconName::Settings, "No automations configured")
+                                    .subtitle("Click \"New\" to create your first automation."),
                             )
                         },
                     )
@@ -353,11 +337,7 @@ impl AutomationsView {
                                             .w(px(8.0))
                                             .h(px(8.0))
                                             .rounded(px(4.0))
-                                            .bg(if enabled {
-                                                brand_color()
-                                            } else {
-                                                muted
-                                            }),
+                                            .bg(if enabled { brand_color() } else { muted }),
                                     )
                                     .child(
                                         div()
@@ -399,20 +379,11 @@ impl AutomationsView {
                                 div()
                                     .text_size(FONT_SIZE_CAPTION)
                                     .text_color(muted)
-                                    .child(SharedString::from(format!(
-                                        "To: {}",
-                                        card.dest_name
-                                    ))),
+                                    .child(SharedString::from(format!("To: {}", card.dest_name))),
                             )
-                            .child(
-                                div()
-                                    .text_size(FONT_SIZE_CAPTION)
-                                    .text_color(muted)
-                                    .child(SharedString::from(format!(
-                                        "Trigger: {}",
-                                        card.trigger_desc
-                                    ))),
-                            ),
+                            .child(div().text_size(FONT_SIZE_CAPTION).text_color(muted).child(
+                                SharedString::from(format!("Trigger: {}", card.trigger_desc)),
+                            )),
                     )
                     .when_some(card.last_run.clone(), |el, last| {
                         el.child(

@@ -399,10 +399,9 @@ fn send_or_collect_hash(
             .as_ref()
             .map(|tx| tx.send(h.clone()).is_ok())
             .unwrap_or(false);
-        if !sent
-            && let Ok(mut vec) = hashes.lock() {
-                vec.push(h);
-            }
+        if !sent && let Ok(mut vec) = hashes.lock() {
+            vec.push(h);
+        }
     }
 }
 

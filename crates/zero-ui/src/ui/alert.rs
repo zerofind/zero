@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
 use gpui::*;
-use gpui_component::{h_flex, v_flex, Icon, IconName, Sizable as _};
+use gpui_component::{Icon, IconName, Sizable as _, h_flex, v_flex};
 
 use crate::theme::{self, FONT_SIZE_CAPTION, RADIUS};
 

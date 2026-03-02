@@ -1,19 +1,24 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use gpui_component::{
+    ActiveTheme, Disableable as _, Sizable as _,
     button::{Button, ButtonVariants as _},
     switch::Switch,
-    v_flex, ActiveTheme, Disableable as _, Sizable as _,
+    v_flex,
 };
 
 use crate::theme::{FONT_SIZE_BODY, FONT_SIZE_CAPTION, RADIUS, RADIUS_LG};
-use crate::ui::{format_number, ConfirmDialog};
+use crate::ui::{ConfirmDialog, format_number};
 
-use super::helpers::{card_border, group_label, render_theme_picker, setting_row};
 use super::SettingsView;
+use super::helpers::{card_border, group_label, render_theme_picker, setting_row};
 
 impl SettingsView {
-    pub(super) fn render_general(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    pub(super) fn render_general(
+        &self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let border = card_border(cx);
         let muted = cx.theme().muted_foreground;
         let fg = cx.theme().foreground;

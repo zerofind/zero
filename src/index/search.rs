@@ -435,9 +435,10 @@ impl SearchIndex {
         for result in walk_dir {
             // Check for cancellation
             if let Some(ref p) = progress
-                && p.is_cancelled() {
-                    break;
-                }
+                && p.is_cancelled()
+            {
+                break;
+            }
 
             match result {
                 Ok(entry) => {
@@ -563,20 +564,14 @@ impl SearchIndex {
         self.slab.push(node);
 
         // Add to name index
-        self.name_index
-            .entry(name_lower)
-            .or_default()
-            .push(index);
+        self.name_index.entry(name_lower).or_default().push(index);
 
         // Add to type index for fast type filtering (also tracks trash)
         self.type_index
             .add_file(index as u32, &path, extension.as_deref(), is_directory);
 
         // Add to mtime index for fast "recent files" queries
-        self.mtime_index
-            .entry(mtime)
-            .or_default()
-            .push(index);
+        self.mtime_index.entry(mtime).or_default().push(index);
     }
 
     /// Clear the index
@@ -691,17 +686,11 @@ impl SearchIndex {
                 }
             }
             // Type-only search (bitmap fast path)
-            (true, Some(cat), _) => {
-                self.bitmap_search(*cat, q.limit, q.include_trash)
-            }
+            (true, Some(cat), _) => self.bitmap_search(*cat, q.limit, q.include_trash),
             // Text + type search (bitmap intersection)
-            (false, Some(cat), _) => {
-                self.text_with_bitmap(&q.text, *cat, q.limit, q.include_trash)
-            }
+            (false, Some(cat), _) => self.text_with_bitmap(&q.text, *cat, q.limit, q.include_trash),
             // List all (no text, no type, no extension)
-            (true, None, _) if q.extension.is_none() => {
-                self.list_all(q.limit)
-            }
+            (true, None, _) if q.extension.is_none() => self.list_all(q.limit),
             // Extension or text search with options
             _ => {
                 let opts = self.query_to_options(&q);
@@ -1016,9 +1005,10 @@ impl SearchIndex {
             for &idx in indices.iter().rev() {
                 // If type filter specified, check bitmap
                 if let Some(bitmap) = type_bitmap
-                    && !bitmap.contains(idx as u32) {
-                        continue;
-                    }
+                    && !bitmap.contains(idx as u32)
+                {
+                    continue;
+                }
 
                 if let Some(node) = self.slab.get(idx) {
                     // Skip directories unless explicitly requested
@@ -1065,9 +1055,10 @@ impl SearchIndex {
             for &idx in indices.iter().rev() {
                 // Type filter check
                 if let Some(bitmap) = type_bitmap
-                    && !bitmap.contains(idx as u32) {
-                        continue;
-                    }
+                    && !bitmap.contains(idx as u32)
+                {
+                    continue;
+                }
 
                 if let Some(node) = self.slab.get(idx) {
                     // Skip directories

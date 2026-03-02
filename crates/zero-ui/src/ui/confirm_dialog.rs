@@ -2,11 +2,12 @@ use std::rc::Rc;
 
 use gpui::*;
 use gpui_component::{
+    ActiveTheme, Sizable as _,
     button::{Button, ButtonVariants as _},
-    h_flex, v_flex, ActiveTheme, Sizable as _,
+    h_flex, v_flex,
 };
 
-use crate::theme::{self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, RADIUS_LG, MODAL_MD_WIDTH};
+use crate::theme::{self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, MODAL_MD_WIDTH, RADIUS_LG};
 
 type Handler = Rc<dyn Fn(&mut Window, &mut App)>;
 

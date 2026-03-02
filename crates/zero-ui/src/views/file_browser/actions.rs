@@ -105,9 +105,10 @@ impl FileBrowserView {
 
         let load_path = self.path.clone();
         cx.spawn(async move |this, cx| {
-            let entries = cx.background_executor().spawn(async move {
-                super::state::load_directory(&load_path)
-            }).await;
+            let entries = cx
+                .background_executor()
+                .spawn(async move { super::state::load_directory(&load_path) })
+                .await;
 
             this.update(cx, |view, cx| {
                 view.loading = false;
@@ -118,8 +119,10 @@ impl FileBrowserView {
                     cx.notify();
                 });
                 cx.notify();
-            }).ok();
-        }).detach();
+            })
+            .ok();
+        })
+        .detach();
     }
 
     /// Get the first selected BrowserEntry (if any).
@@ -197,8 +200,7 @@ impl FileBrowserView {
                                 copy_recursive_with_progress(src, &target, &progress)
                             }
                             ClipboardOperation::Cut => {
-                                let r =
-                                    std::fs::rename(src, &target).map_err(|e| e.to_string());
+                                let r = std::fs::rename(src, &target).map_err(|e| e.to_string());
                                 if r.is_ok() {
                                     // For moves, count as instantly done
                                     let mut f = 0usize;
@@ -265,7 +267,11 @@ impl FileBrowserView {
 
     /// Emit selected entries for move to the other split pane.
     pub fn move_to_other_pane(&mut self, cx: &mut Context<Self>) {
-        let paths: Vec<PathBuf> = self.selected_entries(cx).into_iter().map(|e| e.path).collect();
+        let paths: Vec<PathBuf> = self
+            .selected_entries(cx)
+            .into_iter()
+            .map(|e| e.path)
+            .collect();
         if !paths.is_empty() {
             cx.emit(FileBrowserEvent::MoveToOtherPane(paths));
         }
@@ -273,7 +279,11 @@ impl FileBrowserView {
 
     /// Emit selected entries for copy to the other split pane.
     pub fn copy_to_other_pane(&mut self, cx: &mut Context<Self>) {
-        let paths: Vec<PathBuf> = self.selected_entries(cx).into_iter().map(|e| e.path).collect();
+        let paths: Vec<PathBuf> = self
+            .selected_entries(cx)
+            .into_iter()
+            .map(|e| e.path)
+            .collect();
         if !paths.is_empty() {
             cx.emit(FileBrowserEvent::CopyToOtherPane(paths));
         }

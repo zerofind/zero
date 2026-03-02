@@ -46,9 +46,8 @@ impl AutomationModal {
             name_input: cx.new(|cx| InputState::new(window, cx).placeholder("Automation name")),
             source_input: cx
                 .new(|cx| InputState::new(window, cx).placeholder("~/Documents, ~/Photos")),
-            dest_input: cx.new(|cx| {
-                InputState::new(window, cx).placeholder("/Volumes/Backup or ~/Backup")
-            }),
+            dest_input: cx
+                .new(|cx| InputState::new(window, cx).placeholder("/Volumes/Backup or ~/Backup")),
             on_mount: true,
             on_change: false,
             verify: true,
@@ -68,9 +67,8 @@ impl AutomationModal {
                     .placeholder("Automation name")
                     .default_value(&data.name)
             }),
-            source_input: cx.new(|cx| {
-                InputState::new(window, cx).placeholder("~/Documents, ~/Photos")
-            }),
+            source_input: cx
+                .new(|cx| InputState::new(window, cx).placeholder("~/Documents, ~/Photos")),
             dest_input: cx.new(|cx| {
                 InputState::new(window, cx)
                     .placeholder("/Volumes/Backup or ~/Backup")
@@ -124,7 +122,13 @@ impl AutomationModal {
     }
 
     pub(super) fn save(&mut self, cx: &mut Context<Self>) {
-        let name = self.name_input.read(cx).value().to_string().trim().to_string();
+        let name = self
+            .name_input
+            .read(cx)
+            .value()
+            .to_string()
+            .trim()
+            .to_string();
         if name.is_empty() {
             self.error = Some("Name is required.".to_string());
             cx.notify();
@@ -135,7 +139,13 @@ impl AutomationModal {
             cx.notify();
             return;
         }
-        let dest_raw = self.dest_input.read(cx).value().to_string().trim().to_string();
+        let dest_raw = self
+            .dest_input
+            .read(cx)
+            .value()
+            .to_string()
+            .trim()
+            .to_string();
         if dest_raw.is_empty() {
             self.error = Some("Destination is required.".to_string());
             cx.notify();
@@ -235,8 +245,7 @@ impl AutomationModal {
         editing_id: Option<i64>,
         new: zero::cache::automations::NewAutomation,
     ) -> Result<(), String> {
-        let db = zero::cache::CacheDb::open()
-            .map_err(|e| format!("Database error: {e}"))?;
+        let db = zero::cache::CacheDb::open().map_err(|e| format!("Database error: {e}"))?;
 
         if let Some(id) = editing_id {
             db.update_automation(id, new)
@@ -249,4 +258,3 @@ impl AutomationModal {
         Ok(())
     }
 }
-

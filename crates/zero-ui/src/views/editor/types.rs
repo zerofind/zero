@@ -6,18 +6,61 @@ pub const MAX_EDITABLE_SIZE: u64 = 1_048_576;
 /// Extensions we consider text-editable.
 const EDITABLE_EXTENSIONS: &[&str] = &[
     // Code
-    "rs", "py", "js", "ts", "jsx", "tsx", "go", "c", "h", "cpp", "hpp",
-    "java", "kt", "swift", "rb", "php", "lua", "sh", "bash", "zsh", "fish",
+    "rs",
+    "py",
+    "js",
+    "ts",
+    "jsx",
+    "tsx",
+    "go",
+    "c",
+    "h",
+    "cpp",
+    "hpp",
+    "java",
+    "kt",
+    "swift",
+    "rb",
+    "php",
+    "lua",
+    "sh",
+    "bash",
+    "zsh",
+    "fish",
     // Config / data
-    "toml", "yaml", "yml", "json", "xml", "csv", "ini", "cfg", "conf",
-    "env", "properties",
+    "toml",
+    "yaml",
+    "yml",
+    "json",
+    "xml",
+    "csv",
+    "ini",
+    "cfg",
+    "conf",
+    "env",
+    "properties",
     // Docs / text
-    "md", "txt", "rst", "log", "adoc",
+    "md",
+    "txt",
+    "rst",
+    "log",
+    "adoc",
     // Web
-    "html", "htm", "css", "scss", "sass", "less", "svg",
+    "html",
+    "htm",
+    "css",
+    "scss",
+    "sass",
+    "less",
+    "svg",
     // Other
-    "sql", "graphql", "proto", "dockerfile", "makefile",
-    "gitignore", "editorconfig",
+    "sql",
+    "graphql",
+    "proto",
+    "dockerfile",
+    "makefile",
+    "gitignore",
+    "editorconfig",
 ];
 
 /// Check whether a file path is a text-editable file.
@@ -32,7 +75,9 @@ pub fn is_editable(path: &Path) -> bool {
     // Dotfiles without extension (e.g., .gitignore, .env)
     if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
         let lower = name.to_lowercase();
-        if EDITABLE_EXTENSIONS.iter().any(|ext| lower == format!(".{ext}"))
+        if EDITABLE_EXTENSIONS
+            .iter()
+            .any(|ext| lower == format!(".{ext}"))
             || lower == "makefile"
             || lower == "dockerfile"
             || lower == "cmakelists.txt"

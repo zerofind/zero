@@ -322,10 +322,7 @@ pub fn find_duplicates_with_progress(
     progress: Option<Arc<DedupProgress>>,
 ) -> Result<DedupResult, DedupError> {
     // Create scan progress that mirrors to our dedup progress
-    let scan_progress = progress.as_ref().map(|_p| {
-        
-        Arc::new(CrawlProgress::new())
-    });
+    let scan_progress = progress.as_ref().map(|_p| Arc::new(CrawlProgress::new()));
 
     // Scan directory with progress
     let scan_options = ScanOptions {
@@ -335,15 +332,16 @@ pub fn find_duplicates_with_progress(
 
     // Check cancellation before scan
     if let Some(ref p) = progress
-        && p.is_cancelled() {
-            return Ok(DedupResult {
-                groups: vec![],
-                files_scanned: 0,
-                bytes_scanned: 0,
-                duplicate_count: 0,
-                wasted_bytes: 0,
-            });
-        }
+        && p.is_cancelled()
+    {
+        return Ok(DedupResult {
+            groups: vec![],
+            files_scanned: 0,
+            bytes_scanned: 0,
+            duplicate_count: 0,
+            wasted_bytes: 0,
+        });
+    }
 
     let entries = scan_collect_with_progress(path, scan_options, scan_progress.clone())?;
 
@@ -358,15 +356,16 @@ pub fn find_duplicates_with_progress(
 
     // Check cancellation after scan
     if let Some(ref p) = progress
-        && p.is_cancelled() {
-            return Ok(DedupResult {
-                groups: vec![],
-                files_scanned,
-                bytes_scanned,
-                duplicate_count: 0,
-                wasted_bytes: 0,
-            });
-        }
+        && p.is_cancelled()
+    {
+        return Ok(DedupResult {
+            groups: vec![],
+            files_scanned,
+            bytes_scanned,
+            duplicate_count: 0,
+            wasted_bytes: 0,
+        });
+    }
 
     // Filter by minimum size and type
     let type_filter = options.type_filter;
@@ -443,20 +442,21 @@ pub fn find_duplicates_with_progress(
                         .filter_map(|entry| {
                             // Check cancellation
                             if let Some(ref p) = progress_for_hash
-                                && p.is_cancelled() {
-                                    return None;
-                                }
+                                && p.is_cancelled()
+                            {
+                                return None;
+                            }
 
                             let size = entry.size;
-                            
+
                             hash_file_for_dedup(&entry, hash_algorithm, verify).map(|hash| {
-                                    // Update progress after successful hash
-                                    if let Some(ref p) = progress_for_hash {
-                                        p.files_hashed.fetch_add(1, Ordering::Release);
-                                        p.bytes_hashed.fetch_add(size, Ordering::Release);
-                                    }
-                                    (hash, entry)
-                                })
+                                // Update progress after successful hash
+                                if let Some(ref p) = progress_for_hash {
+                                    p.files_hashed.fetch_add(1, Ordering::Release);
+                                    p.bytes_hashed.fetch_add(size, Ordering::Release);
+                                }
+                                (hash, entry)
+                            })
                         })
                         .collect::<Vec<_>>()
                 })

@@ -268,12 +268,13 @@ pub fn copy_chunked_with_resume(
     } else {
         // Fresh copy - create new file
         if let Some(parent) = dest.parent()
-            && !parent.exists() {
-                std::fs::create_dir_all(parent).map_err(|e| ChunkedCopyError::DestCreateError {
-                    path: parent.to_string_lossy().to_string(),
-                    source: e,
-                })?;
-            }
+            && !parent.exists()
+        {
+            std::fs::create_dir_all(parent).map_err(|e| ChunkedCopyError::DestCreateError {
+                path: parent.to_string_lossy().to_string(),
+                source: e,
+            })?;
+        }
         File::create(dest).map_err(|e| ChunkedCopyError::DestCreateError {
             path: dest_str.clone(),
             source: e,

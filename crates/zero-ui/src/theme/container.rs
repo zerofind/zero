@@ -1,6 +1,6 @@
-use gpui::{px, Pixels};
+use gpui::{Pixels, px};
 
-use super::{content_bg, popover_bg, sidebar_bg, RADIUS_LG};
+use super::{RADIUS_LG, content_bg, popover_bg, sidebar_bg};
 
 /// Container depth levels — matches Swift ContainerLevel
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

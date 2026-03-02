@@ -27,10 +27,7 @@ impl AppService {
 
     fn load(&mut self, cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| {
-            let apps = cx
-                .background_executor()
-                .spawn(async { Self::scan() })
-                .await;
+            let apps = cx.background_executor().spawn(async { Self::scan() }).await;
 
             this.update(cx, |svc, _cx| {
                 svc.apps = apps;

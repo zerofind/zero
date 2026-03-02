@@ -114,14 +114,21 @@ pub fn cmd_delete(out: &Outputter, args: &DeleteArgs) -> anyhow::Result<()> {
 
     if deletable.is_empty() {
         let msg = "No valid paths to delete".to_string();
-        cmd_error!(out, "delete", start.elapsed().as_millis() as u64, "NOTHING_TO_DELETE", msg, {
-            out.error("Nothing to delete");
-            for item in &undeletable {
-                if let Some(reason) = &item.reason {
-                    out.indented(&format!("{}: {}", item.path.display(), reason));
+        cmd_error!(
+            out,
+            "delete",
+            start.elapsed().as_millis() as u64,
+            "NOTHING_TO_DELETE",
+            msg,
+            {
+                out.error("Nothing to delete");
+                for item in &undeletable {
+                    if let Some(reason) = &item.reason {
+                        out.indented(&format!("{}: {}", item.path.display(), reason));
+                    }
                 }
             }
-        });
+        );
         return Ok(());
     }
 
@@ -239,7 +246,13 @@ pub fn cmd_delete(out: &Outputter, args: &DeleteArgs) -> anyhow::Result<()> {
             });
         }
         Err(e) => {
-            cmd_error!(out, "delete", duration_ms, "DELETE_FAILED", format!("Delete failed: {}", e));
+            cmd_error!(
+                out,
+                "delete",
+                duration_ms,
+                "DELETE_FAILED",
+                format!("Delete failed: {}", e)
+            );
         }
     }
 
@@ -313,7 +326,10 @@ fn cmd_delete_preview(
         }
         if !cannot_delete.is_empty() {
             out.newline();
-            out.warn(&format!("{} path(s) cannot be deleted:", cannot_delete.len()));
+            out.warn(&format!(
+                "{} path(s) cannot be deleted:",
+                cannot_delete.len()
+            ));
             for item in &cannot_delete {
                 if let Some(reason) = &item.reason {
                     out.indented(&format!("{}: {}", item.path.display(), reason));

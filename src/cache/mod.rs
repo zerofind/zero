@@ -60,15 +60,15 @@
 
 pub mod automations;
 mod batch;
-mod db;
-pub mod runs;
-mod storages;
 pub mod control_state;
-pub mod storage_state;
 #[cfg(test)]
 mod control_state_test;
+mod db;
+pub mod runs;
+pub mod storage_state;
 #[cfg(test)]
 mod storage_state_test;
+mod storages;
 
 // Re-export main database types
 pub use db::{CacheDb, CacheError, CacheManager, ControlDb, StorageDb};
@@ -95,7 +95,7 @@ pub use control_state::{
 };
 
 // Re-export etch-backed storage state
-pub use storage_state::{StorageState, StorageTx, open_storage_store, cache_entry_to_file_entry};
+pub use storage_state::{StorageState, StorageTx, cache_entry_to_file_entry, open_storage_store};
 
 // Re-export run types
 pub use runs::{

@@ -1,5 +1,5 @@
 use gpui::*;
-use gpui_component::{menu::PopupMenu, table::TableState, IconName};
+use gpui_component::{IconName, menu::PopupMenu, table::TableState};
 
 use crate::actions::{
     AddToBookmarks, CopyFiles, CopyPath, CopyToOtherPane, CutFiles, DuplicateFiles,
@@ -53,11 +53,7 @@ pub fn build_context_menu(
 
     if is_dir {
         m = m
-            .menu_with_icon(
-                "Add to Bookmarks",
-                IconName::Plus,
-                Box::new(AddToBookmarks),
-            )
+            .menu_with_icon("Add to Bookmarks", IconName::Plus, Box::new(AddToBookmarks))
             .menu_with_icon(
                 "Find Duplicates",
                 IconName::Search,
@@ -88,11 +84,7 @@ pub fn build_context_menu(
         .menu_with_icon("Rename", IconName::Replace, Box::new(Rename))
         .menu_with_icon("New Folder", IconName::Plus, Box::new(NewFolder))
         .separator()
-        .menu_with_icon(
-            "Move to Trash",
-            IconName::Delete,
-            Box::new(MoveToTrash),
-        );
+        .menu_with_icon("Move to Trash", IconName::Delete, Box::new(MoveToTrash));
 
     m
 }

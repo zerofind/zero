@@ -2,10 +2,12 @@ use std::time::Duration;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
-use gpui_component::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable as _};
+use gpui_component::{ActiveTheme, Icon, IconName, Sizable as _, h_flex, v_flex};
 
-use crate::theme::{self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, PROGRESS_BAR_HEIGHT, PROGRESS_BAR_RADIUS, RADIUS};
 use super::format::{format_bytes, format_number};
+use crate::theme::{
+    self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, PROGRESS_BAR_HEIGHT, PROGRESS_BAR_RADIUS, RADIUS,
+};
 
 /// What kind of background operation is in progress.
 #[derive(Debug, Clone)]

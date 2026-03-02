@@ -125,7 +125,9 @@ pub mod prelude {
     pub use crate::automation::{AutomationEvent, Executor, ExecutorConfig};
 
     // Cache/Database
-    pub use crate::cache::{CacheDb, CacheEntry, CachedFileEntry, CacheManager, ChecksumBatch, Storage};
+    pub use crate::cache::{
+        CacheDb, CacheEntry, CacheManager, CachedFileEntry, ChecksumBatch, Storage,
+    };
 
     // Disk/Hardware
     pub use crate::disk::{DiskInfo, UsbDeviceInfo, UsbSpeed, VolumeInfo};

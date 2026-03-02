@@ -436,17 +436,18 @@ where
 
         // Check for cancellation before starting stage
         if let Some(ref cancel_fn) = is_cancelled
-            && cancel_fn() {
-                // Save state before cancelling
-                persistent_state.update_progress(
-                    stage_idx,
-                    state.position,
-                    false,
-                    state.total_bytes_written,
-                );
-                let _ = persistent_state.save(&control_db);
-                return Err(EraseError::Cancelled);
-            }
+            && cancel_fn()
+        {
+            // Save state before cancelling
+            persistent_state.update_progress(
+                stage_idx,
+                state.position,
+                false,
+                state.total_bytes_written,
+            );
+            let _ = persistent_state.save(&control_db);
+            return Err(EraseError::Cancelled);
+        }
 
         // Fill pass (skip if resuming into verification)
         if !(stage_idx == start_stage && start_in_verification) {
@@ -692,9 +693,10 @@ where
         if blocks_since_cancel_check >= CANCEL_CHECK_INTERVAL {
             blocks_since_cancel_check = 0;
             if let Some(ref cancel_fn) = is_cancelled
-                && cancel_fn() {
-                    return Err(EraseError::Cancelled);
-                }
+                && cancel_fn()
+            {
+                return Err(EraseError::Cancelled);
+            }
         }
 
         let chunk = stream.get().ok_or_else(|| EraseError::WriteFailed {
@@ -778,9 +780,10 @@ where
         if blocks_since_cancel_check >= CANCEL_CHECK_INTERVAL {
             blocks_since_cancel_check = 0;
             if let Some(ref cancel_fn) = is_cancelled
-                && cancel_fn() {
-                    return Err(EraseError::Cancelled);
-                }
+                && cancel_fn()
+            {
+                return Err(EraseError::Cancelled);
+            }
         }
         let expected = stream.get().ok_or_else(|| EraseError::WriteFailed {
             position: state.position,

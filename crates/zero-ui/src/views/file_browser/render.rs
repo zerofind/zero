@@ -4,10 +4,10 @@ use std::time::Instant;
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use gpui_component::{
-    h_flex, v_flex,
+    ActiveTheme, IconName, h_flex,
     input::{Input, InputState},
     table::{Table, TableState},
-    ActiveTheme, IconName,
+    v_flex,
 };
 
 use crate::actions::{
@@ -16,7 +16,7 @@ use crate::actions::{
     OpenSelected, QuickLook, Refresh, Rename, RevealInFinder, SelectAll, SelectNext, SelectPrev,
 };
 use crate::services::SearchService;
-use crate::theme::{self, brand_color, FONT_SIZE_BODY, FONT_SIZE_CAPTION};
+use crate::theme::{self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, brand_color};
 use crate::ui::{ConfirmDialog, EmptyState};
 
 use super::delegate::FileBrowserDelegate;
@@ -59,9 +59,7 @@ impl FileBrowserView {
         // Start with empty entries, load in background
         let delegate = FileBrowserDelegate::new(Vec::new());
 
-        let table_state = cx.new(|cx| {
-            TableState::new(delegate, window, cx)
-        });
+        let table_state = cx.new(|cx| TableState::new(delegate, window, cx));
 
         let load_path = path.clone();
         let start = Instant::now();
@@ -84,9 +82,10 @@ impl FileBrowserView {
 
         // Load directory entries in background
         cx.spawn(async move |this, cx| {
-            let entries = cx.background_executor().spawn(async move {
-                state::load_directory(&load_path)
-            }).await;
+            let entries = cx
+                .background_executor()
+                .spawn(async move { state::load_directory(&load_path) })
+                .await;
 
             let elapsed = start.elapsed().as_secs_f64() * 1000.0;
 
@@ -98,8 +97,10 @@ impl FileBrowserView {
                     cx.notify();
                 });
                 cx.notify();
-            }).ok();
-        }).detach();
+            })
+            .ok();
+        })
+        .detach();
 
         view
     }
@@ -121,8 +122,7 @@ impl FileBrowserView {
         let muted = cx.theme().muted_foreground;
 
         // Search results mode shows a different summary
-        if let Some(super::search_bar::DisplayMode::SearchResults { ref query }) =
-            self.display_mode
+        if let Some(super::search_bar::DisplayMode::SearchResults { ref query }) = self.display_mode
         {
             let total = file_count + folder_count;
             return h_flex()
@@ -146,20 +146,12 @@ impl FileBrowserView {
                         .child(
                             div()
                                 .text_color(muted)
-                                .child(SharedString::from(format!(
-                                    "results for \"{}\"",
-                                    query
-                                ))),
+                                .child(SharedString::from(format!("results for \"{}\"", query))),
                         ),
                 )
-                .child(
-                    div()
-                        .text_size(FONT_SIZE_CAPTION)
-                        .text_color(muted)
-                        .child(SharedString::from(
-                            state::format_size(total_size).to_string()
-                        )),
-                );
+                .child(div().text_size(FONT_SIZE_CAPTION).text_color(muted).child(
+                    SharedString::from(state::format_size(total_size).to_string()),
+                ));
         }
 
         let path_str = self.path.to_string_lossy().to_string();
@@ -177,11 +169,7 @@ impl FileBrowserView {
                     .items_center()
                     .text_size(FONT_SIZE_CAPTION)
                     // Zap icon
-                    .child(
-                        div()
-                            .text_color(brand_color())
-                            .child("\u{26A1}"),
-                    )
+                    .child(div().text_color(brand_color()).child("\u{26A1}"))
                     // Stats with mixed weights
                     .child(
                         div()
@@ -214,7 +202,6 @@ impl FileBrowserView {
                     .child(SharedString::from(path_str)),
             )
     }
-
 }
 
 impl FileBrowserView {
@@ -228,7 +215,14 @@ impl FileBrowserView {
             .map(|n: &std::ffi::OsStr| n.to_string_lossy().to_string())
             .unwrap_or_default();
 
-        let idx = self.table_state.read(cx).delegate().selected.first().copied().unwrap_or(0);
+        let idx = self
+            .table_state
+            .read(cx)
+            .delegate()
+            .selected
+            .first()
+            .copied()
+            .unwrap_or(0);
         let input = cx.new(|cx| InputState::new(window, cx).default_value(&name));
         self.inline_edit = Some(InlineEdit::Rename { idx });
         self.inline_input = Some(input);
@@ -236,9 +230,7 @@ impl FileBrowserView {
     }
 
     pub fn start_new_folder(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let input = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("Folder name...")
-        });
+        let input = cx.new(|cx| InputState::new(window, cx).placeholder("Folder name..."));
         self.inline_edit = Some(InlineEdit::NewFolder);
         self.inline_input = Some(input);
         cx.notify();
@@ -328,11 +320,7 @@ impl FileBrowserView {
 }
 
 impl Render for FileBrowserView {
-    fn render(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let is_empty = self.table_state.read(cx).delegate().entries.is_empty();
 
         // Build confirm dialog overlay if pending
@@ -442,9 +430,7 @@ impl Render for FileBrowserView {
                     }))
                     .when(!self.loading, |el| el.child(self.render_summary_bar(cx)))
                     // Search bar
-                    .when_some(self.render_search_bar(cx), |el, bar| {
-                        el.child(bar)
-                    })
+                    .when_some(self.render_search_bar(cx), |el, bar| el.child(bar))
                     // Inline edit bar (rename or new folder)
                     .when_some(self.render_inline_edit(cx), |el, edit_bar| {
                         el.child(edit_bar)

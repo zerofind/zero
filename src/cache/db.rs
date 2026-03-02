@@ -27,9 +27,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use super::ChecksumBatch;
-use super::control_state::{
-    ControlState, EraseJob, IndexedRoot, open_control_store,
-};
+use super::control_state::{ControlState, EraseJob, IndexedRoot, open_control_store};
 use super::storage_state::{
     CacheEntry, CachedFileEntry, StorageState, StorageStats, cache_entry_to_file_entry,
     open_storage_store,
@@ -37,9 +35,7 @@ use super::storage_state::{
 use super::storages::{DeviceInfo, Storage, StorageIdentifier};
 
 use crate::cache::automations::{Automation, NewAutomation};
-use crate::cache::runs::{
-    Progress, Run, RunResult, RunStatus, TriggerType,
-};
+use crate::cache::runs::{Progress, Run, RunResult, RunStatus, TriggerType};
 
 /// Error type for cache operations
 #[derive(Debug, thiserror::Error)]
@@ -99,8 +95,8 @@ impl ControlDb {
         })?;
 
         let control_dir = db_dir.join("control");
-        let store = open_control_store(&control_dir)
-            .map_err(|e| CacheError::Etch(e.to_string()))?;
+        let store =
+            open_control_store(&control_dir).map_err(|e| CacheError::Etch(e.to_string()))?;
 
         Ok(Self {
             store,
@@ -114,19 +110,15 @@ impl ControlDb {
         use std::sync::atomic::{AtomicU64, Ordering};
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let id = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let base = std::env::temp_dir().join(format!(
-            "zero_test_{}_{}",
-            std::process::id(),
-            id,
-        ));
+        let base = std::env::temp_dir().join(format!("zero_test_{}_{}", std::process::id(), id,));
         let control_dir = base.join("control");
         let storages_dir = base.join("storages");
         fs::create_dir_all(&storages_dir).map_err(|e| CacheError::CreateDir {
             path: storages_dir.to_string_lossy().to_string(),
             source: e,
         })?;
-        let store = open_control_store(&control_dir)
-            .map_err(|e| CacheError::Etch(e.to_string()))?;
+        let store =
+            open_control_store(&control_dir).map_err(|e| CacheError::Etch(e.to_string()))?;
         Ok(Self {
             store,
             db_path: base,
@@ -153,12 +145,15 @@ impl ControlDb {
         device_info: Option<DeviceInfo>,
     ) -> Result<Storage, CacheError> {
         let path = path.to_path_buf();
-        let storage = self.store.write(|tx| {
-            let mut state_clone = tx.state.clone();
-            let s = state_clone.get_or_create_storage(&path, device_info.clone());
-            tx.put_storage(&s);
-            Ok(s)
-        }).map_err(|e| CacheError::Etch(e.to_string()))?;
+        let storage = self
+            .store
+            .write(|tx| {
+                let mut state_clone = tx.state.clone();
+                let s = state_clone.get_or_create_storage(&path, device_info.clone());
+                tx.put_storage(&s);
+                Ok(s)
+            })
+            .map_err(|e| CacheError::Etch(e.to_string()))?;
         Ok(storage)
     }
 
@@ -208,26 +203,31 @@ impl ControlDb {
         file_count: i64,
         total_bytes: i64,
     ) -> Result<(), CacheError> {
-        self.store.write(|tx| {
-            let mut state_clone = tx.state.clone();
-            state_clone.update_storage_stats(id, file_count, total_bytes);
-            if let Some(s) = state_clone.get_storage_by_id(id) {
-                tx.put_storage(s);
-            }
-            Ok(())
-        }).map_err(|e| CacheError::Etch(e.to_string()))?;
+        self.store
+            .write(|tx| {
+                let mut state_clone = tx.state.clone();
+                state_clone.update_storage_stats(id, file_count, total_bytes);
+                if let Some(s) = state_clone.get_storage_by_id(id) {
+                    tx.put_storage(s);
+                }
+                Ok(())
+            })
+            .map_err(|e| CacheError::Etch(e.to_string()))?;
         Ok(())
     }
 
     /// Delete a storage and its database file
     pub fn delete_storage(&self, id: i64) -> Result<(), CacheError> {
         // Get the db_filename before deleting
-        let db_filename = self.store.write(|tx| {
-            let mut state_clone = tx.state.clone();
-            let filename = state_clone.delete_storage(id);
-            tx.delete_storage(id);
-            Ok(filename)
-        }).map_err(|e| CacheError::Etch(e.to_string()))?;
+        let db_filename = self
+            .store
+            .write(|tx| {
+                let mut state_clone = tx.state.clone();
+                let filename = state_clone.delete_storage(id);
+                tx.delete_storage(id);
+                Ok(filename)
+            })
+            .map_err(|e| CacheError::Etch(e.to_string()))?;
 
         // Delete the storage database directory if it exists
         if let Some(filename) = db_filename {
@@ -286,7 +286,11 @@ impl ControlDb {
     /// List enabled automations
     pub fn list_enabled_automations(&self) -> Result<Vec<Automation>, CacheError> {
         let state = self.store.read();
-        Ok(state.list_enabled_automations().into_iter().cloned().collect())
+        Ok(state
+            .list_enabled_automations()
+            .into_iter()
+            .cloned()
+            .collect())
     }
 
     /// Get an automation by ID
@@ -297,68 +301,91 @@ impl ControlDb {
 
     /// Create a new automation
     pub fn create_automation(&self, new: NewAutomation) -> Result<Automation, CacheError> {
-        let automation = self.store.write(|tx| {
-            let mut state_clone = tx.state.clone();
-            let a = state_clone.create_automation(new);
-            tx.put_automation(&a);
-            Ok(a)
-        }).map_err(|e| CacheError::Etch(e.to_string()))?;
+        let automation = self
+            .store
+            .write(|tx| {
+                let mut state_clone = tx.state.clone();
+                let a = state_clone.create_automation(new);
+                tx.put_automation(&a);
+                Ok(a)
+            })
+            .map_err(|e| CacheError::Etch(e.to_string()))?;
         Ok(automation)
     }
 
     /// Update an automation
     pub fn update_automation(&self, id: i64, new: NewAutomation) -> Result<(), CacheError> {
-        self.store.write(|tx| {
-            let mut state_clone = tx.state.clone();
-            state_clone.update_automation(id, new);
-            if let Some(a) = state_clone.get_automation(id) {
-                tx.put_automation(a);
-            }
-            Ok(())
-        }).map_err(|e| CacheError::Etch(e.to_string()))?;
+        self.store
+            .write(|tx| {
+                let mut state_clone = tx.state.clone();
+                state_clone.update_automation(id, new);
+                if let Some(a) = state_clone.get_automation(id) {
+                    tx.put_automation(a);
+                }
+                Ok(())
+            })
+            .map_err(|e| CacheError::Etch(e.to_string()))?;
         Ok(())
     }
 
     /// Delete an automation and its runs
     pub fn delete_automation(&self, id: i64) -> Result<(), CacheError> {
-        self.store.write(|tx| {
-            // Collect run IDs to delete from current committed state
-            let run_ids: Vec<i64> = tx.state.runs.iter()
-                .filter(|(_, r)| r.automation_id == id)
-                .map(|(rid, _)| *rid)
-                .collect();
-            for rid in run_ids {
-                tx.delete_run(rid);
-            }
-            tx.delete_automation(id);
-            Ok(())
-        }).map_err(|e| CacheError::Etch(e.to_string()))?;
+        self.store
+            .write(|tx| {
+                // Collect run IDs to delete from current committed state
+                let run_ids: Vec<i64> = tx
+                    .state
+                    .runs
+                    .iter()
+                    .filter(|(_, r)| r.automation_id == id)
+                    .map(|(rid, _)| *rid)
+                    .collect();
+                for rid in run_ids {
+                    tx.delete_run(rid);
+                }
+                tx.delete_automation(id);
+                Ok(())
+            })
+            .map_err(|e| CacheError::Etch(e.to_string()))?;
         Ok(())
     }
 
     /// Enable or disable an automation
     pub fn set_automation_enabled(&self, id: i64, enabled: bool) -> Result<(), CacheError> {
-        self.store.write(|tx| {
-            let mut state_clone = tx.state.clone();
-            state_clone.set_automation_enabled(id, enabled);
-            if let Some(a) = state_clone.get_automation(id) {
-                tx.put_automation(a);
-            }
-            Ok(())
-        }).map_err(|e| CacheError::Etch(e.to_string()))?;
+        self.store
+            .write(|tx| {
+                let mut state_clone = tx.state.clone();
+                state_clone.set_automation_enabled(id, enabled);
+                if let Some(a) = state_clone.get_automation(id) {
+                    tx.put_automation(a);
+                }
+                Ok(())
+            })
+            .map_err(|e| CacheError::Etch(e.to_string()))?;
         Ok(())
     }
 
     /// Find automations by device serial (on_mount trigger)
     pub fn find_automations_by_serial(&self, serial: &str) -> Result<Vec<Automation>, CacheError> {
         let state = self.store.read();
-        Ok(state.find_automations_by_serial(serial).into_iter().cloned().collect())
+        Ok(state
+            .find_automations_by_serial(serial)
+            .into_iter()
+            .cloned()
+            .collect())
     }
 
     /// Find automations by watch path (on_change trigger)
-    pub fn find_automations_by_watch_path(&self, path: &str) -> Result<Vec<Automation>, CacheError> {
+    pub fn find_automations_by_watch_path(
+        &self,
+        path: &str,
+    ) -> Result<Vec<Automation>, CacheError> {
         let state = self.store.read();
-        Ok(state.find_automations_by_watch_path(path).into_iter().cloned().collect())
+        Ok(state
+            .find_automations_by_watch_path(path)
+            .into_iter()
+            .cloned()
+            .collect())
     }
 
     // ==================== Run Operations ====================
@@ -370,12 +397,15 @@ impl ControlDb {
         trigger: TriggerType,
         initial_progress: Option<Progress>,
     ) -> Result<Run, CacheError> {
-        let run = self.store.write(|tx| {
-            let mut state_clone = tx.state.clone();
-            let r = state_clone.start_run(automation_id, trigger, initial_progress);
-            tx.put_run(&r);
-            Ok(r)
-        }).map_err(|e| CacheError::Etch(e.to_string()))?;
+        let run = self
+            .store
+            .write(|tx| {
+                let mut state_clone = tx.state.clone();
+                let r = state_clone.start_run(automation_id, trigger, initial_progress);
+                tx.put_run(&r);
+                Ok(r)
+            })
+            .map_err(|e| CacheError::Etch(e.to_string()))?;
         Ok(run)
     }
 
@@ -398,7 +428,11 @@ impl ControlDb {
         limit: usize,
     ) -> Result<Vec<Run>, CacheError> {
         let state = self.store.read();
-        Ok(state.list_runs_for_automation(automation_id, limit).into_iter().cloned().collect())
+        Ok(state
+            .list_runs_for_automation(automation_id, limit)
+            .into_iter()
+            .cloned()
+            .collect())
     }
 
     /// Find running run for an automation
@@ -415,40 +449,46 @@ impl ControlDb {
 
     /// Update run progress
     pub fn update_run_progress(&self, id: i64, progress: &Progress) -> Result<(), CacheError> {
-        self.store.write(|tx| {
-            let mut state_clone = tx.state.clone();
-            state_clone.update_run_progress(id, progress);
-            if let Some(r) = state_clone.get_run(id) {
-                tx.put_run(r);
-            }
-            Ok(())
-        }).map_err(|e| CacheError::Etch(e.to_string()))?;
+        self.store
+            .write(|tx| {
+                let mut state_clone = tx.state.clone();
+                state_clone.update_run_progress(id, progress);
+                if let Some(r) = state_clone.get_run(id) {
+                    tx.put_run(r);
+                }
+                Ok(())
+            })
+            .map_err(|e| CacheError::Etch(e.to_string()))?;
         Ok(())
     }
 
     /// Complete a run with success
     pub fn complete_run_success(&self, id: i64, result: &RunResult) -> Result<(), CacheError> {
-        self.store.write(|tx| {
-            let mut state_clone = tx.state.clone();
-            state_clone.complete_run_success(id, result);
-            if let Some(r) = state_clone.get_run(id) {
-                tx.put_run(r);
-            }
-            Ok(())
-        }).map_err(|e| CacheError::Etch(e.to_string()))?;
+        self.store
+            .write(|tx| {
+                let mut state_clone = tx.state.clone();
+                state_clone.complete_run_success(id, result);
+                if let Some(r) = state_clone.get_run(id) {
+                    tx.put_run(r);
+                }
+                Ok(())
+            })
+            .map_err(|e| CacheError::Etch(e.to_string()))?;
         Ok(())
     }
 
     /// Complete a run with failure
     pub fn complete_run_failed(&self, id: i64, result: &RunResult) -> Result<(), CacheError> {
-        self.store.write(|tx| {
-            let mut state_clone = tx.state.clone();
-            state_clone.complete_run_failed(id, result);
-            if let Some(r) = state_clone.get_run(id) {
-                tx.put_run(r);
-            }
-            Ok(())
-        }).map_err(|e| CacheError::Etch(e.to_string()))?;
+        self.store
+            .write(|tx| {
+                let mut state_clone = tx.state.clone();
+                state_clone.complete_run_failed(id, result);
+                if let Some(r) = state_clone.get_run(id) {
+                    tx.put_run(r);
+                }
+                Ok(())
+            })
+            .map_err(|e| CacheError::Etch(e.to_string()))?;
         Ok(())
     }
 
@@ -459,71 +499,86 @@ impl ControlDb {
         result: &RunResult,
         resume_state: Option<&str>,
     ) -> Result<(), CacheError> {
-        self.store.write(|tx| {
-            let mut state_clone = tx.state.clone();
-            state_clone.mark_run_partial(id, result, resume_state);
-            if let Some(r) = state_clone.get_run(id) {
-                tx.put_run(r);
-            }
-            Ok(())
-        }).map_err(|e| CacheError::Etch(e.to_string()))?;
+        self.store
+            .write(|tx| {
+                let mut state_clone = tx.state.clone();
+                state_clone.mark_run_partial(id, result, resume_state);
+                if let Some(r) = state_clone.get_run(id) {
+                    tx.put_run(r);
+                }
+                Ok(())
+            })
+            .map_err(|e| CacheError::Etch(e.to_string()))?;
         Ok(())
     }
 
     /// Cancel a run
     pub fn cancel_run(&self, id: i64) -> Result<(), CacheError> {
-        self.store.write(|tx| {
-            let mut state_clone = tx.state.clone();
-            state_clone.cancel_run(id);
-            if let Some(r) = state_clone.get_run(id) {
-                tx.put_run(r);
-            }
-            Ok(())
-        }).map_err(|e| CacheError::Etch(e.to_string()))?;
+        self.store
+            .write(|tx| {
+                let mut state_clone = tx.state.clone();
+                state_clone.cancel_run(id);
+                if let Some(r) = state_clone.get_run(id) {
+                    tx.put_run(r);
+                }
+                Ok(())
+            })
+            .map_err(|e| CacheError::Etch(e.to_string()))?;
         Ok(())
     }
 
     /// Mark all running runs as interrupted (startup recovery)
     pub fn mark_interrupted_on_startup(&self) -> Result<u64, CacheError> {
-        let count = self.store.write(|tx| {
-            // Find running runs from committed state
-            let running_ids: Vec<i64> = tx.state.runs.iter()
-                .filter(|(_, r)| r.status == RunStatus::Running)
-                .map(|(id, _)| *id)
-                .collect();
-            let c = running_ids.len() as u64;
-            let now = crate::util::now_timestamp();
-            for id in running_ids {
-                if let Some(r) = tx.state.runs.get(&id) {
-                    let mut updated = r.clone();
-                    updated.status = RunStatus::Partial;
-                    updated.completed_at = Some(now);
-                    updated.resumable = true;
-                    tx.put_run(&updated);
+        let count = self
+            .store
+            .write(|tx| {
+                // Find running runs from committed state
+                let running_ids: Vec<i64> = tx
+                    .state
+                    .runs
+                    .iter()
+                    .filter(|(_, r)| r.status == RunStatus::Running)
+                    .map(|(id, _)| *id)
+                    .collect();
+                let c = running_ids.len() as u64;
+                let now = crate::util::now_timestamp();
+                for id in running_ids {
+                    if let Some(r) = tx.state.runs.get(&id) {
+                        let mut updated = r.clone();
+                        updated.status = RunStatus::Partial;
+                        updated.completed_at = Some(now);
+                        updated.resumable = true;
+                        tx.put_run(&updated);
+                    }
                 }
-            }
-            Ok(c)
-        }).map_err(|e| CacheError::Etch(e.to_string()))?;
+                Ok(c)
+            })
+            .map_err(|e| CacheError::Etch(e.to_string()))?;
         Ok(count)
     }
 
     /// Delete runs older than N days
     pub fn delete_runs_older_than(&self, days: i64) -> Result<u64, CacheError> {
-        let count = self.store.write(|tx| {
-            let cutoff = crate::util::now_timestamp() - (days * 24 * 60 * 60);
-            let ids_to_delete: Vec<i64> = tx.state.runs.iter()
-                .filter(|(_, r)| {
-                    r.status != RunStatus::Running
-                        && r.completed_at.is_some_and(|t| t < cutoff)
-                })
-                .map(|(id, _)| *id)
-                .collect();
-            let c = ids_to_delete.len() as u64;
-            for id in ids_to_delete {
-                tx.delete_run(id);
-            }
-            Ok(c)
-        }).map_err(|e| CacheError::Etch(e.to_string()))?;
+        let count = self
+            .store
+            .write(|tx| {
+                let cutoff = crate::util::now_timestamp() - (days * 24 * 60 * 60);
+                let ids_to_delete: Vec<i64> = tx
+                    .state
+                    .runs
+                    .iter()
+                    .filter(|(_, r)| {
+                        r.status != RunStatus::Running && r.completed_at.is_some_and(|t| t < cutoff)
+                    })
+                    .map(|(id, _)| *id)
+                    .collect();
+                let c = ids_to_delete.len() as u64;
+                for id in ids_to_delete {
+                    tx.delete_run(id);
+                }
+                Ok(c)
+            })
+            .map_err(|e| CacheError::Etch(e.to_string()))?;
         Ok(count)
     }
 
@@ -531,10 +586,12 @@ impl ControlDb {
 
     /// Insert or update an indexed root
     pub fn upsert_indexed_root(&self, path: &str, root: &IndexedRoot) -> Result<(), CacheError> {
-        self.store.write(|tx| {
-            tx.put_indexed_root(path, root);
-            Ok(())
-        }).map_err(|e| CacheError::Etch(e.to_string()))?;
+        self.store
+            .write(|tx| {
+                tx.put_indexed_root(path, root);
+                Ok(())
+            })
+            .map_err(|e| CacheError::Etch(e.to_string()))?;
         Ok(())
     }
 
@@ -547,7 +604,11 @@ impl ControlDb {
     /// List all indexed roots
     pub fn list_indexed_roots(&self) -> Result<Vec<(String, IndexedRoot)>, CacheError> {
         let state = self.store.read();
-        Ok(state.list_indexed_roots().into_iter().map(|(k, v)| (k.to_string(), v.clone())).collect())
+        Ok(state
+            .list_indexed_roots()
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v.clone()))
+            .collect())
     }
 
     /// Remove an indexed root
@@ -557,10 +618,12 @@ impl ControlDb {
             state.get_indexed_root(path).cloned()
         };
         if removed.is_some() {
-            self.store.write(|tx| {
-                tx.delete_indexed_root(path);
-                Ok(())
-            }).map_err(|e| CacheError::Etch(e.to_string()))?;
+            self.store
+                .write(|tx| {
+                    tx.delete_indexed_root(path);
+                    Ok(())
+                })
+                .map_err(|e| CacheError::Etch(e.to_string()))?;
         }
         Ok(removed)
     }
@@ -569,12 +632,15 @@ impl ControlDb {
 
     /// Create a new erase job (auto-assigns ID)
     pub fn create_erase_job(&self, job: EraseJob) -> Result<EraseJob, CacheError> {
-        let created = self.store.write(|tx| {
-            let mut state_clone = tx.state.clone();
-            let j = state_clone.create_erase_job(job);
-            tx.put_erase_job(&j);
-            Ok(j)
-        }).map_err(|e| CacheError::Etch(e.to_string()))?;
+        let created = self
+            .store
+            .write(|tx| {
+                let mut state_clone = tx.state.clone();
+                let j = state_clone.create_erase_job(job);
+                tx.put_erase_job(&j);
+                Ok(j)
+            })
+            .map_err(|e| CacheError::Etch(e.to_string()))?;
         Ok(created)
     }
 
@@ -585,7 +651,10 @@ impl ControlDb {
     }
 
     /// Find an erase job by BSD device name
-    pub fn find_erase_job_by_bsd_name(&self, bsd_name: &str) -> Result<Option<EraseJob>, CacheError> {
+    pub fn find_erase_job_by_bsd_name(
+        &self,
+        bsd_name: &str,
+    ) -> Result<Option<EraseJob>, CacheError> {
         let state = self.store.read();
         Ok(state.find_erase_job_by_bsd_name(bsd_name).cloned())
     }
@@ -599,7 +668,9 @@ impl ControlDb {
         size_bytes: u64,
     ) -> Result<Option<EraseJob>, CacheError> {
         let state = self.store.read();
-        Ok(state.find_erase_job_matching(bsd_name, volume_uuid, serial_number, size_bytes).cloned())
+        Ok(state
+            .find_erase_job_matching(bsd_name, volume_uuid, serial_number, size_bytes)
+            .cloned())
     }
 
     /// Find an erase job by volume name or mount point
@@ -608,24 +679,30 @@ impl ControlDb {
         name: &str,
     ) -> Result<Option<EraseJob>, CacheError> {
         let state = self.store.read();
-        Ok(state.find_erase_job_by_volume_name_or_mount_point(name).cloned())
+        Ok(state
+            .find_erase_job_by_volume_name_or_mount_point(name)
+            .cloned())
     }
 
     /// Update an erase job
     pub fn update_erase_job(&self, job: &EraseJob) -> Result<(), CacheError> {
-        self.store.write(|tx| {
-            tx.put_erase_job(job);
-            Ok(())
-        }).map_err(|e| CacheError::Etch(e.to_string()))?;
+        self.store
+            .write(|tx| {
+                tx.put_erase_job(job);
+                Ok(())
+            })
+            .map_err(|e| CacheError::Etch(e.to_string()))?;
         Ok(())
     }
 
     /// Delete an erase job
     pub fn delete_erase_job(&self, id: i64) -> Result<(), CacheError> {
-        self.store.write(|tx| {
-            tx.delete_erase_job(id);
-            Ok(())
-        }).map_err(|e| CacheError::Etch(e.to_string()))?;
+        self.store
+            .write(|tx| {
+                tx.delete_erase_job(id);
+                Ok(())
+            })
+            .map_err(|e| CacheError::Etch(e.to_string()))?;
         Ok(())
     }
 
@@ -638,7 +715,11 @@ impl ControlDb {
     /// List active (incomplete) erase jobs
     pub fn list_active_erase_jobs(&self) -> Result<Vec<EraseJob>, CacheError> {
         let state = self.store.read();
-        Ok(state.list_active_erase_jobs().into_iter().cloned().collect())
+        Ok(state
+            .list_active_erase_jobs()
+            .into_iter()
+            .cloned()
+            .collect())
     }
 }
 
@@ -655,8 +736,7 @@ pub struct StorageDb {
 impl StorageDb {
     /// Open a storage database at a specific path (directory for etch store)
     pub fn open_at(db_path: &Path) -> Result<Self, CacheError> {
-        let store = open_storage_store(db_path)
-            .map_err(|e| CacheError::Etch(e.to_string()))?;
+        let store = open_storage_store(db_path).map_err(|e| CacheError::Etch(e.to_string()))?;
         Ok(Self {
             store,
             db_path: db_path.to_path_buf(),
@@ -668,13 +748,9 @@ impl StorageDb {
         use std::sync::atomic::{AtomicU64, Ordering};
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let id = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let base = std::env::temp_dir().join(format!(
-            "zero_storage_test_{}_{}",
-            std::process::id(),
-            id,
-        ));
-        let store = open_storage_store(&base)
-            .map_err(|e| CacheError::Etch(e.to_string()))?;
+        let base =
+            std::env::temp_dir().join(format!("zero_storage_test_{}_{}", std::process::id(), id,));
+        let store = open_storage_store(&base).map_err(|e| CacheError::Etch(e.to_string()))?;
         Ok(Self {
             store,
             db_path: base,
@@ -713,19 +789,23 @@ impl StorageDb {
     /// Insert or update a file entry
     pub fn upsert_file(&self, entry: &CacheEntry) -> Result<(), CacheError> {
         let file_entry = cache_entry_to_file_entry(entry);
-        self.store.write(|tx| {
-            tx.put(&file_entry);
-            Ok(())
-        }).map_err(|e| CacheError::Etch(e.to_string()))?;
+        self.store
+            .write(|tx| {
+                tx.put(&file_entry);
+                Ok(())
+            })
+            .map_err(|e| CacheError::Etch(e.to_string()))?;
         Ok(())
     }
 
     /// Delete a file entry
     pub fn delete_file(&self, path: &str) -> Result<(), CacheError> {
-        self.store.write(|tx| {
-            tx.delete(path);
-            Ok(())
-        }).map_err(|e| CacheError::Etch(e.to_string()))?;
+        self.store
+            .write(|tx| {
+                tx.delete(path);
+                Ok(())
+            })
+            .map_err(|e| CacheError::Etch(e.to_string()))?;
         Ok(())
     }
 
@@ -750,7 +830,11 @@ impl StorageDb {
     /// Find files by Blake3 hash
     pub fn find_by_hash_blake3(&self, hash: &[u8]) -> Result<Vec<CachedFileEntry>, CacheError> {
         let state = self.store.read();
-        Ok(state.find_by_hash_blake3(hash).into_iter().cloned().collect())
+        Ok(state
+            .find_by_hash_blake3(hash)
+            .into_iter()
+            .cloned()
+            .collect())
     }
 
     /// Find files by size (for dedup pre-filter)
@@ -762,7 +846,11 @@ impl StorageDb {
     /// List all files (paginated)
     pub fn list_files(&self, limit: i64, offset: i64) -> Result<Vec<CachedFileEntry>, CacheError> {
         let state = self.store.read();
-        Ok(state.list(limit as usize, offset as usize).into_iter().cloned().collect())
+        Ok(state
+            .list(limit as usize, offset as usize)
+            .into_iter()
+            .cloned()
+            .collect())
     }
 
     /// Prune entries for files that no longer exist
@@ -770,7 +858,8 @@ impl StorageDb {
         // First, find missing paths by reading state
         let missing: Vec<String> = {
             let state = self.store.read();
-            state.iter()
+            state
+                .iter()
                 .filter(|(_, entry)| !storage_path.join(&entry.path).exists())
                 .map(|(path, _)| path.clone())
                 .collect()
@@ -779,12 +868,14 @@ impl StorageDb {
         // Then delete them in a write transaction
         if !missing.is_empty() {
             let missing_clone = missing.clone();
-            self.store.write(|tx| {
-                for path in &missing_clone {
-                    tx.delete(path);
-                }
-                Ok(())
-            }).map_err(|e| CacheError::Etch(e.to_string()))?;
+            self.store
+                .write(|tx| {
+                    for path in &missing_clone {
+                        tx.delete(path);
+                    }
+                    Ok(())
+                })
+                .map_err(|e| CacheError::Etch(e.to_string()))?;
         }
 
         Ok(missing)
@@ -819,13 +910,15 @@ impl StorageDb {
             return Ok(0);
         }
         let count = entries.len();
-        self.store.write(|tx| {
-            for entry in &entries {
-                let file_entry = cache_entry_to_file_entry(entry);
-                tx.put(&file_entry);
-            }
-            Ok(())
-        }).map_err(|e| CacheError::Etch(e.to_string()))?;
+        self.store
+            .write(|tx| {
+                for entry in &entries {
+                    let file_entry = cache_entry_to_file_entry(entry);
+                    tx.put(&file_entry);
+                }
+                Ok(())
+            })
+            .map_err(|e| CacheError::Etch(e.to_string()))?;
         Ok(count)
     }
 }

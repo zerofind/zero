@@ -235,10 +235,11 @@ pub fn scan_with_progress(
         .process_read_dir(move |_depth, _path, _state, children| {
             // Check for cancellation
             if let Some(ref p) = progress_for_filter
-                && p.is_cancelled() {
-                    children.clear();
-                    return;
-                }
+                && p.is_cancelled()
+            {
+                children.clear();
+                return;
+            }
 
             // Filter out entries we don't want (in parallel)
             children.retain(|entry| {
@@ -253,9 +254,10 @@ pub fn scan_with_progress(
     let iter = walk_dir.into_iter().filter_map(move |result| {
         // Check for cancellation
         if let Some(ref p) = progress
-            && p.is_cancelled() {
-                return None;
-            }
+            && p.is_cancelled()
+        {
+            return None;
+        }
 
         match result {
             Ok(entry) => {

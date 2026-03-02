@@ -169,15 +169,18 @@ impl ControlState {
     /// Find storage by identifier (serial > uuid > path_hash)
     fn find_storage_by_identifier(&self, identifier: &StorageIdentifier) -> Option<&Storage> {
         match identifier {
-            StorageIdentifier::DeviceSerial(s) => {
-                self.storages.values().find(|st| st.device_serial.as_deref() == Some(s))
-            }
-            StorageIdentifier::DeviceUuid(u) => {
-                self.storages.values().find(|st| st.device_uuid.as_deref() == Some(u))
-            }
-            StorageIdentifier::PathHash(h) => {
-                self.storages.values().find(|st| st.path_hash.as_deref() == Some(h))
-            }
+            StorageIdentifier::DeviceSerial(s) => self
+                .storages
+                .values()
+                .find(|st| st.device_serial.as_deref() == Some(s)),
+            StorageIdentifier::DeviceUuid(u) => self
+                .storages
+                .values()
+                .find(|st| st.device_uuid.as_deref() == Some(u)),
+            StorageIdentifier::PathHash(h) => self
+                .storages
+                .values()
+                .find(|st| st.path_hash.as_deref() == Some(h)),
         }
     }
 
@@ -188,12 +191,16 @@ impl ControlState {
 
     /// Get a storage by serial
     pub fn get_storage_by_serial(&self, serial: &str) -> Option<&Storage> {
-        self.storages.values().find(|s| s.device_serial.as_deref() == Some(serial))
+        self.storages
+            .values()
+            .find(|s| s.device_serial.as_deref() == Some(serial))
     }
 
     /// Get a storage by UUID
     pub fn get_storage_by_uuid(&self, uuid: &str) -> Option<&Storage> {
-        self.storages.values().find(|s| s.device_uuid.as_deref() == Some(uuid))
+        self.storages
+            .values()
+            .find(|s| s.device_uuid.as_deref() == Some(uuid))
     }
 
     /// Get a storage by path
@@ -275,9 +282,7 @@ impl ControlState {
         self.automations
             .values()
             .filter(|a| {
-                a.enabled
-                    && a.dest_device_serial.as_deref() == Some(serial)
-                    && a.triggers.on_mount
+                a.enabled && a.dest_device_serial.as_deref() == Some(serial) && a.triggers.on_mount
             })
             .collect()
     }
@@ -289,9 +294,9 @@ impl ControlState {
             .filter(|a| {
                 a.enabled
                     && a.triggers.on_change
-                    && a.paths.iter().any(|p| {
-                        p.source == path || path.starts_with(&format!("{}/", p.source))
-                    })
+                    && a.paths
+                        .iter()
+                        .any(|p| p.source == path || path.starts_with(&format!("{}/", p.source)))
             })
             .collect()
     }
@@ -374,7 +379,7 @@ impl ControlState {
             .values()
             .filter(|r| r.automation_id == automation_id)
             .collect();
-        runs.sort_by(|a, b| b.started_at.cmp(&a.started_at));
+        runs.sort_by_key(|b| std::cmp::Reverse(b.started_at));
         runs.truncate(limit);
         runs
     }
@@ -389,7 +394,7 @@ impl ControlState {
     /// Find all resumable runs
     pub fn find_resumable_runs(&self) -> Vec<&Run> {
         let mut runs: Vec<_> = self.runs.values().filter(|r| r.resumable).collect();
-        runs.sort_by(|a, b| b.started_at.cmp(&a.started_at));
+        runs.sort_by_key(|b| std::cmp::Reverse(b.started_at));
         runs
     }
 
@@ -468,8 +473,7 @@ impl ControlState {
         let cutoff = now_timestamp() - (days * 24 * 60 * 60);
         let before = self.runs.len();
         self.runs.retain(|_, r| {
-            r.status == RunStatus::Running
-                || r.completed_at.map_or(true, |t| t >= cutoff)
+            r.status == RunStatus::Running || r.completed_at.is_none_or(|t| t >= cutoff)
         });
         (before - self.runs.len()) as u64
     }
@@ -538,10 +542,8 @@ impl ControlState {
     ) -> Option<&EraseJob> {
         self.erase_jobs.values().find(|j| {
             let matches = (bsd_name.is_some() && bsd_name == Some(&j.device.bsd_name))
-                || (volume_uuid.is_some()
-                    && volume_uuid == j.device.volume_uuid.as_deref())
-                || (serial_number.is_some()
-                    && serial_number == j.device.serial_number.as_deref());
+                || (volume_uuid.is_some() && volume_uuid == j.device.volume_uuid.as_deref())
+                || (serial_number.is_some() && serial_number == j.device.serial_number.as_deref());
             matches && j.device.size_bytes == size_bytes
         })
     }
@@ -608,102 +610,97 @@ impl Replayable for ControlState {
         for op in ops {
             match op {
                 Op::Put {
-                    collection, key, value,
-                } => {
-                    match *collection {
-                        STORAGES => {
-                            let id = i64_from_bytes(key)?;
-                            let storage: Storage = postcard::from_bytes(value).map_err(|e| {
-                                etchdb::Error::WalCorrupted {
-                                    offset: 0,
-                                    reason: format!("bad storage: {e}"),
-                                }
-                            })?;
-                            self.storages.insert(id, storage);
-                            if id >= self.next_storage_id {
-                                self.next_storage_id = id;
+                    collection,
+                    key,
+                    value,
+                } => match *collection {
+                    STORAGES => {
+                        let id = i64_from_bytes(key)?;
+                        let storage: Storage = postcard::from_bytes(value).map_err(|e| {
+                            etchdb::Error::WalCorrupted {
+                                offset: 0,
+                                reason: format!("bad storage: {e}"),
                             }
+                        })?;
+                        self.storages.insert(id, storage);
+                        if id >= self.next_storage_id {
+                            self.next_storage_id = id;
                         }
-                        AUTOMATIONS => {
-                            let id = i64_from_bytes(key)?;
-                            let automation: Automation =
-                                postcard::from_bytes(value).map_err(|e| {
-                                    etchdb::Error::WalCorrupted {
-                                        offset: 0,
-                                        reason: format!("bad automation: {e}"),
-                                    }
-                                })?;
-                            self.automations.insert(id, automation);
-                            if id >= self.next_automation_id {
-                                self.next_automation_id = id;
-                            }
-                        }
-                        RUNS => {
-                            let id = i64_from_bytes(key)?;
-                            let run: Run = postcard::from_bytes(value).map_err(|e| {
-                                etchdb::Error::WalCorrupted {
-                                    offset: 0,
-                                    reason: format!("bad run: {e}"),
-                                }
-                            })?;
-                            self.runs.insert(id, run);
-                            if id >= self.next_run_id {
-                                self.next_run_id = id;
-                            }
-                        }
-                        INDEXED_ROOTS => {
-                            let path = string_from_bytes(key)?;
-                            let root: IndexedRoot =
-                                postcard::from_bytes(value).map_err(|e| {
-                                    etchdb::Error::WalCorrupted {
-                                        offset: 0,
-                                        reason: format!("bad indexed_root: {e}"),
-                                    }
-                                })?;
-                            self.indexed_roots.insert(path, root);
-                        }
-                        ERASE_JOBS => {
-                            let id = i64_from_bytes(key)?;
-                            let job: EraseJob =
-                                postcard::from_bytes(value).map_err(|e| {
-                                    etchdb::Error::WalCorrupted {
-                                        offset: 0,
-                                        reason: format!("bad erase_job: {e}"),
-                                    }
-                                })?;
-                            self.erase_jobs.insert(id, job);
-                            if id >= self.next_erase_job_id {
-                                self.next_erase_job_id = id;
-                            }
-                        }
-                        _ => {}
                     }
-                }
-                Op::Delete { collection, key } => {
-                    match *collection {
-                        STORAGES => {
-                            let id = i64_from_bytes(key)?;
-                            self.storages.remove(&id);
+                    AUTOMATIONS => {
+                        let id = i64_from_bytes(key)?;
+                        let automation: Automation = postcard::from_bytes(value).map_err(|e| {
+                            etchdb::Error::WalCorrupted {
+                                offset: 0,
+                                reason: format!("bad automation: {e}"),
+                            }
+                        })?;
+                        self.automations.insert(id, automation);
+                        if id >= self.next_automation_id {
+                            self.next_automation_id = id;
                         }
-                        AUTOMATIONS => {
-                            let id = i64_from_bytes(key)?;
-                            self.automations.remove(&id);
-                        }
-                        RUNS => {
-                            let id = i64_from_bytes(key)?;
-                            self.runs.remove(&id);
-                        }
-                        INDEXED_ROOTS => {
-                            let path = string_from_bytes(key)?;
-                            self.indexed_roots.remove(&path);
-                        }
-                        ERASE_JOBS => {
-                            let id = i64_from_bytes(key)?;
-                            self.erase_jobs.remove(&id);
-                        }
-                        _ => {}
                     }
-                }
+                    RUNS => {
+                        let id = i64_from_bytes(key)?;
+                        let run: Run = postcard::from_bytes(value).map_err(|e| {
+                            etchdb::Error::WalCorrupted {
+                                offset: 0,
+                                reason: format!("bad run: {e}"),
+                            }
+                        })?;
+                        self.runs.insert(id, run);
+                        if id >= self.next_run_id {
+                            self.next_run_id = id;
+                        }
+                    }
+                    INDEXED_ROOTS => {
+                        let path = string_from_bytes(key)?;
+                        let root: IndexedRoot = postcard::from_bytes(value).map_err(|e| {
+                            etchdb::Error::WalCorrupted {
+                                offset: 0,
+                                reason: format!("bad indexed_root: {e}"),
+                            }
+                        })?;
+                        self.indexed_roots.insert(path, root);
+                    }
+                    ERASE_JOBS => {
+                        let id = i64_from_bytes(key)?;
+                        let job: EraseJob = postcard::from_bytes(value).map_err(|e| {
+                            etchdb::Error::WalCorrupted {
+                                offset: 0,
+                                reason: format!("bad erase_job: {e}"),
+                            }
+                        })?;
+                        self.erase_jobs.insert(id, job);
+                        if id >= self.next_erase_job_id {
+                            self.next_erase_job_id = id;
+                        }
+                    }
+                    _ => {}
+                },
+                Op::Delete { collection, key } => match *collection {
+                    STORAGES => {
+                        let id = i64_from_bytes(key)?;
+                        self.storages.remove(&id);
+                    }
+                    AUTOMATIONS => {
+                        let id = i64_from_bytes(key)?;
+                        self.automations.remove(&id);
+                    }
+                    RUNS => {
+                        let id = i64_from_bytes(key)?;
+                        self.runs.remove(&id);
+                    }
+                    INDEXED_ROOTS => {
+                        let path = string_from_bytes(key)?;
+                        self.indexed_roots.remove(&path);
+                    }
+                    ERASE_JOBS => {
+                        let id = i64_from_bytes(key)?;
+                        self.erase_jobs.remove(&id);
+                    }
+                    _ => {}
+                },
             }
         }
         Ok(())

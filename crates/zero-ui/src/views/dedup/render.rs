@@ -1,22 +1,19 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use gpui_component::{
+    ActiveTheme, Disableable as _, Icon, IconName, Sizable as _,
     button::{Button, ButtonVariants as _},
     checkbox::Checkbox,
-    h_flex, v_flex, ActiveTheme, Disableable as _, Icon, IconName, Sizable as _,
+    h_flex, v_flex,
 };
 
 use crate::theme::{self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, RADIUS};
-use crate::ui::{format_size, ConfirmDialog, EmptyState, StatusPill};
+use crate::ui::{ConfirmDialog, EmptyState, StatusPill, format_size};
 
 use super::{DedupFilter, DedupSort, DedupView};
 
 impl Render for DedupView {
-    fn render(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let muted = cx.theme().muted_foreground;
 
         let confirm_dialog = if self.confirm_delete {

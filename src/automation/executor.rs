@@ -175,10 +175,11 @@ impl Executor {
         for (automation_id, state) in running.iter() {
             // Check if this automation uses this device
             if let Ok(Some(automation)) = self.db.get_automation(*automation_id)
-                && automation.dest_device_serial.as_deref() == Some(serial) {
-                    tracing::info!("Cancelling automation {} due to USB unmount", automation_id);
-                    let _ = state.cancel_tx.send(()).await;
-                }
+                && automation.dest_device_serial.as_deref() == Some(serial)
+            {
+                tracing::info!("Cancelling automation {} due to USB unmount", automation_id);
+                let _ = state.cancel_tx.send(()).await;
+            }
         }
 
         Ok(vec![])
@@ -191,8 +192,9 @@ impl Executor {
         _changed_paths: &[PathBuf],
     ) -> Result<Vec<i64>, ExecutorError> {
         // Find automations triggered by this path
-        let automations =
-            self.db.find_automations_by_watch_path(&watch_root.to_string_lossy())?;
+        let automations = self
+            .db
+            .find_automations_by_watch_path(&watch_root.to_string_lossy())?;
 
         if automations.is_empty() {
             return Ok(vec![]);
@@ -215,14 +217,14 @@ impl Executor {
                 if let Some(last) = debounce.get(&automation.id)
                     && now.duration_since(*last)
                         < Duration::from_millis(automation.settings.debounce_ms)
-                    {
-                        tracing::debug!(
-                            "Debouncing file change for automation {} ({}ms)",
-                            automation.id,
-                            automation.settings.debounce_ms
-                        );
-                        continue;
-                    }
+                {
+                    tracing::debug!(
+                        "Debouncing file change for automation {} ({}ms)",
+                        automation.id,
+                        automation.settings.debounce_ms
+                    );
+                    continue;
+                }
                 debounce.insert(automation.id, now);
             }
 
@@ -254,7 +256,9 @@ impl Executor {
 
     /// Run an automation manually
     pub async fn run_automation_manual(&self, automation_id: i64) -> Result<i64, ExecutorError> {
-        let automation = self.db.get_automation(automation_id)?
+        let automation = self
+            .db
+            .get_automation(automation_id)?
             .ok_or(ExecutorError::AutomationNotFound(automation_id))?;
 
         // Get destination mount
@@ -340,7 +344,9 @@ impl Executor {
 
     /// Get resumable runs
     pub async fn get_resumable_runs(&self) -> Result<Vec<Run>, ExecutorError> {
-        self.db.find_resumable_runs().map_err(ExecutorError::Database)
+        self.db
+            .find_resumable_runs()
+            .map_err(ExecutorError::Database)
     }
 
     /// Register a USB device as mounted (for tracking)

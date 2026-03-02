@@ -83,8 +83,7 @@ impl Default for FileWatchConfig {
 }
 
 /// Configuration for USB watching
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct UsbWatchConfig {
     /// Only report events for volumes matching these paths (if empty, report all)
     pub volume_filter: Vec<String>,
@@ -92,4 +91,3 @@ pub struct UsbWatchConfig {
     /// Only report events for devices with these serial numbers (if empty, report all)
     pub serial_filter: Vec<String>,
 }
-

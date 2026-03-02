@@ -104,15 +104,12 @@ impl SyncJob {
                         )))
                     })?;
 
-                let source_db =
-                    control
-                        .open_storage_db(&source_storage)
-                        .map_err(|e| {
-                            SyncError::IoError(std::io::Error::other(format!(
-                                "Failed to open source storage database: {}",
-                                e
-                            )))
-                        })?;
+                let source_db = control.open_storage_db(&source_storage).map_err(|e| {
+                    SyncError::IoError(std::io::Error::other(format!(
+                        "Failed to open source storage database: {}",
+                        e
+                    )))
+                })?;
 
                 let dest_db = control.open_storage_db(&dest_storage).map_err(|e| {
                     SyncError::IoError(std::io::Error::other(format!(
@@ -249,12 +246,13 @@ impl SyncJob {
 
         // Check for cancellation
         if let Some(ref sp) = sync_progress
-            && sp.is_cancelled() {
-                return Err(SyncError::IoError(std::io::Error::new(
-                    std::io::ErrorKind::Interrupted,
-                    "Sync cancelled",
-                )));
-            }
+            && sp.is_cancelled()
+        {
+            return Err(SyncError::IoError(std::io::Error::new(
+                std::io::ErrorKind::Interrupted,
+                "Sync cancelled",
+            )));
+        }
 
         // Phase 1: Scan source and destination
         let scan = super::phases::phase_scan(
@@ -282,12 +280,13 @@ impl SyncJob {
 
         // Check for cancellation
         if let Some(ref sp) = sync_progress
-            && sp.is_cancelled() {
-                return Err(SyncError::IoError(std::io::Error::new(
-                    std::io::ErrorKind::Interrupted,
-                    "Sync cancelled",
-                )));
-            }
+            && sp.is_cancelled()
+        {
+            return Err(SyncError::IoError(std::io::Error::new(
+                std::io::ErrorKind::Interrupted,
+                "Sync cancelled",
+            )));
+        }
 
         // Pre-populate cached hashes to avoid re-hashing unchanged files
         let (source_files, dest_files) = if self.options.use_checksum {
@@ -303,38 +302,36 @@ impl SyncJob {
                 // Populate source file hashes from cache
                 let mut new_source_files = Vec::with_capacity(source_files.len());
                 for mut entry in source_files {
-                    if let Ok(Some(cached)) = source_db
-                        .lookup_valid_file(
-                            &entry.path.to_string_lossy(),
-                            entry.size as i64,
-                            entry.mtime as i64,
-                        )
-                        && let Some(hash_bytes) = cached.hash_xxh3
-                            && hash_bytes.len() == 16 {
-                                let mut arr = [0u8; 16];
-                                arr.copy_from_slice(&hash_bytes);
-                                entry.hash_xxh3 = Some(arr);
-                                src_cache_hits += 1;
-                            }
+                    if let Ok(Some(cached)) = source_db.lookup_valid_file(
+                        &entry.path.to_string_lossy(),
+                        entry.size as i64,
+                        entry.mtime as i64,
+                    ) && let Some(hash_bytes) = cached.hash_xxh3
+                        && hash_bytes.len() == 16
+                    {
+                        let mut arr = [0u8; 16];
+                        arr.copy_from_slice(&hash_bytes);
+                        entry.hash_xxh3 = Some(arr);
+                        src_cache_hits += 1;
+                    }
                     new_source_files.push(entry);
                 }
 
                 // Populate dest file hashes from cache
                 let mut new_dest_files = Vec::with_capacity(dest_files.len());
                 for mut entry in dest_files {
-                    if let Ok(Some(cached)) = dest_db
-                        .lookup_valid_file(
-                            &entry.path.to_string_lossy(),
-                            entry.size as i64,
-                            entry.mtime as i64,
-                        )
-                        && let Some(hash_bytes) = cached.hash_xxh3
-                            && hash_bytes.len() == 16 {
-                                let mut arr = [0u8; 16];
-                                arr.copy_from_slice(&hash_bytes);
-                                entry.hash_xxh3 = Some(arr);
-                                dest_cache_hits += 1;
-                            }
+                    if let Ok(Some(cached)) = dest_db.lookup_valid_file(
+                        &entry.path.to_string_lossy(),
+                        entry.size as i64,
+                        entry.mtime as i64,
+                    ) && let Some(hash_bytes) = cached.hash_xxh3
+                        && hash_bytes.len() == 16
+                    {
+                        let mut arr = [0u8; 16];
+                        arr.copy_from_slice(&hash_bytes);
+                        entry.hash_xxh3 = Some(arr);
+                        dest_cache_hits += 1;
+                    }
                     new_dest_files.push(entry);
                 }
 
@@ -461,13 +458,15 @@ impl SyncJob {
                         Err(mpsc::RecvTimeoutError::Disconnected) => {
                             // Channel closed, flush remaining and exit
                             if let Some(ref db) = source_db
-                                && source_batch.pending_count() > 0 {
-                                    let _ = db.flush_batch(&mut source_batch);
-                                }
+                                && source_batch.pending_count() > 0
+                            {
+                                let _ = db.flush_batch(&mut source_batch);
+                            }
                             if let Some(ref db) = dest_db
-                                && dest_batch.pending_count() > 0 {
-                                    let _ = db.flush_batch(&mut dest_batch);
-                                }
+                                && dest_batch.pending_count() > 0
+                            {
+                                let _ = db.flush_batch(&mut dest_batch);
+                            }
                             break;
                         }
                         Err(mpsc::RecvTimeoutError::Timeout) => {}
@@ -495,13 +494,15 @@ impl SyncJob {
                     // Time-based flush: flush if interval elapsed and there's data
                     if last_flush.elapsed() >= flush_interval {
                         if let Some(ref db) = source_db
-                            && source_batch.pending_count() > 0 {
-                                let _ = db.flush_batch(&mut source_batch);
-                            }
+                            && source_batch.pending_count() > 0
+                        {
+                            let _ = db.flush_batch(&mut source_batch);
+                        }
                         if let Some(ref db) = dest_db
-                            && dest_batch.pending_count() > 0 {
-                                let _ = db.flush_batch(&mut dest_batch);
-                            }
+                            && dest_batch.pending_count() > 0
+                        {
+                            let _ = db.flush_batch(&mut dest_batch);
+                        }
                         last_flush = Instant::now();
                     }
                 }
@@ -583,31 +584,31 @@ impl SyncJob {
             if (!remaining_source_hashes.is_empty() || !remaining_dest_hashes.is_empty())
                 && let (Some(source_db), Some(dest_db)) =
                     (&self.source_storage_db, &self.dest_storage_db)
-                {
-                    let mut source_batch = ChecksumBatch::new();
-                    for h in &remaining_source_hashes {
-                        let entry = CacheEntry::with_xxh3(
-                            h.path.clone(),
-                            h.size as i64,
-                            h.mtime as i64,
-                            h.hash.clone(),
-                        );
-                        source_batch.add(entry);
-                    }
-                    let _ = source_db.flush_batch(&mut source_batch);
-
-                    let mut dest_batch = ChecksumBatch::new();
-                    for h in &remaining_dest_hashes {
-                        let entry = CacheEntry::with_xxh3(
-                            h.path.clone(),
-                            h.size as i64,
-                            h.mtime as i64,
-                            h.hash.clone(),
-                        );
-                        dest_batch.add(entry);
-                    }
-                    let _ = dest_db.flush_batch(&mut dest_batch);
+            {
+                let mut source_batch = ChecksumBatch::new();
+                for h in &remaining_source_hashes {
+                    let entry = CacheEntry::with_xxh3(
+                        h.path.clone(),
+                        h.size as i64,
+                        h.mtime as i64,
+                        h.hash.clone(),
+                    );
+                    source_batch.add(entry);
                 }
+                let _ = source_db.flush_batch(&mut source_batch);
+
+                let mut dest_batch = ChecksumBatch::new();
+                for h in &remaining_dest_hashes {
+                    let entry = CacheEntry::with_xxh3(
+                        h.path.clone(),
+                        h.size as i64,
+                        h.mtime as i64,
+                        h.hash.clone(),
+                    );
+                    dest_batch.add(entry);
+                }
+                let _ = dest_db.flush_batch(&mut dest_batch);
+            }
 
             let total_cached = cached_source
                 + cached_dest
@@ -715,12 +716,13 @@ impl SyncJob {
 
         // Check for cancellation
         if let Some(ref sp) = sync_progress
-            && sp.is_cancelled() {
-                return Err(SyncError::IoError(std::io::Error::new(
-                    std::io::ErrorKind::Interrupted,
-                    "Sync cancelled",
-                )));
-            }
+            && sp.is_cancelled()
+        {
+            return Err(SyncError::IoError(std::io::Error::new(
+                std::io::ErrorKind::Interrupted,
+                "Sync cancelled",
+            )));
+        }
 
         // Copy options
         let copy_options = CopyOptions {
@@ -761,7 +763,8 @@ impl SyncJob {
         progress.errors = transfer.errors;
 
         // Phase 6: Cache flush (when verify mode is enabled)
-        if self.options.verify && !transfer.collected_hashes.is_empty()
+        if self.options.verify
+            && !transfer.collected_hashes.is_empty()
             && let (
                 Some(control_db),
                 Some(source_db),
@@ -774,16 +777,17 @@ impl SyncJob {
                 &self.dest_storage_db,
                 self.source_storage_id,
                 self.dest_storage_id,
-            ) {
-                super::phases::phase_cache_flush(
-                    control_db,
-                    source_db,
-                    dest_db,
-                    source_id,
-                    dest_id,
-                    &transfer.collected_hashes,
-                );
-            }
+            )
+        {
+            super::phases::phase_cache_flush(
+                control_db,
+                source_db,
+                dest_db,
+                source_id,
+                dest_id,
+                &transfer.collected_hashes,
+            );
+        }
 
         // Phase 7: Delete orphan files
         let mut files_deleted = 0;
@@ -887,9 +891,10 @@ pub(crate) fn hex_to_bytes(hex: &str) -> Result<Vec<u8>, std::num::ParseIntError
 pub(crate) fn preallocate_file(path: &Path, size: u64) -> std::io::Result<()> {
     // Create parent directories if needed
     if let Some(parent) = path.parent()
-        && !parent.exists() {
-            fs::create_dir_all(parent)?;
-        }
+        && !parent.exists()
+    {
+        fs::create_dir_all(parent)?;
+    }
 
     let file = fs::File::create(path)?;
 

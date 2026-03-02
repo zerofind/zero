@@ -1,6 +1,6 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
-use gpui_component::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable as _};
+use gpui_component::{ActiveTheme, Icon, IconName, Sizable as _, h_flex, v_flex};
 
 use crate::theme::{self, FONT_SIZE_BODY, FONT_SIZE_CAPTION};
 
@@ -72,9 +72,27 @@ pub fn render_theme_picker(
         .bg(pill_bg)
         .p(px(3.0))
         .gap(px(2.0))
-        .child(theme_option("Light", IconName::Sun, !is_dark && !is_system, on_light, cx))
-        .child(theme_option("Dark", IconName::Moon, is_dark && !is_system, on_dark, cx))
-        .child(theme_option("System", IconName::Settings, is_system, on_system, cx))
+        .child(theme_option(
+            "Light",
+            IconName::Sun,
+            !is_dark && !is_system,
+            on_light,
+            cx,
+        ))
+        .child(theme_option(
+            "Dark",
+            IconName::Moon,
+            is_dark && !is_system,
+            on_dark,
+            cx,
+        ))
+        .child(theme_option(
+            "System",
+            IconName::Settings,
+            is_system,
+            on_system,
+            cx,
+        ))
         .into_any_element()
 }
 

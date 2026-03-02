@@ -149,8 +149,7 @@ fn test_find_by_volume_name_or_mount_point() {
     assert_eq!(found.device().bsd_name, "disk22s1");
 
     // Find by volume name
-    let found = EraseState::find_by_volume_name_or_mount_point(&db, "Ghost")
-        .unwrap();
+    let found = EraseState::find_by_volume_name_or_mount_point(&db, "Ghost").unwrap();
     // The ControlDb lookup strips /Volumes/ prefix, so "Ghost" matches volume_name
     assert!(found.is_some());
 }
@@ -207,7 +206,11 @@ fn test_device_has_new_label_no_original() {
 fn test_elapsed_seconds() {
     let state = create_test_state();
     let elapsed = state.elapsed_seconds();
-    assert!(elapsed < 2, "Elapsed seconds should be < 2, got {}", elapsed);
+    assert!(
+        elapsed < 2,
+        "Elapsed seconds should be < 2, got {}",
+        elapsed
+    );
 }
 
 #[test]

@@ -1,11 +1,12 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use gpui_component::{
+    ActiveTheme, Sizable as _,
     button::{Button, ButtonVariants as _},
     h_flex,
     input::{Input, InputState},
     switch::Switch,
-    v_flex, ActiveTheme, Sizable as _,
+    v_flex,
 };
 
 use crate::theme::{self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, MODAL_LG_WIDTH, RADIUS, RADIUS_LG};
@@ -13,11 +14,7 @@ use crate::theme::{self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, MODAL_LG_WIDTH, RADI
 use super::modal::AutomationModal;
 
 impl Render for AutomationModal {
-    fn render(
-        &mut self,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let muted = cx.theme().muted_foreground;
         let fg = cx.theme().foreground;
         let is_edit = self.editing_id.is_some();
@@ -89,11 +86,7 @@ impl Render for AutomationModal {
 }
 
 impl AutomationModal {
-    fn render_field(
-        label: &str,
-        input: &Entity<InputState>,
-        muted: Hsla,
-    ) -> impl IntoElement {
+    fn render_field(label: &str, input: &Entity<InputState>, muted: Hsla) -> impl IntoElement {
         v_flex()
             .gap_1()
             .child(
@@ -106,11 +99,7 @@ impl AutomationModal {
             .child(Input::new(input).into_any_element())
     }
 
-    pub(super) fn render_sources(
-        &self,
-        muted: Hsla,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    pub(super) fn render_sources(&self, muted: Hsla, cx: &mut Context<Self>) -> impl IntoElement {
         let source_rows: Vec<AnyElement> = self
             .sources
             .iter()
@@ -283,14 +272,12 @@ impl AutomationModal {
                                     .text_color(fg)
                                     .child("Verify after copy"),
                             )
-                            .child(
-                                Switch::new("opt-verify")
-                                    .checked(self.verify)
-                                    .on_click(cx.listener(|this, checked: &bool, _, cx| {
-                                        this.verify = *checked;
-                                        cx.notify();
-                                    })),
-                            ),
+                            .child(Switch::new("opt-verify").checked(self.verify).on_click(
+                                cx.listener(|this, checked: &bool, _, cx| {
+                                    this.verify = *checked;
+                                    cx.notify();
+                                }),
+                            )),
                     )
                     .child(
                         div()
@@ -326,17 +313,15 @@ impl AutomationModal {
                             div()
                                 .text_size(FONT_SIZE_CAPTION)
                                 .text_color(cx.theme().warning)
-                                .child("Files deleted from source will also be deleted from the drive"),
+                                .child(
+                                    "Files deleted from source will also be deleted from the drive",
+                                ),
                         )
                     }),
             )
     }
 
-    pub(super) fn render_buttons(
-        &self,
-        is_edit: bool,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    pub(super) fn render_buttons(&self, is_edit: bool, cx: &mut Context<Self>) -> impl IntoElement {
         let saving = self.saving;
         let save_label = if saving {
             "Saving..."

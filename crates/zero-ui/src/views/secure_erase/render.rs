@@ -1,35 +1,28 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use gpui_component::{
+    ActiveTheme, Disableable as _, Sizable as _,
     button::{Button, ButtonVariants as _},
     h_flex,
     input::Input,
-    v_flex, ActiveTheme, Disableable as _, Sizable as _,
+    v_flex,
 };
 use std::sync::atomic::Ordering;
 
-use crate::theme::{self, brand_color, FONT_SIZE_BODY, FONT_SIZE_CAPTION, RADIUS_LG};
+use crate::theme::{self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, RADIUS_LG, brand_color};
 use crate::ui::format::format_bytes;
 
 use super::view::{ErasePhase, SecureEraseView};
 
 impl Render for SecureEraseView {
-    fn render(
-        &mut self,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let muted = cx.theme().muted_foreground;
 
         let content: AnyElement = match &self.phase {
             ErasePhase::Idle => self.render_idle(muted, cx).into_any_element(),
-            ErasePhase::Confirming { .. } => {
-                self.render_confirming(muted, cx).into_any_element()
-            }
+            ErasePhase::Confirming { .. } => self.render_confirming(muted, cx).into_any_element(),
             ErasePhase::Erasing => self.render_erasing(muted, cx).into_any_element(),
-            ErasePhase::Complete { .. } => {
-                self.render_complete(muted, cx).into_any_element()
-            }
+            ErasePhase::Complete { .. } => self.render_complete(muted, cx).into_any_element(),
             ErasePhase::Error(_) => self.render_error(muted, cx).into_any_element(),
             ErasePhase::Cancelled => self.render_cancelled(muted, cx).into_any_element(),
         };
@@ -52,31 +45,23 @@ impl Render for SecureEraseView {
                             .font_weight(FontWeight::BOLD)
                             .child("Secure Erase"),
                     )
-                    .child(
-                        div()
-                            .text_size(FONT_SIZE_BODY)
-                            .text_color(muted)
-                            .child(
-                                "Securely wipe external drives so data cannot be recovered. \
+                    .child(div().text_size(FONT_SIZE_BODY).text_color(muted).child(
+                        "Securely wipe external drives so data cannot be recovered. \
                                  Only external drives are shown.",
-                            ),
-                    )
+                    ))
                     .child(content),
             )
     }
 }
 
 impl SecureEraseView {
-    pub(super) fn render_idle(
-        &mut self,
-        muted: Hsla,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    pub(super) fn render_idle(&mut self, muted: Hsla, cx: &mut Context<Self>) -> impl IntoElement {
         let has_selection = self.selected_volume.is_some();
         let has_resume = self.resume_info.is_some();
-        let resume_label = self.resume_info.as_ref().map(|r| {
-            format!("Resume previous erase ({})", r.percent_str)
-        });
+        let resume_label = self
+            .resume_info
+            .as_ref()
+            .map(|r| format!("Resume previous erase ({})", r.percent_str));
 
         v_flex()
             .gap_4()
@@ -146,13 +131,9 @@ impl SecureEraseView {
                                             .child(SharedString::from(vol.name.clone())),
                                     )
                                     .child(
-                                        div()
-                                            .text_size(FONT_SIZE_CAPTION)
-                                            .text_color(muted)
-                                            .child(SharedString::from(format!(
-                                                "{}{}",
-                                                size_str, fs_str
-                                            ))),
+                                        div().text_size(FONT_SIZE_CAPTION).text_color(muted).child(
+                                            SharedString::from(format!("{}{}", size_str, fs_str)),
+                                        ),
                                     ),
                             )
                     })),
@@ -203,21 +184,19 @@ impl SecureEraseView {
                                 .font_weight(FontWeight::SEMIBOLD)
                                 .child("Security Level"),
                         )
-                        .child(
-                            h_flex().gap_2().children((0..3).map(|i| {
-                                let selected = self.selected_level == i;
-                                Button::new(SharedString::from(format!("level-{i}")))
-                                    .label(Self::level_name(i))
-                                    .compact()
-                                    .small()
-                                    .when(selected, |b| b.primary())
-                                    .when(!selected, |b| b.ghost())
-                                    .on_click(cx.listener(move |this, _, _, cx| {
-                                        this.selected_level = i;
-                                        cx.notify();
-                                    }))
-                            })),
-                        )
+                        .child(h_flex().gap_2().children((0..3).map(|i| {
+                            let selected = self.selected_level == i;
+                            Button::new(SharedString::from(format!("level-{i}")))
+                                .label(Self::level_name(i))
+                                .compact()
+                                .small()
+                                .when(selected, |b| b.primary())
+                                .when(!selected, |b| b.ghost())
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    this.selected_level = i;
+                                    cx.notify();
+                                }))
+                        })))
                         .child(
                             div()
                                 .text_size(FONT_SIZE_CAPTION)
@@ -263,7 +242,10 @@ impl SecureEraseView {
             _ => return v_flex().into_any_element(),
         };
 
-        let name_matches = self.confirm_name_value.trim().eq_ignore_ascii_case(target_name.trim());
+        let name_matches = self
+            .confirm_name_value
+            .trim()
+            .eq_ignore_ascii_case(target_name.trim());
 
         v_flex()
             .gap_4()
@@ -291,15 +273,9 @@ impl SecureEraseView {
             .child(
                 v_flex()
                     .gap_1()
-                    .child(
-                        div()
-                            .text_size(FONT_SIZE_CAPTION)
-                            .text_color(muted)
-                            .child(SharedString::from(format!(
-                                "Type \"{}\" to confirm:",
-                                target_name
-                            ))),
-                    )
+                    .child(div().text_size(FONT_SIZE_CAPTION).text_color(muted).child(
+                        SharedString::from(format!("Type \"{}\" to confirm:", target_name)),
+                    ))
                     .child(Input::new(&self.confirm_name_input)),
             )
             .child(
@@ -482,11 +458,7 @@ impl SecureEraseView {
             )
     }
 
-    pub(super) fn render_error(
-        &mut self,
-        muted: Hsla,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    pub(super) fn render_error(&mut self, muted: Hsla, cx: &mut Context<Self>) -> impl IntoElement {
         let msg = match &self.phase {
             ErasePhase::Error(e) => e.clone(),
             _ => String::new(),
@@ -533,14 +505,9 @@ impl SecureEraseView {
                     .font_weight(FontWeight::BOLD)
                     .child("Erase Cancelled"),
             )
-            .child(
-                div()
-                    .text_size(FONT_SIZE_BODY)
-                    .text_color(muted)
-                    .child(
-                        "Progress saved \u{2014} you can resume later when the drive is reconnected.",
-                    ),
-            )
+            .child(div().text_size(FONT_SIZE_BODY).text_color(muted).child(
+                "Progress saved \u{2014} you can resume later when the drive is reconnected.",
+            ))
             .child(
                 h_flex().justify_end().child(
                     Button::new("back-cancelled")

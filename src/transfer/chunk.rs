@@ -200,12 +200,13 @@ pub fn copy_file_with_hash_progress(
 
     // Create destination directory if needed
     if let Some(parent) = dest.parent()
-        && !parent.exists() {
-            fs::create_dir_all(parent).map_err(|e| CopyError::DirCreateError {
-                path: parent.to_string_lossy().to_string(),
-                source: e,
-            })?;
-        }
+        && !parent.exists()
+    {
+        fs::create_dir_all(parent).map_err(|e| CopyError::DirCreateError {
+            path: parent.to_string_lossy().to_string(),
+            source: e,
+        })?;
+    }
 
     // Open source and destination
     let src_file = File::open(source).map_err(|e| CopyError::SourceOpenError {
@@ -361,12 +362,13 @@ pub fn copy_file_with_progress(
 
     // Create destination directory if needed
     if let Some(parent) = dest.parent()
-        && !parent.exists() {
-            fs::create_dir_all(parent).map_err(|e| CopyError::DirCreateError {
-                path: parent.to_string_lossy().to_string(),
-                source: e,
-            })?;
-        }
+        && !parent.exists()
+    {
+        fs::create_dir_all(parent).map_err(|e| CopyError::DirCreateError {
+            path: parent.to_string_lossy().to_string(),
+            source: e,
+        })?;
+    }
 
     // Use std::fs::copy for fast OS-level copy
     // Only spawn polling thread for large files (>10MB) to avoid thread overhead

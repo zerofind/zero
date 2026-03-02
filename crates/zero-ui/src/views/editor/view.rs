@@ -3,10 +3,11 @@ use std::path::PathBuf;
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use gpui_component::{
+    ActiveTheme, Sizable as _,
     button::{Button, ButtonVariants as _},
     h_flex,
     input::{Input, InputEvent, InputState},
-    v_flex, ActiveTheme, Sizable as _,
+    v_flex,
 };
 
 use crate::theme::{self, FONT_SIZE_BODY, FONT_SIZE_CAPTION};
@@ -260,11 +261,7 @@ impl EditorView {
 }
 
 impl Render for EditorView {
-    fn render(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let muted = cx.theme().muted_foreground;
 
         let toolbar = self.render_toolbar(cx).into_any_element();
@@ -301,10 +298,7 @@ impl Render for EditorView {
             Some(
                 ConfirmDialog::new(
                     "Unsaved Changes",
-                    format!(
-                        "Do you want to save changes to \"{}\"?",
-                        file_name
-                    ),
+                    format!("Do you want to save changes to \"{}\"?", file_name),
                     move |_window, cx| {
                         save_entity.update(cx, |this, cx| {
                             this.confirm_close_save(cx);
@@ -337,15 +331,13 @@ impl Render for EditorView {
                         }
                         // Cmd+S / Ctrl+S to save
                         if ev.keystroke.key == "s"
-                            && (ev.keystroke.modifiers.platform
-                                || ev.keystroke.modifiers.control)
+                            && (ev.keystroke.modifiers.platform || ev.keystroke.modifiers.control)
                         {
                             this.save(cx);
                         }
                         // Cmd+W / Ctrl+W to close
                         if ev.keystroke.key == "w"
-                            && (ev.keystroke.modifiers.platform
-                                || ev.keystroke.modifiers.control)
+                            && (ev.keystroke.modifiers.platform || ev.keystroke.modifiers.control)
                         {
                             this.close(cx);
                         }

@@ -26,17 +26,17 @@ impl FileIcon {
             | Some("cpp") | Some("h") | Some("java") | Some("rb") | Some("swift")
             | Some("json") | Some("yaml") | Some("yml") | Some("toml") | Some("xml")
             | Some("csv") => IconName::File, // code files
-            Some("jpg") | Some("jpeg") | Some("png") | Some("gif") | Some("svg")
-            | Some("webp") | Some("bmp") | Some("ico") | Some("heic") => IconName::File,
-            Some("mp4") | Some("mov") | Some("avi") | Some("mkv") | Some("webm") => {
+            Some("jpg") | Some("jpeg") | Some("png") | Some("gif") | Some("svg") | Some("webp")
+            | Some("bmp") | Some("ico") | Some("heic") => IconName::File,
+            Some("mp4") | Some("mov") | Some("avi") | Some("mkv") | Some("webm") => IconName::File,
+            Some("mp3") | Some("wav") | Some("flac") | Some("aac") | Some("ogg") | Some("m4a") => {
                 IconName::File
             }
-            Some("mp3") | Some("wav") | Some("flac") | Some("aac") | Some("ogg")
-            | Some("m4a") => IconName::File,
-            Some("pdf") | Some("md") | Some("txt") | Some("rtf") | Some("doc")
-            | Some("docx") => IconName::File,
-            Some("zip") | Some("tar") | Some("gz") | Some("bz2") | Some("xz")
-            | Some("7z") | Some("rar") => IconName::File,
+            Some("pdf") | Some("md") | Some("txt") | Some("rtf") | Some("doc") | Some("docx") => {
+                IconName::File
+            }
+            Some("zip") | Some("tar") | Some("gz") | Some("bz2") | Some("xz") | Some("7z")
+            | Some("rar") => IconName::File,
             _ => IconName::File,
         }
     }
@@ -56,11 +56,12 @@ impl FileIcon {
             Some("java") | Some("rb") => t.red,
             Some("json") | Some("yaml") | Some("yml") | Some("toml") | Some("xml")
             | Some("csv") => t.muted_foreground,
-            Some("jpg") | Some("jpeg") | Some("png") | Some("gif") | Some("svg")
-            | Some("webp") | Some("bmp") | Some("ico") | Some("heic") => t.magenta,
+            Some("jpg") | Some("jpeg") | Some("png") | Some("gif") | Some("svg") | Some("webp")
+            | Some("bmp") | Some("ico") | Some("heic") => t.magenta,
             Some("mp4") | Some("mov") | Some("avi") | Some("mkv") | Some("webm") => t.red,
-            Some("mp3") | Some("wav") | Some("flac") | Some("aac") | Some("ogg")
-            | Some("m4a") => t.green,
+            Some("mp3") | Some("wav") | Some("flac") | Some("aac") | Some("ogg") | Some("m4a") => {
+                t.green
+            }
             Some("pdf") => t.red_light,
             Some("md") | Some("txt") | Some("rtf") | Some("doc") | Some("docx") => {
                 t.muted_foreground

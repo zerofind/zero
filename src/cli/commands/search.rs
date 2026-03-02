@@ -185,17 +185,21 @@ pub fn cmd_search(out: &Outputter, opts: &SearchOptions<'_>) -> anyhow::Result<(
         && recent.is_none()
         && path_filter.is_none()
     {
-        out.info("No query provided. Use --type, --ext, or a path to filter, or provide a search term.");
+        out.info(
+            "No query provided. Use --type, --ext, or a path to filter, or provide a search term.",
+        );
         return Ok(());
     } else {
         let q = if let Some(recent_limit) = recent {
-            SearchQuery::recent(recent_limit)
-                .with_type_opt(type_filter)
-        } else if path_filter.is_some() && query_str.is_empty() && type_filter.is_none() && extension.is_none() {
+            SearchQuery::recent(recent_limit).with_type_opt(type_filter)
+        } else if path_filter.is_some()
+            && query_str.is_empty()
+            && type_filter.is_none()
+            && extension.is_none()
+        {
             SearchQuery::all(search_limit)
         } else {
-            let mut q = SearchQuery::text(query_str, search_limit)
-                .with_type_opt(type_filter);
+            let mut q = SearchQuery::text(query_str, search_limit).with_type_opt(type_filter);
             if let Some(ext) = extension {
                 q = q.with_extension(ext);
             }
