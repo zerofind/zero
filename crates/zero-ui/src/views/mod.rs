@@ -1,0 +1,27 @@
+pub mod automations;
+pub mod cleanup;
+pub mod command_palette;
+pub mod dedup;
+pub mod drives_popover;
+pub mod editor;
+pub mod file_browser;
+pub mod file_grid;
+pub mod onboarding;
+pub mod secure_erase;
+pub mod settings;
+pub mod sidebar;
+pub mod todo;
+
+pub use automations::AutomationsView;
+pub use cleanup::CleanupView;
+pub use command_palette::{PaletteEvent, PaletteView};
+pub use dedup::{DedupEvent, DedupView};
+pub use drives_popover::DrivesPopover;
+pub use editor::{EditorEvent, EditorView};
+pub use file_browser::{FileBrowserEvent, FileBrowserView};
+pub use file_grid::{FileGridEvent, FileGridView};
+pub use onboarding::{OnboardingEvent, OnboardingView};
+pub use secure_erase::SecureEraseView;
+pub use settings::{SettingsEvent, SettingsView};
+pub use sidebar::AppSidebar;
+pub use todo::TodoView;

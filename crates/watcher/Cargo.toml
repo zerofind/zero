@@ -1,0 +1,51 @@
+[package]
+name = "zero-watcher"
+version = "0.1.0"
+edition = "2021"
+description = "File system and USB mount watching for zero"
+license = "MIT"
+
+[lib]
+name = "zero_watcher"
+# Future: add "cdylib" for Swift FFI
+crate-type = ["lib"]
+
+[[bin]]
+name = "zero-watch"
+path = "src/bin/watch.rs"
+
+[dependencies]
+# File system watching
+notify = { version = "8.2", default-features = false, features = ["macos_fsevent"] }
+notify-debouncer-mini = "0.7"
+
+# macOS frameworks for USB detection
+core-foundation = { version = "0.10", features = ["uuid"] }
+core-foundation-sys = "0.8"
+
+# Async runtime
+tokio = { version = "1.41", features = ["rt-multi-thread", "macros", "sync", "time"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+thiserror = "2.0"
+anyhow = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# CLI for test binary
+clap = { version = "4.5", features = ["derive"] }
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+[dev-dependencies]
+tempfile = "3.13"
+
+[build-dependencies]
+cc = "1.0"

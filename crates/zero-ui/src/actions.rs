@@ -1,0 +1,38 @@
+use gpui::*;
+
+actions!(
+    zero,
+    [
+        Quit,
+        ToggleSidebar,
+        GoBack,
+        GoForward,
+        GoUp,
+        OpenCommandPalette,
+        ToggleViewMode,
+        Refresh,
+        SelectAll,
+        SelectPrev,
+        SelectNext,
+        OpenSelected,
+        RevealInFinder,
+        MoveToTrash,
+        Rename,
+        NewFolder,
+        QuickLook,
+        CopyPath,
+        CopyFiles,
+        CutFiles,
+        PasteFiles,
+        DuplicateFiles,
+        FindInBrowser,
+        ToggleSplitView,
+        AddToBookmarks,
+        RemoveBookmark,
+        EjectDrive,
+        NewTodoFile,
+        FindDuplicatesHere,
+        MoveToOtherPane,
+        CopyToOtherPane,
+    ]
+);

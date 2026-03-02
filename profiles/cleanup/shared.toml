@@ -1,0 +1,83 @@
+# Cross-Platform Cleanup Categories
+# These work identically on all operating systems
+
+# =============================================================================
+# Developer - Build caches and dependencies
+# =============================================================================
+
+[node_modules]
+name = "node_modules"
+patterns = ["**/node_modules"]
+group = "developer"
+description = "Node.js dependency folders"
+warning = "Run 'npm install' to restore dependencies"
+
+[rust_target]
+name = "Rust Build Cache"
+patterns = ["**/target"]
+group = "developer"
+description = "Rust compilation artifacts (can be regenerated with cargo build)"
+
+[python_cache]
+name = "Python Cache"
+patterns = ["**/__pycache__", "**/*.pyc", "**/*.pyo"]
+group = "developer"
+description = "Python bytecode cache files"
+
+[go_cache]
+name = "Go Cache"
+group = "developer"
+description = "Go module cache and build cache"
+warning = "Run 'go mod download' to restore dependencies"
+patterns.macos = ["~/Library/Caches/go-build", "~/go/pkg/mod"]
+patterns.linux = ["~/.cache/go-build", "~/go/pkg/mod"]
+patterns.windows = ["~/AppData/Local/go-build", "~/go/pkg/mod"]
+
+[gradle_cache]
+name = "Gradle Cache"
+patterns = ["~/.gradle/caches", "~/.gradle/wrapper/dists", "~/.gradle/daemon"]
+group = "developer"
+description = "Gradle build cache and wrapper distributions"
+warning = "Gradle will re-download dependencies on next build"
+
+[maven_cache]
+name = "Maven Cache"
+patterns = ["~/.m2/repository"]
+group = "developer"
+description = "Maven local repository"
+warning = "Run 'mvn dependency:resolve' to restore dependencies"
+
+[composer_cache]
+name = "Composer Cache"
+group = "developer"
+description = "PHP Composer cache"
+warning = "Run 'composer install' to restore dependencies"
+patterns.macos = ["~/.composer/cache", "~/Library/Caches/composer"]
+patterns.linux = ["~/.composer/cache", "~/.cache/composer"]
+patterns.windows = ["~/AppData/Local/Composer"]
+
+[dotnet_cache]
+name = ".NET Cache"
+patterns = ["~/.nuget/packages", "~/.dotnet"]
+group = "developer"
+description = "NuGet packages cache"
+warning = "Run 'dotnet restore' to restore packages"
+
+# =============================================================================
+# System - Generic system files
+# =============================================================================
+
+[thumbnail_cache]
+name = "Thumbnail Cache"
+group = "system"
+description = "Cached image thumbnails"
+patterns.macos = ["~/Library/Caches/com.apple.QuickLook.thumbnailcache"]
+patterns.linux = ["~/.cache/thumbnails"]
+patterns.windows = ["~/AppData/Local/Microsoft/Windows/Explorer/thumbcache_*"]
+
+[log_files]
+name = "Log Files"
+patterns = ["**/*.log"]
+group = "system"
+description = "Application and system log files"
+min_age = "7d"

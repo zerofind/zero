@@ -1,0 +1,110 @@
+[workspace]
+members = ["crates/watcher", "crates/zero-ui"]
+resolver = "2"
+
+[workspace.dependencies]
+zero-watcher = { path = "crates/watcher" }
+
+[package]
+name = "zero"
+version = "0.4.1"
+edition = "2024"
+rust-version = "1.92"
+description = "A resilient file synchronization and deduplication tool"
+license = "MIT"
+
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+# Parallel directory walking
+jwalk = "0.8"
+
+# Fast hashing
+blake3 = "1.5"
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+sha2 = "0.10"
+hex = "0.4"
+memmap2 = "0.9"
+
+# Parallelism
+rayon = "1.10"
+
+# Async runtime (service mode + cloud storage)
+tokio = { version = "1.41", features = ["rt", "rt-multi-thread", "macros", "sync", "time"] }
+
+# Directories
+dirs = "6.0"
+
+# CLI
+clap = { version = "4.5", features = ["derive"] }
+clap_complete = "4.5"
+
+# Progress bars
+indicatif = "0.18"
+
+# Error handling
+thiserror = "2.0"
+anyhow = "1.0"
+
+# Serialization (for state files)
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+postcard = { version = "1.0", features = ["alloc"] }
+
+# Embedded database with WAL
+etchdb = { path = "../../tell/etch", features = ["compression"] }
+
+# Cloud storage (optional)
+opendal = { version = "0.51", optional = true, features = ["services-s3", "services-b2", "services-gcs", "services-dropbox", "services-webdav", "services-sftp"] }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Watcher (for watch subcommand - dev/testing)
+zero-watcher = { workspace = true }
+
+# Random number generation (for secure erase)
+rand = "0.9"
+rand_chacha = "0.9"
+
+# Signal handling (for graceful shutdown in service mode)
+ctrlc = "3.4"
+
+# Trash (move files to system trash instead of permanent delete)
+trash = "5.2"
+
+# Roaring bitmaps for fast type filtering
+roaring = { version = "0.11", features = ["serde"] }
+
+toml = "0.9.10"
+
+# Unix-specific (for secure erase platform code)
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[features]
+default = []
+opendal = ["dep:opendal"]
+
+[dev-dependencies]
+tempfile = "3.13"
+
+[profile.dev]
+codegen-units = 16
+debug = "limited"
+split-debuginfo = "unpacked"
+
+[profile.dev.package]
+resvg = { opt-level = 3 }
+rustybuzz = { opt-level = 3 }
+taffy = { opt-level = 3 }
+ttf-parser = { opt-level = 3 }
+
+[profile.release]
+lto = false
+codegen-units = 1
+strip = true
+
+
