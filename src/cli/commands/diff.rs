@@ -7,15 +7,36 @@ use zero::hasher::HashAlgorithm;
 use zero::cmd_success;
 use zero::output::*;
 use zero::scanner::{ScanOptions, scan_collect};
+use zero::transfer::compare_permissions;
 
+#[allow(clippy::too_many_arguments)]
 pub fn cmd_diff(
     out: &Outputter,
     source: &Path,
     dest: &Path,
     use_checksum: bool,
+    full: bool,
+    check_permissions: bool,
     show_identical: bool,
     max_depth: Option<usize>,
 ) -> anyhow::Result<()> {
+    // --full implies --checksum
+    let use_checksum = use_checksum || full;
+
+    // When checksum mode is active, delegate to the verify path which has
+    // cache acceleration, permission checks, and richer output.
+    if use_checksum {
+        return super::verify::cmd_verify(
+            out,
+            source,
+            dest,
+            max_depth,
+            false, // quick
+            full,
+            check_permissions,
+        );
+    }
+
     let start = Instant::now();
 
     out.header(&format!(
@@ -23,9 +44,7 @@ pub fn cmd_diff(
         source.display(),
         dest.display()
     ));
-    if use_checksum {
-        out.info("Using checksums for comparison");
-    }
+    out.info("Comparing by metadata (size + mtime)");
 
     let scan_options = ScanOptions {
         max_depth: max_depth.unwrap_or(usize::MAX),
@@ -80,6 +99,37 @@ pub fn cmd_diff(
         },
         changes,
     };
+
+    // Check permissions if requested
+    if check_permissions {
+        match compare_permissions(source, dest) {
+            Ok(perm_result) => {
+                if !perm_result.mismatches.is_empty() {
+                    out.newline();
+                    out.info(&format!(
+                        "Permission mismatches ({}):",
+                        perm_result.mismatches.len()
+                    ));
+                    for pm in perm_result.mismatches.iter().take(10) {
+                        let kind = if pm.is_dir { "dir" } else { "file" };
+                        out.indented(&format!(
+                            "{} [{}]: {:o} → {:o}",
+                            pm.path, kind, pm.source_mode, pm.dest_mode
+                        ));
+                    }
+                    if perm_result.mismatches.len() > 10 {
+                        out.indented(&format!(
+                            "... and {} more",
+                            perm_result.mismatches.len() - 10
+                        ));
+                    }
+                }
+            }
+            Err(e) => {
+                out.warn(&format!("Failed to compare permissions: {}", e));
+            }
+        }
+    }
 
     cmd_success!(out, "diff", duration_ms, data, {
         out.newline();

@@ -53,7 +53,7 @@ serde_json = "1.0"
 postcard = { version = "1.0", features = ["alloc"] }
 
 # Embedded database with WAL
-etchdb = { path = "../../tell/etch", features = ["compression"] }
+etchdb = { version = "0.3.2", features = ["compression"] }
 
 # Cloud storage (optional)
 opendal = { version = "0.51", optional = true, features = ["services-s3", "services-b2", "services-gcs", "services-dropbox", "services-webdav", "services-sftp"] }

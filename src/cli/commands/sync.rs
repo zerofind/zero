@@ -1,4 +1,4 @@
-//! Sync and Transfer command handlers
+//! Sync command handler
 //!
 //! Supports both local-to-local sync (fast path) and cloud sync via StorageBackend.
 
@@ -8,13 +8,10 @@ use std::time::Instant;
 
 use anyhow::{Context, Result};
 
-use zero::cmd_success;
 use zero::output::*;
 use zero::progress::AtomicProgress;
 use zero::storage::{ListOptions, StorageBackend, StorageEntry};
 use zero::sync::{SyncJob, SyncOptions, SyncPhase};
-use zero::transfer::{TransferJob, TransferOptions};
-
 use super::cloud::parse_storage_path;
 
 pub struct CmdSyncOptions<'a> {
@@ -693,87 +690,4 @@ async fn storage_sync_impl(
     }
 
     Ok(stats)
-}
-
-pub fn cmd_transfer(
-    out: &Outputter,
-    source: &Path,
-    dest: &Path,
-    verify: bool,
-    max_depth: Option<usize>,
-    preserve_permissions: bool,
-) -> Result<()> {
-    out.header(&format!(
-        "Transfer {} → {}",
-        source.display(),
-        dest.display()
-    ));
-    out.info("(Simple copy - transfers ALL files. Use `sync` for incremental.)");
-    if verify {
-        out.info("Checksum verification: enabled");
-    }
-    if preserve_permissions {
-        out.info("Preserve directory permissions: enabled");
-    }
-    out.newline();
-
-    let options = TransferOptions {
-        verify,
-        max_depth,
-        preserve_permissions,
-        ..Default::default()
-    };
-
-    let job = TransferJob::new(source, dest, options)?;
-
-    out.info("Scanning source...");
-
-    let is_json = out.is_json();
-    let result = job.run(|progress| {
-        // Log start
-        if progress.files_done == 0 && progress.total_files > 0 && !is_json {
-            println!(
-                "Transferring {} files ({})...",
-                progress.total_files,
-                format_bytes(progress.total_bytes)
-            );
-        }
-    })?;
-
-    let duration_ms = result.duration.as_millis() as u64;
-    let throughput = if result.duration.as_secs_f64() > 0.0 {
-        Some((result.bytes_transferred as f64 / 1_000_000.0) / result.duration.as_secs_f64())
-    } else {
-        None
-    };
-
-    let data = TransferData {
-        source: source.to_path_buf(),
-        dest: dest.to_path_buf(),
-        files_copied: result.files_transferred,
-        bytes_copied: result.bytes_transferred,
-        throughput_mbps: throughput,
-        verified: verify,
-        errors: vec![], // TODO: collect actual errors
-        dirs_permissions_synced: Some(result.dirs_permissions_synced),
-    };
-
-    cmd_success!(out, "transfer", duration_ms, data, {
-        out.newline();
-        out.success("Transfer complete!");
-        out.kv("Files transferred", result.files_transferred);
-        out.kv("Bytes transferred", format_bytes(result.bytes_transferred));
-        out.kv("Duration", format_duration(result.duration));
-        if result.files_failed > 0 {
-            out.kv("Files failed", result.files_failed);
-        }
-        if result.dirs_permissions_synced > 0 {
-            out.kv("Dir permissions synced", result.dirs_permissions_synced);
-        }
-        if let Some(tp) = throughput {
-            out.kv("Throughput", format!("{:.1} MB/s", tp));
-        }
-    });
-
-    Ok(())
 }

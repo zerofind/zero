@@ -167,32 +167,11 @@ pub enum Commands {
     // =========================================================================
     // Verification and comparison
     // =========================================================================
-    /// Verify two directories are identical (using checksums)
-    Verify {
-        /// Source directory
-        source: PathBuf,
-
-        /// Destination directory
-        dest: PathBuf,
-
-        /// Maximum depth to traverse
-        #[arg(short, long)]
-        max_depth: Option<usize>,
-
-        /// Quick mode: compare metadata only (size + mtime), no checksums
-        #[arg(long)]
-        quick: bool,
-
-        /// Full mode: force rehash all files, ignore cache
-        #[arg(long)]
-        full: bool,
-
-        /// Also check that file and directory permissions match
-        #[arg(long)]
-        check_permissions: bool,
-    },
-
     /// Compare two directories and show differences
+    ///
+    /// By default compares by metadata (size + mtime). Use --checksum for
+    /// cryptographic verification with cached results.
+    #[command(visible_alias = "verify")]
     Diff {
         /// Source directory
         source: PathBuf,
@@ -200,9 +179,17 @@ pub enum Commands {
         /// Destination directory
         dest: PathBuf,
 
-        /// Use checksums instead of mtime+size for comparison
+        /// Use checksums instead of mtime+size (enables hash cache for speed)
         #[arg(long)]
         checksum: bool,
+
+        /// Force rehash all files, ignore cache (implies --checksum)
+        #[arg(long)]
+        full: bool,
+
+        /// Also check file/directory permissions match
+        #[arg(long)]
+        check_permissions: bool,
 
         /// Show identical files too
         #[arg(long)]
@@ -304,28 +291,6 @@ pub enum Commands {
         /// Skip hidden files and directories (default: include them)
         #[arg(long)]
         skip_hidden: bool,
-    },
-
-    /// Transfer ALL files from source to destination (simple copy)
-    /// For smart incremental sync, use the `sync` command instead.
-    Transfer {
-        /// Source directory
-        source: PathBuf,
-
-        /// Destination directory
-        dest: PathBuf,
-
-        /// Verify checksums after copy (slower but guarantees integrity)
-        #[arg(long)]
-        verify: bool,
-
-        /// Maximum depth to traverse
-        #[arg(short, long)]
-        max_depth: Option<usize>,
-
-        /// Preserve directory permissions (file permissions are always preserved)
-        #[arg(short = 'p', long)]
-        preserve_permissions: bool,
     },
 
     /// Build and manage the file index (checksums database)
@@ -437,12 +402,6 @@ pub enum Commands {
         watch_cmd: WatchCommands,
     },
 
-    /// Show status of current/recent jobs
-    Status {
-        /// Optional job ID to show details for
-        job_id: Option<u64>,
-    },
-
     /// Generate shell completions
     ///
     /// Examples:
@@ -546,26 +505,40 @@ pub enum Commands {
 
 /// Print the intro/help message when no command is given
 pub fn print_intro() {
-    eprintln!(
+    println!(
         r#"
-  zero - Fast, resilient file sync
+  zero — fast, resilient file sync
 
-  Usage:
-    zero <source> <dest>     Sync files (smart, incremental)
-    zero ls <path>           List files
-    zero get <url>           Download from cloud
-    zero cp <src> <dest>     Copy files
+  Commands:
+    automation    Manage sync automations
+    completions   Generate shell completions
+    cp            Copy files (local or cloud)
+    delete        Delete files (moves to Trash by default)
+    diff          Compare two directories
+    disk          Show disk/volume info
+    drives        List connected drives
+    dupes         Find duplicate files
+    erase         Securely erase a disk (destructive)
+    get           Download from cloud storage
+    index         Build/manage file checksum index
+    ls            List files (local or cloud)
+    scan          Scan directory and show statistics
+    search        Fast file search (private Spotlight replacement)
+    sync          Sync source to destination [default]
+    todo          Manage tasks and todo lists
+    watch         Watch for filesystem/USB events
 
   Examples:
-    zero ./photos /backup/photos
-    zero ./data s3://bucket/backup
-    zero get s3://bucket/file.txt
+    zero ./photos /backup/photos         Sync files
+    zero ./data s3://bucket/backup       Sync to cloud
+    zero get s3://bucket/file.txt        Download from cloud
+    zero diff ./src /backup/src          Compare directories
+    zero diff ./src /backup --checksum   Verify with checksums
 
-  Enable tab completion:
-    zero completions fish | source
-    zero completions --install         # auto-detect & install
+  Tab completion:
+    zero completions --install
 
-  Run 'zero help' or 'zero --help' for all commands
+  Run 'zero help' or 'zero --help' for full details.
 "#
     );
 }

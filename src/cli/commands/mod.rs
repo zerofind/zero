@@ -29,5 +29,4 @@ pub use search::*;
 pub use sync::*;
 pub use templates::*;
 pub use todo::*;
-pub use verify::*;
 pub use watch::*;

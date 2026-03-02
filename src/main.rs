@@ -18,6 +18,17 @@ use cli::{Commands, ShellType, print_intro};
 /// Global flag to track if we're in a panic state
 static PANICKING: AtomicBool = AtomicBool::new(false);
 
+/// All known CLI commands and flags (used by preprocess_args and looks_like_path)
+const KNOWN_COMMANDS: &[&str] = &[
+    "automation", "completions", "cp", "copy", "delete", "diff",
+    "disk", "download", "drives", "dupes", "erase",
+    "get", "help", "index", "ls", "list", "rm",
+    "scan", "search", "service", "sync", "templates",
+    "todo", "verify", "watch", "wipe",
+    // flags
+    "--help", "-h", "--version", "-V",
+];
+
 /// Set up a panic handler that ensures clean process exit
 /// This prevents zombie rayon threads from hanging around after a panic/stack overflow
 fn setup_panic_handler() {
@@ -85,39 +96,12 @@ fn looks_like_path(s: &str) -> bool {
         return true;
     }
     // Could be a relative path that doesn't exist yet (destination)
-    // If it doesn't start with '-' and contains a path separator or looks like a filename
-    if !s.starts_with('-') && (s.contains('/') || s.contains('.') || !s.contains('-')) {
-        // Heuristic: if it looks like a path segment (not a flag, not a known subcommand)
-        let known_commands = [
-            "sync",
-            "ls",
-            "list",
-            "cp",
-            "copy",
-            "verify",
-            "diff",
-            "dupes",
-            "scan",
-            "transfer",
-            "index",
-            "drives",
-            "disk",
-            "erase",
-            "wipe",
-            "automation",
-            "templates",
-            "watch",
-            "status",
-            "cloud",
-            "help",
-            "--help",
-            "-h",
-            "--version",
-            "-V",
-        ];
-        if !known_commands.contains(&s) {
-            return true;
-        }
+    // If it doesn't start with '-' and contains a path separator or extension dot
+    if !s.starts_with('-')
+        && (s.contains('/') || s.contains('.'))
+        && !KNOWN_COMMANDS.contains(&s)
+    {
+        return true;
     }
     false
 }
@@ -142,39 +126,7 @@ fn preprocess_args() -> Vec<String> {
     }
 
     // Skip if it's a known subcommand
-    let known_commands = [
-        "sync",
-        "ls",
-        "list",
-        "cp",
-        "copy",
-        "get",
-        "download",
-        "verify",
-        "diff",
-        "delete",
-        "rm",
-        "dupes",
-        "scan",
-        "transfer",
-        "index",
-        "drives",
-        "disk",
-        "erase",
-        "wipe",
-        "automation",
-        "templates",
-        "watch",
-        "status",
-        "completions",
-        "cloud",
-        "search",
-        "service",
-        "todo",
-        "help",
-    ];
-
-    if known_commands.contains(&first_arg.as_str()) {
+    if KNOWN_COMMANDS.contains(&first_arg.as_str()) {
         return args;
     }
 
@@ -300,33 +252,25 @@ fn main() -> anyhow::Result<()> {
         // =====================================================================
         // Verification and comparison
         // =====================================================================
-        Commands::Verify {
-            source,
-            dest,
-            max_depth,
-            quick,
-            full,
-            check_permissions,
-        } => {
-            cli::commands::cmd_verify(
-                &out,
-                &source,
-                &dest,
-                max_depth,
-                quick,
-                full,
-                check_permissions,
-            )?;
-        }
-
         Commands::Diff {
             source,
             dest,
             checksum,
+            full,
+            check_permissions,
             show_identical,
             max_depth,
         } => {
-            cli::commands::cmd_diff(&out, &source, &dest, checksum, show_identical, max_depth)?;
+            cli::commands::cmd_diff(
+                &out,
+                &source,
+                &dest,
+                checksum,
+                full,
+                check_permissions,
+                show_identical,
+                max_depth,
+            )?;
         }
 
         // =====================================================================
@@ -390,23 +334,6 @@ fn main() -> anyhow::Result<()> {
             } else {
                 cli::commands::cmd_scan(&out, &path, max_depth, follow_symlinks, skip_hidden)?;
             }
-        }
-
-        Commands::Transfer {
-            source,
-            dest,
-            verify,
-            max_depth,
-            preserve_permissions,
-        } => {
-            cli::commands::cmd_transfer(
-                &out,
-                &source,
-                &dest,
-                verify,
-                max_depth,
-                preserve_permissions,
-            )?;
         }
 
         Commands::Index {
@@ -475,10 +402,6 @@ fn main() -> anyhow::Result<()> {
 
         Commands::Watch { watch_cmd } => {
             cli::commands::cmd_watch(&out, watch_cmd)?;
-        }
-
-        Commands::Status { job_id: _ } => {
-            out.info("Status not yet implemented");
         }
 
         // =====================================================================
