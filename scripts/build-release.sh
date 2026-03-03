@@ -46,7 +46,7 @@ package_artifact() {
     local artifact_name="${BINARY_NAME}-${VERSION}-${os_arch}"
 
     echo "Building for ${target}..."
-    cargo build --release --target "${target}" -p zero
+    cargo build --release --target "${target}" -p zero-cli
 
     mkdir -p "${DIST_DIR}/${artifact_name}"
     cp "target/${target}/release/${BINARY_NAME}" "${DIST_DIR}/${artifact_name}/"

@@ -503,46 +503,6 @@ pub enum Commands {
     },
 }
 
-/// Print the intro/help message when no command is given
-pub fn print_intro() {
-    println!(
-        r#"
-  zero — fast, resilient file sync
-
-  Commands:
-    automation    Manage sync automations
-    completions   Generate shell completions
-    cp            Copy files (local or cloud)
-    delete        Delete files (moves to Trash by default)
-    diff          Compare two directories
-    disk          Show disk/volume info
-    drives        List connected drives
-    dupes         Find duplicate files
-    erase         Securely erase a disk (destructive)
-    get           Download from cloud storage
-    index         Build/manage file checksum index
-    ls            List files (local or cloud)
-    scan          Scan directory and show statistics
-    search        Fast file search (private Spotlight replacement)
-    sync          Sync source to destination [default]
-    todo          Manage tasks and todo lists
-    watch         Watch for filesystem/USB events
-
-  Examples:
-    zero ./photos /backup/photos         Sync files
-    zero ./data s3://bucket/backup       Sync to cloud
-    zero get s3://bucket/file.txt        Download from cloud
-    zero diff ./src /backup/src          Compare directories
-    zero diff ./src /backup --checksum   Verify with checksums
-
-  Tab completion:
-    zero completions --install
-
-  Run 'zero help' or 'zero --help' for full details.
-"#
-    );
-}
-
 /// Subcommands for the watch command (dev/testing)
 #[derive(Subcommand)]
 pub enum WatchCommands {

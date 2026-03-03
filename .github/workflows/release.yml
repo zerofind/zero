@@ -60,7 +60,7 @@ jobs:
           SCCACHE_GHA_ENABLED: "true"
           RUSTC_WRAPPER: "sccache"
           RUSTFLAGS: ${{ matrix.rustflags }}
-        run: cargo build --release --target ${{ matrix.target }} -p zero
+        run: cargo build --release --target ${{ matrix.target }} -p zero-cli
 
       - name: Package artifact
         run: |

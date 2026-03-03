@@ -8789,7 +8789,7 @@ checksum = "6df3dc4292935e51816d896edcd52aa30bc297907c26167fec31e2b0c6a32524"
 
 [[package]]
 name = "zero"
-version = "0.4.1"
+version = "0.4.3"
 dependencies = [
  "anyhow",
  "blake3",
@@ -8820,6 +8820,25 @@ dependencies = [
  "tracing-subscriber",
  "trash",
  "xxhash-rust",
+ "zero-watcher",
+]
+
+[[package]]
+name = "zero-cli"
+version = "0.4.3"
+dependencies = [
+ "anyhow",
+ "clap",
+ "clap_complete",
+ "dirs 6.0.0",
+ "rayon",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "zero",
+ "zero-ui",
  "zero-watcher",
 ]
 

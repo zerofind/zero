@@ -13,7 +13,7 @@ use tracing_subscriber::{EnvFilter, FmtSubscriber};
 use zero::output::{OutputMode, Outputter};
 
 mod cli;
-use cli::{Commands, ShellType, print_intro};
+use cli::{Commands, ShellType};
 
 /// Global flag to track if we're in a panic state
 static PANICKING: AtomicBool = AtomicBool::new(false);
@@ -197,11 +197,11 @@ fn main() -> anyhow::Result<()> {
             .init();
     }
 
-    // Handle no command (show intro)
+    // Handle no command: launch GUI
     let command = match cli.command {
         Some(cmd) => cmd,
         None => {
-            print_intro();
+            zero_ui::launch();
             return Ok(());
         }
     };
