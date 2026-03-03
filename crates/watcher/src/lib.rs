@@ -18,7 +18,7 @@
 //! # Example
 //!
 //! ```no_run
-//! use zero_watcher::{FileWatcher, UsbWatcher};
+//! use zero_watcher::FileWatcher;
 //! use std::path::Path;
 //! use std::time::Duration;
 //!
@@ -27,16 +27,10 @@
 //!     let mut file_watcher = FileWatcher::new()?;
 //!     file_watcher.watch(Path::new("/Users/me/Documents"))?;
 //!
-//!     // Watch for USB mount/unmount
-//!     let mut usb_watcher = UsbWatcher::new()?;
-//!
 //!     // Process events (polling style)
 //!     loop {
 //!         if let Some(event) = file_watcher.try_next_event() {
 //!             println!("File event: {:?}", event);
-//!         }
-//!         if let Some(event) = usb_watcher.try_next_event() {
-//!             println!("USB event: {:?}", event);
 //!         }
 //!         std::thread::sleep(Duration::from_millis(10));
 //!     }
@@ -45,11 +39,13 @@
 
 pub mod events;
 pub mod file_watcher;
+#[cfg(target_os = "macos")]
 pub mod usb_watcher;
 
 // Re-export main types
 pub use events::{FileChangeKind, FileEvent, UsbEvent, UsbEventKind, WatchEvent};
 pub use file_watcher::FileWatcher;
+#[cfg(target_os = "macos")]
 pub use usb_watcher::UsbWatcher;
 
 /// Configuration for file watching

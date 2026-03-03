@@ -14,7 +14,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use tokio::sync::mpsc;
-use zero_watcher::{FileWatchConfig, FileWatcher, UsbEventKind, UsbWatcher};
+use zero_watcher::{FileWatchConfig, FileWatcher};
+#[cfg(target_os = "macos")]
+use zero_watcher::{UsbEventKind, UsbWatcher};
 
 use crate::automation::{AutomationEvent, Executor, ExecutorConfig};
 use crate::cache::CacheDb;
@@ -221,85 +223,91 @@ async fn start_watchers(
     event_tx: mpsc::Sender<ServiceEvent>,
     logger: ServiceLogger,
 ) -> anyhow::Result<()> {
-    // Start USB watcher
-    let usb_tx = event_tx.clone();
-    let usb_logger = logger.clone();
-    let usb_executor = Arc::clone(&executor);
+    // Start USB watcher (macOS only - uses DiskArbitration framework)
+    #[cfg(target_os = "macos")]
+    {
+        let usb_tx = event_tx.clone();
+        let usb_logger = logger.clone();
+        let usb_executor = Arc::clone(&executor);
 
-    std::thread::spawn(move || {
-        let mut watcher = match UsbWatcher::new() {
-            Ok(w) => w,
-            Err(e) => {
-                usb_logger.error("usb_watcher", &format!("Failed to start: {}", e));
-                return;
-            }
-        };
+        std::thread::spawn(move || {
+            let mut watcher = match UsbWatcher::new() {
+                Ok(w) => w,
+                Err(e) => {
+                    usb_logger.error("usb_watcher", &format!("Failed to start: {}", e));
+                    return;
+                }
+            };
 
-        usb_logger.info("usb_watcher", "Started");
+            usb_logger.info("usb_watcher", "Started");
 
-        loop {
-            if let Some(event) = watcher.next_event_timeout(Duration::from_millis(500)) {
-                let timestamp_ms = event.timestamp_ms;
+            loop {
+                if let Some(event) = watcher.next_event_timeout(Duration::from_millis(500)) {
+                    let timestamp_ms = event.timestamp_ms;
 
-                match event.kind {
-                    UsbEventKind::Mounted => {
-                        usb_logger.info(
-                            "usb_watcher",
-                            &format!("USB mounted: {}", event.mount_point.display()),
-                        );
+                    match event.kind {
+                        UsbEventKind::Mounted => {
+                            usb_logger.info(
+                                "usb_watcher",
+                                &format!("USB mounted: {}", event.mount_point.display()),
+                            );
 
-                        let params = UsbMountedParams {
-                            mount_point: event.mount_point.to_string_lossy().to_string(),
-                            volume_name: event.volume_name.clone(),
-                            device_serial: event.device_serial.clone(),
-                            volume_uuid: event.volume_uuid.clone(),
-                            capacity_bytes: event.capacity_bytes,
-                            timestamp_ms,
-                        };
-
-                        let _ = usb_tx.blocking_send(ServiceEvent::UsbMounted(params));
-
-                        // Trigger automations
-                        if let Some(serial) = &event.device_serial {
-                            let automation_event = AutomationEvent::UsbMounted {
-                                serial: serial.clone(),
-                                mount_point: event.mount_point.clone(),
+                            let params = UsbMountedParams {
+                                mount_point: event.mount_point.to_string_lossy().to_string(),
                                 volume_name: event.volume_name.clone(),
+                                device_serial: event.device_serial.clone(),
+                                volume_uuid: event.volume_uuid.clone(),
+                                capacity_bytes: event.capacity_bytes,
+                                timestamp_ms,
                             };
 
-                            let executor = Arc::clone(&usb_executor);
-                            tokio::runtime::Handle::current().spawn(async move {
-                                let _ = executor.handle_event(automation_event).await;
-                            });
+                            let _ = usb_tx.blocking_send(ServiceEvent::UsbMounted(params));
+
+                            // Trigger automations
+                            if let Some(serial) = &event.device_serial {
+                                let automation_event = AutomationEvent::UsbMounted {
+                                    serial: serial.clone(),
+                                    mount_point: event.mount_point.clone(),
+                                    volume_name: event.volume_name.clone(),
+                                };
+
+                                let executor = Arc::clone(&usb_executor);
+                                tokio::runtime::Handle::current().spawn(async move {
+                                    let _ = executor.handle_event(automation_event).await;
+                                });
+                            }
                         }
-                    }
 
-                    UsbEventKind::Unmounted => {
-                        usb_logger.info(
-                            "usb_watcher",
-                            &format!("USB unmounted: {}", event.mount_point.display()),
-                        );
+                        UsbEventKind::Unmounted => {
+                            usb_logger.info(
+                                "usb_watcher",
+                                &format!("USB unmounted: {}", event.mount_point.display()),
+                            );
 
-                        let params = UsbUnmountedParams {
-                            mount_point: event.mount_point.to_string_lossy().to_string(),
-                            volume_name: event.volume_name.clone(),
-                            device_serial: event.device_serial.clone(),
-                            timestamp_ms,
-                        };
+                            let params = UsbUnmountedParams {
+                                mount_point: event.mount_point.to_string_lossy().to_string(),
+                                volume_name: event.volume_name.clone(),
+                                device_serial: event.device_serial.clone(),
+                                timestamp_ms,
+                            };
 
-                        let _ = usb_tx.blocking_send(ServiceEvent::UsbUnmounted(params));
-                    }
+                            let _ = usb_tx.blocking_send(ServiceEvent::UsbUnmounted(params));
+                        }
 
-                    UsbEventKind::Unmounting => {
-                        usb_logger.debug(
-                            "usb_watcher",
-                            &format!("USB unmounting: {}", event.mount_point.display()),
-                        );
+                        UsbEventKind::Unmounting => {
+                            usb_logger.debug(
+                                "usb_watcher",
+                                &format!("USB unmounting: {}", event.mount_point.display()),
+                            );
+                        }
                     }
                 }
             }
-        }
-    });
+        });
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    logger.info("service", "USB watcher not available on this platform");
 
     // Start file watcher for automations with on_change trigger
     let file_tx = event_tx;

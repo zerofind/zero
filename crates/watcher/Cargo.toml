@@ -16,12 +16,8 @@ path = "src/bin/watch.rs"
 
 [dependencies]
 # File system watching
-notify = { version = "8.2", default-features = false, features = ["macos_fsevent"] }
+notify = "8.2"
 notify-debouncer-mini = "0.7"
-
-# macOS frameworks for USB detection
-core-foundation = { version = "0.10", features = ["uuid"] }
-core-foundation-sys = "0.8"
 
 # Async runtime
 tokio = { version = "1.41", features = ["rt-multi-thread", "macros", "sync", "time"] }
@@ -44,8 +40,11 @@ clap = { version = "4.5", features = ["derive"] }
 # Time handling
 chrono = { version = "0.4", features = ["serde"] }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+# macOS frameworks for USB detection
+core-foundation = { version = "0.10", features = ["uuid"] }
+core-foundation-sys = "0.8"
+
 [dev-dependencies]
 tempfile = "3.13"
 
-[build-dependencies]
-cc = "1.0"

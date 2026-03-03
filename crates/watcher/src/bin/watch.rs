@@ -2,15 +2,17 @@
 //!
 //! Usage:
 //!   zero-watch files /path/to/watch [/another/path ...]
-//!   zero-watch usb
-//!   zero-watch all /path/to/watch [...]
+//!   zero-watch usb       (macOS only)
+//!   zero-watch all /path/to/watch [...]  (macOS only)
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use tracing_subscriber::EnvFilter;
-use zero_watcher::{FileWatchConfig, FileWatcher, UsbWatcher};
+#[cfg(target_os = "macos")]
+use zero_watcher::UsbWatcher;
+use zero_watcher::{FileWatchConfig, FileWatcher};
 
 #[derive(Parser)]
 #[command(name = "zero-watch")]
@@ -46,7 +48,8 @@ enum Commands {
         no_recursive: bool,
     },
 
-    /// Watch for USB mount/unmount events
+    /// Watch for USB mount/unmount events (macOS only)
+    #[cfg(target_os = "macos")]
     Usb {
         /// Only report events for volumes matching these names
         #[arg(long)]
@@ -57,7 +60,8 @@ enum Commands {
         serial: Vec<String>,
     },
 
-    /// Watch both files and USB events
+    /// Watch both files and USB events (macOS only)
+    #[cfg(target_os = "macos")]
     All {
         /// Paths to watch for file changes
         #[arg(required = true)]
@@ -102,8 +106,10 @@ fn main() -> Result<()> {
             no_recursive,
         } => watch_files(paths, debounce_ms, !no_recursive, cli.json),
 
+        #[cfg(target_os = "macos")]
         Commands::Usb { filter, serial } => watch_usb(filter, serial, cli.json),
 
+        #[cfg(target_os = "macos")]
         Commands::All { paths, debounce_ms } => watch_all(paths, debounce_ms, cli.json),
 
         Commands::Latency { path, iterations } => measure_latency(path, iterations),
@@ -122,7 +128,7 @@ fn watch_files(paths: Vec<PathBuf>, debounce_ms: u64, recursive: bool, json: boo
     for path in &paths {
         watcher.watch(path)?;
         if !json {
-            println!("👁  Watching: {}", path.display());
+            println!("Watching: {}", path.display());
         }
     }
 
@@ -135,19 +141,9 @@ fn watch_files(paths: Vec<PathBuf>, debounce_ms: u64, recursive: bool, json: boo
             if json {
                 println!("{}", event.to_json()?);
             } else {
-                let icon = match event.kind {
-                    zero_watcher::FileChangeKind::Created => "✨",
-                    zero_watcher::FileChangeKind::Modified => "📝",
-                    zero_watcher::FileChangeKind::Deleted => "🗑 ",
-                    zero_watcher::FileChangeKind::Renamed => "📋",
-                    zero_watcher::FileChangeKind::Metadata => "🔧",
-                    zero_watcher::FileChangeKind::Other => "❓",
-                };
-
                 for path in &event.paths {
                     println!(
-                        "{} {:?}: {}",
-                        icon,
+                        "{:?}: {}",
                         event.kind,
                         path.strip_prefix(&event.watch_root)
                             .unwrap_or(path)
@@ -159,6 +155,7 @@ fn watch_files(paths: Vec<PathBuf>, debounce_ms: u64, recursive: bool, json: boo
     }
 }
 
+#[cfg(target_os = "macos")]
 fn watch_usb(filter: Vec<String>, serial: Vec<String>, json: bool) -> Result<()> {
     let config = zero_watcher::UsbWatchConfig {
         volume_filter: filter,
@@ -168,10 +165,10 @@ fn watch_usb(filter: Vec<String>, serial: Vec<String>, json: bool) -> Result<()>
     let mut watcher = UsbWatcher::with_config(config)?;
 
     if !json {
-        println!("👁  Watching for USB mount/unmount events");
+        println!("Watching for USB mount/unmount events");
         println!("\nCurrently mounted volumes:");
         for vol in UsbWatcher::current_volumes() {
-            println!("  💾 {}", vol.display());
+            println!("  {}", vol.display());
         }
         println!("\nPress Ctrl+C to stop\n");
     }
@@ -181,15 +178,8 @@ fn watch_usb(filter: Vec<String>, serial: Vec<String>, json: bool) -> Result<()>
             if json {
                 println!("{}", event.to_json()?);
             } else {
-                let icon = match event.kind {
-                    zero_watcher::UsbEventKind::Mounted => "🔌",
-                    zero_watcher::UsbEventKind::Unmounted => "⏏️ ",
-                    zero_watcher::UsbEventKind::Unmounting => "⚠️ ",
-                };
-
                 println!(
-                    "{} {:?}: {}{}",
-                    icon,
+                    "{:?}: {}{}",
                     event.kind,
                     event.mount_point.display(),
                     event
@@ -210,6 +200,7 @@ fn watch_usb(filter: Vec<String>, serial: Vec<String>, json: bool) -> Result<()>
     }
 }
 
+#[cfg(target_os = "macos")]
 fn watch_all(paths: Vec<PathBuf>, debounce_ms: u64, json: bool) -> Result<()> {
     let file_config = FileWatchConfig {
         debounce_ms,
@@ -223,12 +214,12 @@ fn watch_all(paths: Vec<PathBuf>, debounce_ms: u64, json: bool) -> Result<()> {
     for path in &paths {
         file_watcher.watch(path)?;
         if !json {
-            println!("👁  Watching files: {}", path.display());
+            println!("Watching files: {}", path.display());
         }
     }
 
     if !json {
-        println!("👁  Watching USB events");
+        println!("Watching USB events");
         println!("\nPress Ctrl+C to stop\n");
     }
 
@@ -239,19 +230,9 @@ fn watch_all(paths: Vec<PathBuf>, debounce_ms: u64, json: bool) -> Result<()> {
                 let watch_event = zero_watcher::WatchEvent::File(event);
                 println!("{}", watch_event.to_json()?);
             } else {
-                let icon = match event.kind {
-                    zero_watcher::FileChangeKind::Created => "✨",
-                    zero_watcher::FileChangeKind::Modified => "📝",
-                    zero_watcher::FileChangeKind::Deleted => "🗑 ",
-                    zero_watcher::FileChangeKind::Renamed => "📋",
-                    zero_watcher::FileChangeKind::Metadata => "🔧",
-                    zero_watcher::FileChangeKind::Other => "❓",
-                };
-
                 for path in &event.paths {
                     println!(
-                        "{} [FILE] {:?}: {}",
-                        icon,
+                        "[FILE] {:?}: {}",
                         event.kind,
                         path.strip_prefix(&event.watch_root)
                             .unwrap_or(path)
@@ -267,15 +248,8 @@ fn watch_all(paths: Vec<PathBuf>, debounce_ms: u64, json: bool) -> Result<()> {
                 let watch_event = zero_watcher::WatchEvent::Usb(event);
                 println!("{}", watch_event.to_json()?);
             } else {
-                let icon = match event.kind {
-                    zero_watcher::UsbEventKind::Mounted => "🔌",
-                    zero_watcher::UsbEventKind::Unmounted => "⏏️ ",
-                    zero_watcher::UsbEventKind::Unmounting => "⚠️ ",
-                };
-
                 println!(
-                    "{} [USB] {:?}: {}{}",
-                    icon,
+                    "[USB] {:?}: {}{}",
                     event.kind,
                     event.mount_point.display(),
                     event
@@ -295,7 +269,7 @@ fn watch_all(paths: Vec<PathBuf>, debounce_ms: u64, json: bool) -> Result<()> {
 fn measure_latency(path: PathBuf, iterations: usize) -> Result<()> {
     use std::fs;
 
-    println!("📊 Measuring file watcher latency\n");
+    println!("Measuring file watcher latency\n");
     println!("Watch path: {}", path.display());
     println!("Iterations: {}\n", iterations);
 
@@ -369,7 +343,7 @@ fn measure_latency(path: PathBuf, iterations: usize) -> Result<()> {
 
     // Print statistics
     if !latencies.is_empty() {
-        println!("\n📈 Results:");
+        println!("\nResults:");
 
         let min = latencies.iter().min().unwrap();
         let max = latencies.iter().max().unwrap();
@@ -388,7 +362,7 @@ fn measure_latency(path: PathBuf, iterations: usize) -> Result<()> {
         println!("  P95:    {:>6.2}ms", p95.as_secs_f64() * 1000.0);
         println!("\n  Success rate: {}/{}", latencies.len(), iterations);
     } else {
-        println!("\n❌ No events detected!");
+        println!("\nNo events detected!");
     }
 
     Ok(())

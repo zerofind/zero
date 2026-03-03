@@ -8955,7 +8955,6 @@ name = "zero-watcher"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "cc",
  "chrono",
  "clap",
  "core-foundation 0.10.0",
