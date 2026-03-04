@@ -1,6 +1,8 @@
 use gpui::*;
 use gpui_component::{ActiveTheme as _, Icon, IconName, Sizable as _};
 
+use crate::theme::ICON_XS;
+
 /// Maps file extension to an appropriate icon and color.
 #[derive(IntoElement)]
 pub struct FileIcon {
@@ -76,7 +78,7 @@ impl FileIcon {
 impl RenderOnce for FileIcon {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         Icon::new(self.icon_name())
-            .xsmall()
+            .with_size(ICON_XS)
             .text_color(self.icon_color(cx))
     }
 }

@@ -1,13 +1,12 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use gpui_component::{
-    ActiveTheme, Disableable as _, IconName, Sizable as _, TitleBar,
+    ActiveTheme, Disableable as _, Icon, IconName, Sizable as _, TitleBar,
     button::{Button, ButtonVariants as _},
 };
 
 use crate::actions::{GoBack, GoForward, OpenCommandPalette, ToggleSidebar};
-use crate::theme::{self, FONT_SIZE_CALLOUT};
-use crate::ui::Breadcrumb;
+use crate::theme::{self, ICON_XS, RADIUS_SM, SPACE_XS};
 
 use super::ZeroApp;
 
@@ -18,7 +17,12 @@ impl ZeroApp {
         let can_forward = self.can_go_forward();
         let sidebar_open = self.sidebar_open;
 
-        let breadcrumb_path = self.current_path.clone();
+        // Current folder name (last path component)
+        let folder_name = self
+            .current_path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "Macintosh HD".to_string());
 
         let toggle_icon = if sidebar_open {
             IconName::PanelLeftClose
@@ -59,7 +63,7 @@ impl ZeroApp {
                             .flex()
                             .flex_row()
                             .items_center()
-                            .gap(px(2.0))
+                            .gap(SPACE_XS)
                             .child(
                                 Button::new("nav-back")
                                     .ghost()
@@ -68,8 +72,8 @@ impl ZeroApp {
                                     .icon(IconName::ChevronLeft)
                                     .text_color(if can_back { muted } else { disabled_color })
                                     .disabled(!can_back)
-                                    .on_click(cx.listener(|this, _, _, cx| {
-                                        this.go_back(cx);
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.go_back(window, cx);
                                     })),
                             )
                             .child(
@@ -80,51 +84,54 @@ impl ZeroApp {
                                     .icon(IconName::ChevronRight)
                                     .text_color(if can_forward { muted } else { disabled_color })
                                     .disabled(!can_forward)
-                                    .on_click(cx.listener(|this, _, _, cx| {
-                                        this.go_forward(cx);
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.go_forward(window, cx);
                                     })),
                             ),
                     )
                     // Left spacer for centering
                     .child(div().flex_1())
-                    // Centered breadcrumb navigation
-                    .child({
-                        let app = cx.entity().clone();
+                    // Centered folder button (opens search)
+                    .child(
                         div()
-                            .text_size(FONT_SIZE_CALLOUT)
-                            .font_weight(FontWeight::MEDIUM)
-                            .child(Breadcrumb::new(breadcrumb_path).on_navigate(
-                                move |path, _ev, _window, cx| {
-                                    let path = path.clone();
-                                    app.update(cx, |this, cx| {
-                                        this.navigate_to(path, cx);
-                                    });
-                                },
-                            ))
-                    })
+                            .id("folder-button")
+                            .cursor_pointer()
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .gap(px(6.0))
+                            .px(px(10.0))
+                            .py(px(4.0))
+                            .rounded(RADIUS_SM)
+                            .hover(|s| s.bg(cx.theme().muted.opacity(0.5)))
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.open_command_palette(window, cx);
+                            }))
+                            .child(
+                                Icon::new(IconName::Folder)
+                                    .with_size(ICON_XS)
+                                    .text_color(muted.opacity(0.6)),
+                            )
+                            .child(
+                                div()
+                                    .font_weight(FontWeight::BOLD)
+                                    .text_color(muted)
+                                    .child(SharedString::from(folder_name)),
+                            )
+                            .child(
+                                Icon::new(IconName::ChevronDown)
+                                    .with_size(px(9.0))
+                                    .text_color(muted.opacity(0.4)),
+                            ),
+                    )
                     // Right spacer for centering
                     .child(div().flex_1())
-                    // Drives popover toggle
-                    .child(
-                        Button::new("drives-toggle")
-                            .ghost()
-                            .small()
-                            .tooltip("Drives")
-                            .icon(IconName::ExternalLink)
-                            .text_color(muted)
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.drives_popover_open = !this.drives_popover_open;
-                                if this.drives_popover_open {
-                                    this.ensure_drives_popover(window, cx);
-                                }
-                                cx.notify();
-                            })),
-                    )
                     // Search button
                     .child(
                         Button::new("search")
                             .ghost()
                             .small()
+                            .mr(px(4.0))
                             .tooltip_with_action("Search", &OpenCommandPalette, None)
                             .icon(IconName::Search)
                             .text_color(muted)

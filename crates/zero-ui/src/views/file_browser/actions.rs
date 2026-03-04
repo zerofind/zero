@@ -98,6 +98,59 @@ impl FileBrowserView {
         cx.notify();
     }
 
+    /// Navigate to a new directory in-place — no entity teardown.
+    pub fn navigate(&mut self, path: PathBuf, cx: &mut Context<Self>) {
+        self.path = path.clone();
+
+        // Clear modal/search state (meaningless in new folder)
+        self.inline_edit = None;
+        self.inline_input = None;
+        self.pending_trash = None;
+        self.search_active = false;
+        self.search_input = None;
+        self.display_mode = None;
+
+        // Clear selection immediately
+        self.table_state.update(cx, |state, cx| {
+            state.delegate_mut().selected.clear();
+            cx.notify();
+        });
+
+        // Don't set loading = true — old entries stay visible until new ones arrive
+        let load_path = path;
+        let start = std::time::Instant::now();
+
+        cx.spawn(async move |this, cx| {
+            let guard_path = load_path.clone();
+            let entries = cx
+                .background_executor()
+                .spawn(async move { super::state::load_directory(&load_path) })
+                .await;
+
+            let elapsed = start.elapsed().as_secs_f64() * 1000.0;
+
+            this.update(cx, |view, cx| {
+                // Staleness guard: skip if user already navigated elsewhere
+                if view.path != guard_path {
+                    return;
+                }
+                view.loading = false;
+                view.load_time_ms = elapsed;
+                view.table_state.update(cx, |state, cx| {
+                    let delegate = state.delegate_mut();
+                    delegate.entries = entries;
+                    delegate.selected.clear();
+                    cx.notify();
+                });
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+
+        cx.notify();
+    }
+
     /// Reload the current directory listing (async).
     pub fn reload(&mut self, cx: &mut Context<Self>) {
         self.loading = true;

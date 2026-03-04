@@ -17,6 +17,10 @@ pub struct Settings {
     #[serde(default)]
     pub sidebar_bookmarks: Vec<PathBuf>,
 
+    /// Non-pinned bookmarks shown as rows in the BOOKMARKS section.
+    #[serde(default)]
+    pub sidebar_regular_bookmarks: Vec<PathBuf>,
+
     #[serde(default)]
     pub search_roots: Vec<PathBuf>,
 
@@ -34,6 +38,9 @@ pub struct Settings {
 
     #[serde(default = "default_true")]
     pub dedup_use_checksums: bool,
+
+    #[serde(default = "default_true")]
+    pub auto_update: bool,
 
     #[serde(default)]
     pub onboarding_complete: bool,
@@ -62,12 +69,14 @@ impl Default for Settings {
             theme: default_theme_name(),
             sidebar_open: true,
             sidebar_bookmarks: default_bookmarks(),
+            sidebar_regular_bookmarks: Vec::new(),
             search_roots: Vec::new(),
             last_path: None,
             view_mode: default_view_mode(),
             search_include_trash: false,
             search_include_offline: false,
             dedup_use_checksums: default_true(),
+            auto_update: default_true(),
             onboarding_complete: false,
         }
     }

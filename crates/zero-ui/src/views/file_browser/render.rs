@@ -6,18 +6,18 @@ use gpui::*;
 use gpui_component::{
     ActiveTheme, IconName, h_flex,
     input::{Input, InputState},
-    table::{Table, TableState},
+    table::{Table, TableEvent, TableState},
     v_flex,
 };
 
 use crate::actions::{
     AddToBookmarks, CopyFiles, CopyPath, CopyToOtherPane, CutFiles, DuplicateFiles,
     FindDuplicatesHere, FindInBrowser, MoveToOtherPane, MoveToTrash, NewFolder, NewTodoFile,
-    OpenSelected, QuickLook, Refresh, Rename, RevealInFinder, SelectAll, SelectNext, SelectPrev,
+    OpenSelected, QuickLook, Refresh, Rename, RevealInFinder, SelectAll,
 };
 use crate::services::SearchService;
-use crate::theme::{self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, brand_color};
-use crate::ui::{ConfirmDialog, EmptyState};
+use crate::theme::{self, FONT_SIZE_BODY};
+use crate::ui::{ConfirmDialog, EmptyState, StatusBar, StatusBarMode};
 
 use super::delegate::FileBrowserDelegate;
 use super::search_bar::DisplayMode;
@@ -59,7 +59,23 @@ impl FileBrowserView {
         // Start with empty entries, load in background
         let delegate = FileBrowserDelegate::new(Vec::new());
 
-        let table_state = cx.new(|cx| TableState::new(delegate, window, cx));
+        let table_state = cx.new(|cx| TableState::new(delegate, window, cx).col_selectable(false));
+
+        // Sync Table's keyboard selection → delegate.selected.
+        // Guard: if click handler already built a multi-selection containing
+        // this row, skip — otherwise keyboard nav resets to single select.
+        cx.subscribe(&table_state, |_this, table, event: &TableEvent, cx| {
+            if let TableEvent::SelectRow(row_ix) = event {
+                table.update(cx, |state, _cx| {
+                    let delegate = state.delegate_mut();
+                    if delegate.selected.len() <= 1 || !delegate.selected.contains(row_ix) {
+                        delegate.select(*row_ix);
+                    }
+                });
+                cx.notify();
+            }
+        })
+        .detach();
 
         let load_path = path.clone();
         let start = Instant::now();
@@ -110,7 +126,7 @@ impl FileBrowserView {
         &self.path
     }
 
-    fn render_summary_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_summary_bar(&self, cx: &mut Context<Self>) -> StatusBar {
         let delegate = self.table_state.read(cx).delegate();
         let entries = &delegate.entries;
 
@@ -118,89 +134,22 @@ impl FileBrowserView {
         let folder_count = entries.iter().filter(|e| e.is_dir).count();
         let total_size: u64 = entries.iter().map(|e| e.size).sum();
 
-        let fg = cx.theme().foreground;
-        let muted = cx.theme().muted_foreground;
-
-        // Search results mode shows a different summary
         if let Some(super::search_bar::DisplayMode::SearchResults { ref query }) = self.display_mode
         {
-            let total = file_count + folder_count;
-            return h_flex()
-                .w_full()
-                .px_3()
-                .py_1()
-                .items_center()
-                .justify_between()
-                .child(
-                    h_flex()
-                        .gap(px(4.0))
-                        .items_center()
-                        .text_size(FONT_SIZE_CAPTION)
-                        .child(div().text_color(brand_color()).child("\u{1F50D}"))
-                        .child(
-                            div()
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .text_color(fg)
-                                .child(SharedString::from(total.to_string())),
-                        )
-                        .child(
-                            div()
-                                .text_color(muted)
-                                .child(SharedString::from(format!("results for \"{}\"", query))),
-                        ),
-                )
-                .child(div().text_size(FONT_SIZE_CAPTION).text_color(muted).child(
-                    SharedString::from(state::format_size(total_size).to_string()),
-                ));
+            return StatusBar::new(StatusBarMode::SearchResults {
+                total: file_count + folder_count,
+                query: query.clone(),
+                total_size,
+            });
         }
 
-        let path_str = self.path.to_string_lossy().to_string();
-        let time_str = format_load_time(self.load_time_ms);
-
-        h_flex()
-            .w_full()
-            .px_3()
-            .py_1()
-            .items_center()
-            .justify_between()
-            .child(
-                h_flex()
-                    .gap(px(4.0))
-                    .items_center()
-                    .text_size(FONT_SIZE_CAPTION)
-                    // Zap icon
-                    .child(div().text_color(brand_color()).child("\u{26A1}"))
-                    // Stats with mixed weights
-                    .child(
-                        div()
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(fg)
-                            .child(SharedString::from(file_count.to_string())),
-                    )
-                    .child(div().text_color(muted).child(SharedString::from(format!(
-                        "files ({}),",
-                        state::format_size(total_size),
-                    ))))
-                    .child(
-                        div()
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(fg)
-                            .child(SharedString::from(folder_count.to_string())),
-                    )
-                    .child(div().text_color(muted).child("folders in"))
-                    .child(
-                        div()
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(fg)
-                            .child(SharedString::from(time_str)),
-                    ),
-            )
-            .child(
-                div()
-                    .text_size(FONT_SIZE_CAPTION)
-                    .text_color(muted)
-                    .child(SharedString::from(path_str)),
-            )
+        StatusBar::new(StatusBarMode::Directory {
+            file_count,
+            folder_count,
+            total_size,
+            load_time: format_load_time(self.load_time_ms),
+            path: self.path.to_string_lossy().to_string(),
+        })
     }
 }
 
@@ -374,20 +323,6 @@ impl Render for FileBrowserView {
                     .on_action(cx.listener(|this, _: &Refresh, _, cx| {
                         this.reload(cx);
                     }))
-                    .on_action(cx.listener(|this, _: &SelectPrev, _, cx| {
-                        this.table_state.update(cx, |state, cx| {
-                            state.delegate_mut().select_prev();
-                            cx.notify();
-                        });
-                        cx.notify();
-                    }))
-                    .on_action(cx.listener(|this, _: &SelectNext, _, cx| {
-                        this.table_state.update(cx, |state, cx| {
-                            state.delegate_mut().select_next();
-                            cx.notify();
-                        });
-                        cx.notify();
-                    }))
                     .on_action(cx.listener(|this, _: &SelectAll, _, cx| {
                         this.table_state.update(cx, |state, cx| {
                             state.delegate_mut().select_all();
@@ -452,7 +387,7 @@ impl Render for FileBrowserView {
                             div()
                                 .flex_1()
                                 .overflow_hidden()
-                                .child(Table::new(&self.table_state)),
+                                .child(Table::new(&self.table_state).bordered(false)),
                         )
                     }),
             )

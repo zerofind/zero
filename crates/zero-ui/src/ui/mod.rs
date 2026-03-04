@@ -8,6 +8,7 @@ pub mod format;
 mod progress_banner;
 mod section_header;
 mod sidebar_row;
+mod status_bar;
 mod status_pill;
 
 #[allow(unused_imports)] // AlertLevel is public API for callers
@@ -21,4 +22,5 @@ pub use format::{format_bytes, format_date, format_number, format_size};
 pub use progress_banner::{BannerData, BannerKind, ProgressBanner};
 pub use section_header::SectionHeader;
 pub use sidebar_row::SidebarRow;
+pub use status_bar::{StatusBar, StatusBarMode};
 pub use status_pill::StatusPill;

@@ -30,6 +30,7 @@ impl ZeroApp {
             files_total: 0,
             phase: None,
             indeterminate: false,
+            on_cancel: None,
         });
         cx.notify();
 
@@ -96,8 +97,10 @@ impl ZeroApp {
         kind: BannerKind,
         message: String,
         progress: Arc<CrawlProgress>,
+        on_cancel: Option<Arc<dyn Fn() + Send + Sync>>,
         cx: &mut Context<Self>,
     ) {
+        eprintln!("[zero-ui] start_crawl_progress_polling: {}", message);
         self.banner = Some(BannerData {
             kind,
             message,
@@ -105,12 +108,14 @@ impl ZeroApp {
             bytes_total: 0,
             files_done: 0,
             files_total: 0,
-            phase: None,
+            phase: Some("Scanning...".to_string()),
             indeterminate: true,
+            on_cancel,
         });
         cx.notify();
 
         cx.spawn(async move |this, cx| {
+            let mut ticks: u64 = 0;
             loop {
                 cx.background_executor()
                     .timer(Duration::from_millis(150))
@@ -118,8 +123,9 @@ impl ZeroApp {
 
                 let should_stop = this
                     .update(cx, |app, cx| {
-                        // Banner was cleared by clear_banner() — stop polling
+                        // Banner was cleared — stop polling
                         let Some(banner) = &mut app.banner else {
+                            eprintln!("[zero-ui] poll: banner gone, stopping");
                             return true;
                         };
 
@@ -135,10 +141,23 @@ impl ZeroApp {
                             banner.phase = Some(format!("{} files · {}", files_str, bytes_str));
                         }
 
+                        // Log every ~3s (20 ticks × 150ms)
+                        ticks += 1;
+                        if ticks == 1 || ticks.is_multiple_of(20) {
+                            eprintln!(
+                                "[zero-ui] poll: {} files, {}",
+                                files,
+                                crate::ui::format_bytes(bytes)
+                            );
+                        }
+
                         cx.notify();
                         false
                     })
-                    .unwrap_or(true);
+                    .unwrap_or_else(|_| {
+                        eprintln!("[zero-ui] poll: entity update failed, stopping");
+                        true
+                    });
 
                 if should_stop {
                     break;
@@ -165,6 +184,7 @@ impl ZeroApp {
             files_total: 0,
             phase: Some("Scanning...".to_string()),
             indeterminate: true,
+            on_cancel: None,
         });
         cx.notify();
 

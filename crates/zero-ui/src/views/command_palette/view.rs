@@ -11,7 +11,7 @@ use gpui_component::{
 use crate::services::apps::AppEntry;
 use crate::services::{AppService, SearchService};
 use crate::theme::{
-    self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, MODAL_PALETTE_WIDTH, RADIUS, RADIUS_LG,
+    self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, ICON_XS, MODAL_PALETTE_WIDTH, RADIUS, RADIUS_LG,
 };
 
 use super::items::PaletteItem;
@@ -457,7 +457,11 @@ impl Render for PaletteView {
                                 this.selected_idx = item_idx;
                                 this.confirm_selection(cx);
                             }))
-                            .child(Icon::new((action.icon)()).xsmall().text_color(muted))
+                            .child(
+                                Icon::new((action.icon)())
+                                    .with_size(ICON_XS)
+                                    .text_color(muted),
+                            )
                             .child(div().text_size(FONT_SIZE_BODY).child(action.name))
                     })
                     .collect();

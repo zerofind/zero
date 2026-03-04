@@ -9,7 +9,10 @@ use gpui_component::{
     v_flex,
 };
 
-use crate::theme::{self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, MODAL_LG_WIDTH, RADIUS, RADIUS_LG};
+use crate::theme::{
+    self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, FONT_SIZE_HEADING, MODAL_LG_WIDTH, RADIUS, RADIUS_LG,
+    RADIUS_SM, SPACE_XS,
+};
 
 use super::modal::AutomationModal;
 
@@ -70,7 +73,7 @@ impl Render for AutomationModal {
                     .on_mouse_down(MouseButton::Left, |_, _, _| {})
                     .child(
                         div()
-                            .text_size(px(18.0))
+                            .text_size(FONT_SIZE_HEADING)
                             .font_weight(FontWeight::BOLD)
                             .child(title),
                     )
@@ -109,7 +112,7 @@ impl AutomationModal {
                     .id(SharedString::from(format!("src-{idx}")))
                     .px_3()
                     .py_2()
-                    .rounded(px(6.0))
+                    .rounded(RADIUS_SM)
                     .bg(cx.theme().secondary)
                     .gap_2()
                     .items_center()
@@ -186,7 +189,7 @@ impl AutomationModal {
             )
             .child(
                 v_flex()
-                    .gap(px(2.0))
+                    .gap(SPACE_XS)
                     .child(
                         h_flex()
                             .items_center()
@@ -215,7 +218,7 @@ impl AutomationModal {
             )
             .child(
                 v_flex()
-                    .gap(px(2.0))
+                    .gap(SPACE_XS)
                     .child(
                         h_flex()
                             .items_center()
@@ -261,7 +264,7 @@ impl AutomationModal {
             )
             .child(
                 v_flex()
-                    .gap(px(2.0))
+                    .gap(SPACE_XS)
                     .child(
                         h_flex()
                             .items_center()
@@ -288,7 +291,7 @@ impl AutomationModal {
             )
             .child(
                 v_flex()
-                    .gap(px(2.0))
+                    .gap(SPACE_XS)
                     .child(
                         h_flex()
                             .items_center()

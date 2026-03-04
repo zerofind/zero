@@ -5,6 +5,7 @@ use std::panic;
 use std::path::Path;
 use std::process;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use clap::{CommandFactory, Parser};
 use cli::Cli;
@@ -43,6 +44,7 @@ const KNOWN_COMMANDS: &[&str] = &[
     "sync",
     "templates",
     "todo",
+    "update",
     "verify",
     "watch",
     "wipe",
@@ -205,6 +207,28 @@ fn main() -> anyhow::Result<()> {
             return Ok(());
         }
     };
+
+    // Background update check: spawn a thread for non-update, non-service commands
+    // when auto_update is enabled and enough time has passed since the last check
+    let update_hint: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+    let bg_check = match &command {
+        Commands::Update { .. } | Commands::Service { .. } => false,
+        _ => zero::updater::read_auto_update_setting() && zero::updater::should_check(),
+    };
+
+    if bg_check {
+        let hint = Arc::clone(&update_hint);
+        std::thread::spawn(move || {
+            if let Ok(zero::updater::UpdateStatus::Available { version }) =
+                zero::updater::check_latest()
+            {
+                if let Ok(mut h) = hint.lock() {
+                    *h = Some(version);
+                }
+            }
+            zero::updater::record_check();
+        });
+    }
 
     match command {
         // =====================================================================
@@ -508,6 +532,20 @@ fn main() -> anyhow::Result<()> {
         // =====================================================================
         Commands::Todo { todo_cmd } => {
             cli::commands::cmd_todo(&out, todo_cmd.as_ref())?;
+        }
+
+        // =====================================================================
+        // Updates
+        // =====================================================================
+        Commands::Update { check } => {
+            cli::commands::cmd_update(&out, check)?;
+        }
+    }
+
+    // Print update hint if background check found a new version
+    if let Ok(hint) = update_hint.lock() {
+        if let Some(version) = hint.as_ref() {
+            eprintln!("hint: zero v{version} available — run `zero update` to install");
         }
     }
 

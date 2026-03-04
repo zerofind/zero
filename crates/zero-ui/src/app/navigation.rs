@@ -34,39 +34,58 @@ impl ZeroApp {
         self.focus_handle.focus(window);
     }
 
-    pub fn navigate_to(&mut self, path: PathBuf, cx: &mut Context<Self>) {
+    pub fn navigate_to(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
         if self.history_idx + 1 < self.history.len() {
             self.history.truncate(self.history_idx + 1);
         }
         self.history.push(path.clone());
         self.history_idx = self.history.len() - 1;
-        self.current_path = path;
+        self.current_path = path.clone();
 
-        self.file_browser = None;
-        self.file_grid = None;
+        if let Some(browser) = &self.file_browser {
+            browser.update(cx, |v, cx| v.navigate(path.clone(), cx));
+        }
+        if let Some(grid) = &self.file_grid {
+            grid.update(cx, |v, cx| v.navigate(&path, cx));
+        }
         self.active_view = ActiveView::FileBrowser;
+        self.focus_content(window, cx);
         cx.notify();
     }
 
-    pub fn go_back(&mut self, cx: &mut Context<Self>) {
+    pub fn go_back(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.history_idx == 0 {
             return;
         }
         self.history_idx -= 1;
         self.current_path = self.history[self.history_idx].clone();
-        self.file_browser = None;
-        self.file_grid = None;
+
+        let path = self.current_path.clone();
+        if let Some(browser) = &self.file_browser {
+            browser.update(cx, |v, cx| v.navigate(path.clone(), cx));
+        }
+        if let Some(grid) = &self.file_grid {
+            grid.update(cx, |v, cx| v.navigate(&path, cx));
+        }
+        self.focus_content(window, cx);
         cx.notify();
     }
 
-    pub fn go_forward(&mut self, cx: &mut Context<Self>) {
+    pub fn go_forward(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.history_idx + 1 >= self.history.len() {
             return;
         }
         self.history_idx += 1;
         self.current_path = self.history[self.history_idx].clone();
-        self.file_browser = None;
-        self.file_grid = None;
+
+        let path = self.current_path.clone();
+        if let Some(browser) = &self.file_browser {
+            browser.update(cx, |v, cx| v.navigate(path.clone(), cx));
+        }
+        if let Some(grid) = &self.file_grid {
+            grid.update(cx, |v, cx| v.navigate(&path, cx));
+        }
+        self.focus_content(window, cx);
         cx.notify();
     }
 
@@ -92,10 +111,12 @@ impl ZeroApp {
             return view.clone();
         }
 
-        let bookmarks = crate::session::Settings::load().sidebar_bookmarks;
+        let settings = crate::session::Settings::load();
+        let pinned = settings.sidebar_bookmarks;
+        let regular = settings.sidebar_regular_bookmarks;
         let active = self.active_view.clone();
         let path = self.current_path.clone();
-        let view = cx.new(|cx| AppSidebar::new(active, path, bookmarks, cx));
+        let view = cx.new(|cx| AppSidebar::new(active, path, pinned, regular, cx));
 
         let sub = cx.subscribe_in(&view, window, Self::on_sidebar_event);
         self._subs.push(sub);
@@ -116,14 +137,66 @@ impl ZeroApp {
                 self.focus_content(window, cx);
                 cx.notify();
             }
-            SidebarEvent::OpenPath(path) => self.navigate_to(path.clone(), cx),
+            SidebarEvent::OpenPath(path) => self.navigate_to(path.clone(), window, cx),
             SidebarEvent::RemoveBookmark(path) => {
                 if let Some(sidebar) = &self.sidebar {
                     sidebar.update(cx, |s, cx| s.remove_bookmark(path, cx));
                 }
                 let mut settings = crate::session::Settings::load();
                 settings.sidebar_bookmarks.retain(|b| b != path);
+                settings.sidebar_regular_bookmarks.retain(|b| b != path);
                 settings.save();
+            }
+            SidebarEvent::UnpinBookmark(path) => {
+                if let Some(sidebar) = &self.sidebar {
+                    sidebar.update(cx, |s, cx| s.unpin_bookmark(path, cx));
+                }
+                let mut settings = crate::session::Settings::load();
+                if let Some(pos) = settings.sidebar_bookmarks.iter().position(|b| b == path) {
+                    let removed = settings.sidebar_bookmarks.remove(pos);
+                    if !settings.sidebar_regular_bookmarks.contains(&removed) {
+                        settings.sidebar_regular_bookmarks.push(removed);
+                    }
+                }
+                settings.save();
+            }
+            SidebarEvent::PinBookmark(path) => {
+                if let Some(sidebar) = &self.sidebar {
+                    sidebar.update(cx, |s, cx| s.pin_bookmark(path, cx));
+                }
+                let mut settings = crate::session::Settings::load();
+                if let Some(pos) = settings
+                    .sidebar_regular_bookmarks
+                    .iter()
+                    .position(|b| b == path)
+                {
+                    let removed = settings.sidebar_regular_bookmarks.remove(pos);
+                    if !settings.sidebar_bookmarks.contains(&removed) {
+                        settings.sidebar_bookmarks.push(removed);
+                    }
+                }
+                settings.save();
+            }
+            SidebarEvent::FindDuplicates(path) => {
+                self.dedup = None;
+                let dedup = self.ensure_dedup(window, cx);
+                dedup.update(cx, |view, cx| {
+                    view.set_scan_path(path.clone(), cx);
+                });
+                self.active_view = ActiveView::Dedup;
+                cx.notify();
+            }
+            SidebarEvent::IndexLocation(path) => {
+                let path_str = path.to_string_lossy().to_string();
+                self.services.search.update(cx, |svc, cx| {
+                    svc.add_root(&path_str, cx);
+                });
+                // Persist the search root
+                let mut settings = crate::session::Settings::load();
+                if !settings.search_roots.contains(path) {
+                    settings.search_roots.push(path.clone());
+                    settings.save();
+                }
             }
             SidebarEvent::EjectDrive(path) => {
                 let mount = path.clone();
@@ -180,11 +253,11 @@ impl ZeroApp {
         &mut self,
         _: &Entity<FileBrowserView>,
         event: &FileBrowserEvent,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         match event {
-            FileBrowserEvent::NavigateToDir(path) => self.navigate_to(path.clone(), cx),
+            FileBrowserEvent::NavigateToDir(path) => self.navigate_to(path.clone(), window, cx),
             FileBrowserEvent::OpenFile(path) => {
                 self.editor = None;
                 self.active_view = ActiveView::Editor(path.clone());
@@ -198,8 +271,10 @@ impl ZeroApp {
                     sidebar.update(cx, |s, cx| s.add_bookmark(path.clone(), cx));
                 }
                 let mut settings = crate::session::Settings::load();
-                if !settings.sidebar_bookmarks.contains(path) {
-                    settings.sidebar_bookmarks.push(path.clone());
+                if !settings.sidebar_regular_bookmarks.contains(path)
+                    && !settings.sidebar_bookmarks.contains(path)
+                {
+                    settings.sidebar_regular_bookmarks.push(path.clone());
                     settings.save();
                 }
             }
@@ -217,7 +292,7 @@ impl ZeroApp {
             FileBrowserEvent::NewTodoFile(path) => {
                 // Open the new .todo file in the Todo view
                 self.todo = None; // Reset so it recreates fresh
-                let todo = self.ensure_todo(_window, cx);
+                let todo = self.ensure_todo(window, cx);
                 todo.update(cx, |view, cx| {
                     view.open_file(path.clone(), cx);
                 });
@@ -227,7 +302,7 @@ impl ZeroApp {
             FileBrowserEvent::FindDuplicatesHere(path) => {
                 // Reset dedup view so it recreates with the new path
                 self.dedup = None;
-                let dedup = self.ensure_dedup(_window, cx);
+                let dedup = self.ensure_dedup(window, cx);
                 dedup.update(cx, |view, cx| {
                     view.set_scan_path(path.clone(), cx);
                 });
@@ -368,10 +443,14 @@ impl ZeroApp {
     ) {
         match event {
             SettingsEvent::IndexRebuildStarted(progress) => {
+                let cancel_progress = progress.clone();
+                let on_cancel: std::sync::Arc<dyn Fn() + Send + Sync> =
+                    std::sync::Arc::new(move || cancel_progress.cancel());
                 self.start_crawl_progress_polling(
                     BannerKind::Index,
                     "Rebuilding search index...".to_string(),
                     progress.clone(),
+                    Some(on_cancel),
                     cx,
                 );
             }
@@ -519,7 +598,7 @@ impl ZeroApp {
                 }
 
                 if path.is_dir() {
-                    self.navigate_to(path.clone(), cx);
+                    self.navigate_to(path.clone(), window, cx);
                 } else if crate::views::editor::is_editable(path) {
                     self.editor = None;
                     self.active_view = ActiveView::Editor(path.clone());
@@ -582,11 +661,11 @@ impl ZeroApp {
         &mut self,
         _: &Entity<FileGridView>,
         event: &FileGridEvent,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         match event {
-            FileGridEvent::NavigateToDir(path) => self.navigate_to(path.clone(), cx),
+            FileGridEvent::NavigateToDir(path) => self.navigate_to(path.clone(), window, cx),
         }
     }
 
@@ -621,8 +700,7 @@ impl ZeroApp {
             }
             DrivesPopoverEvent::OpenPath(path) => {
                 self.drives_popover_open = false;
-                self.navigate_to(path.clone(), cx);
-                self.focus_content(window, cx);
+                self.navigate_to(path.clone(), window, cx);
             }
             DrivesPopoverEvent::RunAutomation(name) => {
                 // TODO: Trigger automation runner with the given automation name

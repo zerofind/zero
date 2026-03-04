@@ -13,6 +13,7 @@ pub mod search;
 pub mod sync;
 pub mod templates;
 pub mod todo;
+pub mod update;
 pub mod verify;
 pub mod watch;
 
@@ -29,4 +30,5 @@ pub use search::*;
 pub use sync::*;
 pub use templates::*;
 pub use todo::*;
+pub use update::*;
 pub use watch::*;

@@ -3,6 +3,7 @@ use gpui::*;
 use gpui_component::{
     ActiveTheme, Disableable as _, Sizable as _,
     button::{Button, ButtonVariants as _},
+    select::Select,
     switch::Switch,
     v_flex,
 };
@@ -11,7 +12,7 @@ use crate::theme::{FONT_SIZE_BODY, FONT_SIZE_CAPTION, RADIUS, RADIUS_LG};
 use crate::ui::{ConfirmDialog, format_number};
 
 use super::SettingsView;
-use super::helpers::{card_border, group_label, render_theme_picker, setting_row};
+use super::helpers::{card_border, group_label, setting_row};
 
 impl SettingsView {
     pub(super) fn render_general(
@@ -27,7 +28,7 @@ impl SettingsView {
 
         let content = v_flex()
             .gap_6()
-            // Appearance — pill-style Light / Dark picker
+            // Appearance — theme selector
             .child(
                 v_flex()
                     .gap_3()
@@ -39,15 +40,12 @@ impl SettingsView {
                             .border_color(border)
                             .overflow_hidden()
                             .child(setting_row(
-                                "Theme",
-                                "Switch between light, dark, or follow the system appearance.",
-                                render_theme_picker(
-                                    cx,
-                                    &self.settings.theme_mode,
-                                    cx.listener(|this, _, _, cx| this.set_theme("light", cx)),
-                                    cx.listener(|this, _, _, cx| this.set_theme("dark", cx)),
-                                    cx.listener(|this, _, _, cx| this.set_theme("system", cx)),
-                                ),
+                                "Color theme",
+                                "Choose a color palette for the interface.",
+                                Select::new(&self.theme_select)
+                                    .small()
+                                    .menu_width(px(220.0))
+                                    .into_any_element(),
                                 muted,
                                 fg,
                                 border,
@@ -130,6 +128,35 @@ impl SettingsView {
                                             .map(|d| d.to_string_lossy().to_string())
                                             .unwrap_or_else(|| "~/.zero".to_string()),
                                     ))
+                                    .into_any_element(),
+                                muted,
+                                fg,
+                                border,
+                                false,
+                            )),
+                    ),
+            )
+            // Updates
+            .child(
+                v_flex()
+                    .gap_3()
+                    .child(group_label("Updates", fg))
+                    .child(
+                        v_flex()
+                            .rounded(RADIUS_LG)
+                            .border_1()
+                            .border_color(border)
+                            .overflow_hidden()
+                            .child(setting_row(
+                                "Auto update",
+                                "Check for new versions in the background and notify you.",
+                                Switch::new("auto-update")
+                                    .checked(self.settings.auto_update)
+                                    .on_click(cx.listener(|this, checked: &bool, _, cx| {
+                                        this.settings.auto_update = *checked;
+                                        this.settings.save();
+                                        cx.notify();
+                                    }))
                                     .into_any_element(),
                                 muted,
                                 fg,

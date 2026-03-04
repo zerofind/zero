@@ -4,7 +4,7 @@ use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use gpui_component::{ActiveTheme, Icon, IconName, Sizable as _};
 
-use crate::theme::{self, FONT_SIZE_BODY, RADIUS};
+use crate::theme::{self, FONT_SIZE_BODY, ICON_SM, RADIUS, SIDEBAR_ROW_HEIGHT};
 
 type ClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 
@@ -50,8 +50,11 @@ impl RenderOnce for SidebarRow {
         let muted = cx.theme().muted_foreground;
 
         let (text_color, icon_color, active_bg) = if self.active {
-            let sel = theme::selection_color();
-            (sel, sel, Some(theme::selection_active_bg(cx)))
+            (
+                cx.theme().foreground,
+                theme::selection_color(cx),
+                Some(theme::selection_active_bg(cx)),
+            )
         } else {
             (cx.theme().foreground, muted, None)
         };
@@ -60,7 +63,7 @@ impl RenderOnce for SidebarRow {
 
         div()
             .id(self.id)
-            .h(px(32.0))
+            .h(SIDEBAR_ROW_HEIGHT)
             .flex()
             .flex_row()
             .gap_2()
@@ -77,7 +80,11 @@ impl RenderOnce for SidebarRow {
                     handler(event, window, cx);
                 })
             })
-            .child(Icon::new(self.icon).xsmall().text_color(icon_color))
+            .child(
+                Icon::new(self.icon)
+                    .with_size(ICON_SM)
+                    .text_color(icon_color),
+            )
             .child(
                 div()
                     .overflow_hidden()

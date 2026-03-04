@@ -501,6 +501,16 @@ pub enum Commands {
         #[command(subcommand)]
         todo_cmd: Option<commands::todo::TodoCommands>,
     },
+
+    // =========================================================================
+    // Updates
+    // =========================================================================
+    /// Check for and install updates
+    Update {
+        /// Only check for updates, don't install
+        #[arg(long)]
+        check: bool,
+    },
 }
 
 /// Subcommands for the watch command (dev/testing)

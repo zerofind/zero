@@ -187,16 +187,25 @@ impl IndexManager {
     }
 
     /// Create a new IndexManager with a custom directory and ControlDb
+    ///
+    /// Eagerly loads root metadata from ControlDb so that file counts are
+    /// available immediately, even before the full indexes are loaded.
     pub fn with_dir_and_db(
         indexes_dir: PathBuf,
         control_db: ControlDb,
     ) -> Result<Self, IndexError> {
         fs::create_dir_all(&indexes_dir)?;
 
+        let roots_cache: HashMap<String, IndexedRoot> = control_db
+            .list_indexed_roots()
+            .unwrap_or_default()
+            .into_iter()
+            .collect();
+
         Ok(Self {
             indexes_dir,
             indexes: HashMap::new(),
-            roots_cache: HashMap::new(),
+            roots_cache,
             control_db,
         })
     }
@@ -427,18 +436,45 @@ impl IndexManager {
     }
 
     /// Get total file count across all indexes
+    ///
+    /// Uses in-memory indexes when available, falls back to persisted metadata
+    /// in roots_cache for roots that haven't been loaded yet.
     pub fn total_file_count(&self) -> usize {
-        self.indexes.values().map(|idx| idx.file_count()).sum()
+        self.roots_cache
+            .iter()
+            .map(|(root, cached)| {
+                self.indexes
+                    .get(root)
+                    .map(|idx| idx.file_count())
+                    .unwrap_or(cached.file_count)
+            })
+            .sum()
     }
 
     /// Get total directory count across all indexes
     pub fn total_dir_count(&self) -> usize {
-        self.indexes.values().map(|idx| idx.dir_count()).sum()
+        self.roots_cache
+            .iter()
+            .map(|(root, cached)| {
+                self.indexes
+                    .get(root)
+                    .map(|idx| idx.dir_count())
+                    .unwrap_or(cached.dir_count)
+            })
+            .sum()
     }
 
     /// Get total bytes across all indexes
     pub fn total_bytes(&self) -> u64 {
-        self.indexes.values().map(|idx| idx.total_bytes()).sum()
+        self.roots_cache
+            .iter()
+            .map(|(root, cached)| {
+                self.indexes
+                    .get(root)
+                    .map(|idx| idx.total_bytes())
+                    .unwrap_or(cached.total_bytes)
+            })
+            .sum()
     }
 
     /// Iterate over all files in all indexes

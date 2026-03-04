@@ -6,7 +6,9 @@ use gpui_component::{
     h_flex, v_flex,
 };
 
-use crate::theme::{self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, RADIUS, brand_color};
+use crate::theme::{
+    self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, FONT_SIZE_DISPLAY, RADIUS, brand_color,
+};
 use crate::ui::EmptyState;
 use gpui_component::IconName;
 
@@ -240,7 +242,7 @@ impl Render for AutomationsView {
                             .items_center()
                             .child(
                                 div()
-                                    .text_size(px(20.0))
+                                    .text_size(FONT_SIZE_DISPLAY)
                                     .font_weight(FontWeight::BOLD)
                                     .child("Automations"),
                             )
@@ -337,7 +339,7 @@ impl AutomationsView {
                                             .w(px(8.0))
                                             .h(px(8.0))
                                             .rounded(px(4.0))
-                                            .bg(if enabled { brand_color() } else { muted }),
+                                            .bg(if enabled { brand_color(cx) } else { muted }),
                                     )
                                     .child(
                                         div()

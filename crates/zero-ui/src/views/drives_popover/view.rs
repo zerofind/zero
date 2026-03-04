@@ -9,7 +9,9 @@ use gpui_component::{
     h_flex, v_flex,
 };
 
-use crate::theme::{self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, RADIUS, brand_color};
+use crate::theme::{
+    self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, ICON_SM, ICON_XS, RADIUS, brand_color,
+};
 use crate::ui::format::format_bytes;
 
 // -- Types -------------------------------------------------------------------
@@ -466,7 +468,7 @@ impl DrivesPopover {
                             .items_center()
                             .child(
                                 gpui_component::Icon::new(icon)
-                                    .size(px(14.0))
+                                    .size(ICON_SM)
                                     .text_color(muted),
                             )
                             .child(
@@ -517,7 +519,7 @@ impl DrivesPopover {
                                         .bg(if usage > 0.9 {
                                             cx.theme().danger
                                         } else {
-                                            brand_color()
+                                            brand_color(cx)
                                         })
                                         .w(relative(usage)),
                                 ),
@@ -558,7 +560,7 @@ impl DrivesPopover {
                     .py_1()
                     .gap_2()
                     .items_center()
-                    .child(Icon::new(IconName::Folder).size(px(12.0)).text_color(muted))
+                    .child(Icon::new(IconName::Folder).size(ICON_XS).text_color(muted))
                     .child(
                         div()
                             .flex_1()
@@ -629,7 +631,7 @@ impl DrivesPopover {
         let (status_color, status_icon) = match run.status {
             RunStatus::Success => (hsla(0.35, 0.8, 0.45, 1.0), IconName::Check),
             RunStatus::Failed => (cx.theme().danger, IconName::Close),
-            RunStatus::Running => (brand_color(), IconName::Replace),
+            RunStatus::Running => (brand_color(cx), IconName::Replace),
             RunStatus::Warning => (hsla(0.1, 0.9, 0.55, 1.0), IconName::Minus),
         };
 
@@ -660,7 +662,7 @@ impl DrivesPopover {
                     .justify_center()
                     .child(
                         Icon::new(status_icon)
-                            .size(px(10.0))
+                            .size(ICON_XS)
                             .text_color(gpui::white()),
                     ),
             )

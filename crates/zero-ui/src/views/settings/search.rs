@@ -11,7 +11,7 @@ use gpui_component::{
     v_flex,
 };
 
-use crate::theme::{FONT_SIZE_BODY, FONT_SIZE_CAPTION, RADIUS_LG};
+use crate::theme::{FONT_SIZE_BODY, FONT_SIZE_CAPTION, ICON_XS, RADIUS_LG};
 use crate::ui::format::format_number;
 
 use super::SettingsView;
@@ -22,6 +22,9 @@ impl SettingsView {
         let border = card_border(cx);
         let muted = cx.theme().muted_foreground;
         let fg = cx.theme().foreground;
+
+        // Always read live count from the search service
+        let total_files = self.search.read(cx).file_count();
 
         v_flex()
             .gap_6()
@@ -75,23 +78,19 @@ impl SettingsView {
                         h_flex()
                             .items_center()
                             .justify_between()
+                            .child(group_label("Indexed Locations", fg))
                             .child(
                                 h_flex()
-                                    .gap_2()
+                                    .gap_3()
                                     .items_center()
-                                    .child(group_label("Search Roots", fg))
                                     .child(
                                         div().text_size(FONT_SIZE_CAPTION).text_color(muted).child(
                                             SharedString::from(format!(
-                                                "{} files indexed",
-                                                format_number(self.indexed_file_count),
+                                                "{} files",
+                                                format_number(total_files),
                                             )),
                                         ),
-                                    ),
-                            )
-                            .child(
-                                h_flex()
-                                    .gap_1()
+                                    )
                                     .child(
                                         Button::new("reindex-all")
                                             .label(if self.reindexing_all {
@@ -233,7 +232,7 @@ impl SettingsView {
                                                 .items_center()
                                                 .child(
                                                     Icon::new(IconName::Folder)
-                                                        .xsmall()
+                                                        .with_size(ICON_XS)
                                                         .text_color(muted),
                                                 )
                                                 .child(
@@ -338,8 +337,6 @@ impl SettingsView {
 
         self.search
             .update(cx, |svc, cx| svc.add_root(&path_str, cx));
-        self.indexed_file_count = self.search.read(cx).file_count();
-
         cx.notify();
     }
 
@@ -354,8 +351,6 @@ impl SettingsView {
         let path_str = path.to_string_lossy().to_string();
         self.search
             .update(cx, |svc, cx| svc.remove_root(&path_str, cx));
-        self.indexed_file_count = self.search.read(cx).file_count();
-
         cx.notify();
     }
 }

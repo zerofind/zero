@@ -7,7 +7,7 @@ zero-watcher = { path = "crates/watcher" }
 
 [package]
 name = "zero"
-version = "0.4.4"
+version = "0.4.5"
 edition = "2024"
 rust-version = "1.92"
 description = "A resilient file synchronization and deduplication tool"
@@ -79,6 +79,11 @@ trash = "5.2"
 roaring = { version = "0.11", features = ["serde"] }
 
 toml = "0.9.10"
+
+# Auto-update (HTTP client + archive extraction)
+ureq = "3"
+flate2 = "1"
+tar = "0.4"
 
 # Unix-specific (for secure erase platform code)
 [target.'cfg(unix)'.dependencies]

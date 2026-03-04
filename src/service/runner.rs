@@ -11,7 +11,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use tokio::sync::mpsc;
 use zero_watcher::{FileWatchConfig, FileWatcher};
@@ -159,6 +159,14 @@ async fn async_service_loop(
         }
     });
 
+    // Update check state: random jitter so first check happens 0–60 min after start
+    let update_jitter_secs = rand::random_range(0u64..3600);
+    let mut last_update_check = Instant::now()
+        .checked_sub(Duration::from_secs(
+            86400u64.saturating_sub(update_jitter_secs),
+        ))
+        .unwrap_or_else(Instant::now);
+
     // Main event loop
     loop {
         if shutdown.load(Ordering::SeqCst) {
@@ -190,11 +198,42 @@ async fn async_service_loop(
                 handle_service_event(event, &logger);
             }
 
-            // Periodic tasks (log rotation, health check)
+            // Periodic tasks (log rotation, health check, update check)
             _ = tokio::time::sleep(Duration::from_secs(60)) => {
                 // Rotate logs if needed (10MB max)
                 if let Err(e) = logger.rotate_if_needed(10 * 1024 * 1024) {
                     logger.warn("service", &format!("Log rotation failed: {}", e));
+                }
+
+                // Check for updates every 24h
+                if last_update_check.elapsed() > Duration::from_secs(86400) {
+                    last_update_check = Instant::now();
+                    let update_logger = logger.clone();
+                    tokio::task::spawn_blocking(move || {
+                        match crate::updater::check_latest() {
+                            Ok(crate::updater::UpdateStatus::Available { version }) => {
+                                update_logger.info(
+                                    "updater",
+                                    &format!("Update available: v{}", version),
+                                );
+                                crate::updater::record_check();
+                                send_notification(
+                                    "update.available",
+                                    &serde_json::json!({ "version": version }),
+                                );
+                            }
+                            Ok(crate::updater::UpdateStatus::UpToDate) => {
+                                update_logger.debug("updater", "Up to date");
+                                crate::updater::record_check();
+                            }
+                            Err(e) => {
+                                update_logger.warn(
+                                    "updater",
+                                    &format!("Update check failed: {}", e),
+                                );
+                            }
+                        }
+                    });
                 }
             }
         }

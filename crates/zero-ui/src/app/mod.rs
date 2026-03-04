@@ -4,10 +4,17 @@ pub mod split;
 pub mod titlebar;
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
-use gpui_component::{ActiveTheme, h_flex, v_flex};
+use gpui_component::{
+    ActiveTheme, Sizable as _,
+    button::{Button, ButtonVariants as _},
+    h_flex, v_flex,
+};
+
+use zero::scanner::CrawlProgress;
 
 use crate::actions::{
     GoBack, GoForward, GoUp, OpenCommandPalette, PasteFiles, ToggleSidebar, ToggleSplitView,
@@ -16,7 +23,7 @@ use crate::actions::{
 use crate::models::{ActiveView, FileClipboard, PaneId, SplitPane, ViewMode};
 use crate::services::{SearchEvent, SearchService, ServiceHub};
 use crate::session::Settings;
-use crate::theme::{self, FONT_SIZE_BODY};
+use crate::theme::{self, CONTENT_INSET, FONT_SIZE_BODY, FONT_SIZE_CAPTION, RADIUS_LG};
 use crate::ui::{Alert, AlertStack, BannerData, BannerKind, ProgressBanner};
 use crate::views::{
     AppSidebar, AutomationsView, CleanupView, DedupView, DrivesPopover, EditorView,
@@ -63,6 +70,7 @@ pub struct ZeroApp {
 
     // Progress
     pub banner: Option<BannerData>,
+    pub active_progress: Option<Arc<CrawlProgress>>,
 
     // Alerts / toasts
     pub alerts: Vec<Alert>,
@@ -108,6 +116,7 @@ impl ZeroApp {
             files_total: 0,
             phase: Some("This only takes a moment...".to_string()),
             indeterminate: true,
+            on_cancel: None,
         });
 
         let mut app = Self {
@@ -136,6 +145,7 @@ impl ZeroApp {
             secure_erase: None,
             automations: None,
             banner,
+            active_progress: None,
             alerts: Vec::new(),
             onboarding: None,
             sidebar: None,
@@ -199,7 +209,9 @@ impl ZeroApp {
     ) {
         match event {
             SearchEvent::IndexLoaded => {
-                if !self.services.search.read(cx).is_indexing() {
+                let is_indexing = self.services.search.read(cx).is_indexing();
+                eprintln!("[zero-ui] event: IndexLoaded (is_indexing={})", is_indexing);
+                if !is_indexing {
                     self.banner = None;
                     // Start file watcher for live updates
                     self.services.search.update(cx, |svc, cx| {
@@ -208,20 +220,39 @@ impl ZeroApp {
                     cx.notify();
                 }
             }
-            SearchEvent::IndexingStarted => {
-                self.banner = Some(BannerData {
-                    kind: BannerKind::Index,
-                    message: "Indexing...".to_string(),
-                    bytes_done: 0,
-                    bytes_total: 0,
-                    files_done: 0,
-                    files_total: 0,
-                    phase: Some("Scanning files...".to_string()),
-                    indeterminate: true,
-                });
-                cx.notify();
+            SearchEvent::IndexingStarted { progress, path } => {
+                eprintln!("[zero-ui] event: IndexingStarted path={}", path);
+                self.active_progress = Some(progress.clone());
+
+                // Abbreviate home dir prefix with ~
+                let display_path = dirs::home_dir()
+                    .and_then(|h| {
+                        let h = h.to_string_lossy();
+                        path.strip_prefix(h.as_ref()).map(|rest| {
+                            if rest.is_empty() {
+                                "~".to_string()
+                            } else {
+                                format!("~{rest}")
+                            }
+                        })
+                    })
+                    .unwrap_or_else(|| path.clone());
+
+                let cancel_progress = progress.clone();
+                let on_cancel: Arc<dyn Fn() + Send + Sync> =
+                    Arc::new(move || cancel_progress.cancel());
+
+                self.start_crawl_progress_polling(
+                    BannerKind::Index,
+                    format!("Indexing {display_path}"),
+                    progress.clone(),
+                    Some(on_cancel),
+                    cx,
+                );
             }
             SearchEvent::IndexingFinished => {
+                eprintln!("[zero-ui] event: IndexingFinished");
+                self.active_progress = None;
                 self.banner = None;
                 // Start file watcher after indexing completes
                 self.services.search.update(cx, |svc, cx| {
@@ -313,9 +344,81 @@ impl Render for ZeroApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let sidebar_open = self.sidebar_open;
         let palette_open = self.command_palette_open;
-        let banner = self.banner.clone();
 
         let has_alerts = !self.alerts.is_empty();
+
+        // Banner priority: editor banner > progress banner
+        let editor_banner: Option<AnyElement> = if matches!(self.active_view, ActiveView::Editor(_))
+        {
+            self.editor.as_ref().map(|editor| {
+                let editor = editor.read(cx);
+                let name = editor.file_name();
+                let modified = editor.is_modified();
+                let saving = editor.is_saving();
+                let path_str = editor.path_str();
+                let muted = cx.theme().muted_foreground;
+
+                h_flex()
+                    .w_full()
+                    .px_4()
+                    .py_2()
+                    .items_center()
+                    .gap_3()
+                    .border_b_1()
+                    .border_color(cx.theme().border)
+                    .bg(theme::banner_bg(cx))
+                    .child(
+                        h_flex()
+                            .flex_1()
+                            .gap_2()
+                            .items_center()
+                            .child(
+                                div()
+                                    .text_size(FONT_SIZE_BODY)
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .child(SharedString::from(name)),
+                            )
+                            .when(modified, |el| {
+                                el.child(
+                                    div()
+                                        .w(px(8.0))
+                                        .h(px(8.0))
+                                        .rounded(px(4.0))
+                                        .bg(theme::brand_color(cx)),
+                                )
+                            }),
+                    )
+                    .when(modified || saving, |el| {
+                        el.child(
+                            Button::new("save-editor")
+                                .compact()
+                                .small()
+                                .primary()
+                                .label(if saving { "Saving..." } else { "Save" })
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    if let Some(editor) = &this.editor {
+                                        editor.update(cx, |e, cx| e.save(cx));
+                                    }
+                                })),
+                        )
+                    })
+                    .child(
+                        div()
+                            .text_size(FONT_SIZE_CAPTION)
+                            .text_color(muted)
+                            .child(SharedString::from(path_str)),
+                    )
+                    .into_any_element()
+            })
+        } else {
+            None
+        };
+
+        let banner = if editor_banner.is_none() {
+            self.banner.clone()
+        } else {
+            None
+        };
 
         let has_split = self.split_pane.is_some();
 
@@ -350,15 +453,15 @@ impl Render for ZeroApp {
             .on_action(cx.listener(|this, _: &OpenCommandPalette, window, cx| {
                 this.open_command_palette(window, cx);
             }))
-            .on_action(cx.listener(|this, _: &GoBack, _, cx| {
-                this.go_back(cx);
+            .on_action(cx.listener(|this, _: &GoBack, window, cx| {
+                this.go_back(window, cx);
             }))
-            .on_action(cx.listener(|this, _: &GoForward, _, cx| {
-                this.go_forward(cx);
+            .on_action(cx.listener(|this, _: &GoForward, window, cx| {
+                this.go_forward(window, cx);
             }))
-            .on_action(cx.listener(|this, _: &GoUp, _, cx| {
+            .on_action(cx.listener(|this, _: &GoUp, window, cx| {
                 if let Some(parent) = this.current_path.parent().map(|p| p.to_path_buf()) {
-                    this.navigate_to(parent, cx);
+                    this.navigate_to(parent, window, cx);
                 }
             }))
             .on_action(cx.listener(|this, _: &PasteFiles, _, cx| {
@@ -394,13 +497,17 @@ impl Render for ZeroApp {
                         v_flex()
                             .size_full()
                             .bg(theme::content_bg(cx))
-                            .when(sidebar_open, |el| el.rounded_tl(px(5.0)))
+                            .when(sidebar_open, |el| el.rounded_tl(RADIUS_LG))
+                            .shadow_md()
                             .overflow_hidden()
+                            .pt(CONTENT_INSET)
+                            .pr(CONTENT_INSET)
+                            .pb(CONTENT_INSET)
+                            .when(sidebar_open, |el| el.pl(px(4.0)))
+                            .when(!sidebar_open, |el| el.pl(CONTENT_INSET))
                             .child(titlebar)
-                            .child(div().w_full().h(px(2.0)).bg(theme::selection_color()))
-                            .when_some(banner, |el, data| {
-                                el.child(div().px_3().py_1().child(ProgressBanner::new(data)))
-                            })
+                            .when_some(editor_banner, |el, banner_el| el.child(banner_el))
+                            .when_some(banner, |el, data| el.child(ProgressBanner::new(data)))
                             .child(
                                 h_flex()
                                     .flex_1()

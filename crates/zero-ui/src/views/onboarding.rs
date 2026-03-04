@@ -8,7 +8,9 @@ use gpui_component::{
     h_flex, v_flex,
 };
 
-use crate::theme::{self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, RADIUS_LG, brand_color};
+use crate::theme::{
+    self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, FONT_SIZE_DISPLAY, RADIUS_LG, RADIUS_SM, brand_color,
+};
 
 // -- Events ------------------------------------------------------------------
 
@@ -116,7 +118,7 @@ impl OnboardingView {
                     .gap_2()
                     .child(
                         div()
-                            .text_size(px(20.0))
+                            .text_size(FONT_SIZE_DISPLAY)
                             .font_weight(FontWeight::BOLD)
                             .child("Welcome to Zero"),
                     )
@@ -125,7 +127,8 @@ impl OnboardingView {
                                  All search is 100% local \u{2014} nothing leaves your Mac.",
                     )),
             )
-            .child(
+            .child({
+                let brand = brand_color(cx);
                 v_flex().gap_1().children(
                     [
                         ("Instant local search", "Find any file in milliseconds"),
@@ -133,11 +136,11 @@ impl OnboardingView {
                         ("Duplicate detection", "Reclaim wasted storage space"),
                     ]
                     .into_iter()
-                    .map(|(title, desc)| {
+                    .map(move |(title, desc)| {
                         h_flex()
                             .gap_2()
                             .items_center()
-                            .child(div().text_color(brand_color()).child("\u{2713}"))
+                            .child(div().text_color(brand).child("\u{2713}"))
                             .child(
                                 v_flex()
                                     .child(
@@ -154,8 +157,8 @@ impl OnboardingView {
                                     ),
                             )
                     }),
-                ),
-            )
+                )
+            })
             .child(
                 h_flex()
                     .justify_between()
@@ -190,11 +193,11 @@ impl OnboardingView {
                 h_flex()
                     .px_3()
                     .py_2()
-                    .rounded(px(6.0))
+                    .rounded(RADIUS_SM)
                     .bg(cx.theme().secondary)
                     .gap_2()
                     .items_center()
-                    .child(div().text_color(brand_color()).child("\u{1F4C1}"))
+                    .child(div().text_color(brand_color(cx)).child("\u{1F4C1}"))
                     .child(
                         div()
                             .flex_1()
@@ -214,7 +217,7 @@ impl OnboardingView {
                     .gap_2()
                     .child(
                         div()
-                            .text_size(px(20.0))
+                            .text_size(FONT_SIZE_DISPLAY)
                             .font_weight(FontWeight::BOLD)
                             .child("Choose Folders to Index"),
                     )
@@ -271,7 +274,7 @@ impl OnboardingView {
                     .gap_2()
                     .child(
                         div()
-                            .text_size(px(20.0))
+                            .text_size(FONT_SIZE_DISPLAY)
                             .font_weight(FontWeight::BOLD)
                             .child("You're All Set!"),
                     )

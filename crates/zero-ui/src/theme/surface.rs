@@ -57,3 +57,19 @@ pub fn surface_active(cx: &gpui::App) -> Hsla {
 pub fn brand_active_bg(cx: &gpui::App) -> Hsla {
     cx.theme().primary.opacity(0.12)
 }
+
+/// Status bar background — subtle tinted bar for directory stats.
+/// Matches the SwiftUI summary row tint.
+pub fn status_bar_bg(cx: &gpui::App) -> Hsla {
+    cx.theme().secondary
+}
+
+/// Banner background — matches Swift DS.Color.bannerBackground
+/// dark: success tint @ 8%, light: black @ 6%
+pub fn banner_bg(cx: &gpui::App) -> Hsla {
+    if cx.theme().is_dark() {
+        cx.theme().success.opacity(0.08)
+    } else {
+        gpui::black().opacity(0.06)
+    }
+}

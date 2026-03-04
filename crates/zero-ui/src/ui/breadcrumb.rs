@@ -5,7 +5,7 @@ use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use gpui_component::{ActiveTheme, Icon, IconName, Sizable as _};
 
-use crate::theme::{self, FONT_SIZE_BODY};
+use crate::theme::{self, FONT_SIZE_BODY, ICON_XS};
 
 type PathHandler = Rc<dyn Fn(&PathBuf, &ClickEvent, &mut Window, &mut App)>;
 
@@ -83,6 +83,7 @@ impl RenderOnce for Breadcrumb {
                         } else {
                             muted
                         };
+                        let brand = theme::brand_color(cx);
 
                         div()
                             .flex()
@@ -92,7 +93,7 @@ impl RenderOnce for Breadcrumb {
                             .when(i > 0, |el| {
                                 el.child(
                                     Icon::new(IconName::ChevronRight)
-                                        .with_size(px(10.0))
+                                        .with_size(ICON_XS)
                                         .text_color(muted),
                                 )
                             })
@@ -101,7 +102,8 @@ impl RenderOnce for Breadcrumb {
                                     .id(SharedString::from(format!("crumb-{i}")))
                                     .cursor_pointer()
                                     .text_color(text_color)
-                                    .hover(|s| s.text_color(theme::brand_color()))
+                                    .when(is_last, |el| el.font_weight(FontWeight::BOLD))
+                                    .hover(move |s| s.text_color(brand))
                                     .when_some(handler, |el, h| {
                                         let path = full_path.clone();
                                         el.on_click(move |event, window, cx| {

@@ -4,7 +4,9 @@ use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use gpui_component::{ActiveTheme, InteractiveElementExt as _};
 
-use crate::theme::{self, FONT_SIZE_CAPTION, RADIUS};
+use crate::theme::{
+    self, FONT_SIZE_CAPTION, GRID_CELL_HEIGHT, GRID_CELL_WIDTH, GRID_ICON_SIZE, RADIUS,
+};
 use crate::ui::FileIcon;
 
 use super::file_browser::state::BrowserEntry;
@@ -30,6 +32,12 @@ impl FileGridView {
             selected: Vec::new(),
             focus_handle: cx.focus_handle(),
         }
+    }
+
+    /// Navigate to a new directory in-place (synchronous, matching ensure_file_grid pattern).
+    pub fn navigate(&mut self, path: &std::path::Path, cx: &mut Context<Self>) {
+        let entries = crate::views::file_browser::state::load_directory(path);
+        self.update_entries(entries, cx);
     }
 
     #[allow(dead_code)]
@@ -71,8 +79,8 @@ impl Render for FileGridView {
 
                 div()
                     .id(SharedString::from(format!("grid-{i}")))
-                    .w(px(80.0))
-                    .h(px(100.0))
+                    .w(GRID_CELL_WIDTH)
+                    .h(GRID_CELL_HEIGHT)
                     .flex()
                     .flex_col()
                     .items_center()
@@ -91,8 +99,8 @@ impl Render for FileGridView {
                     }))
                     .child(
                         div()
-                            .w(px(48.0))
-                            .h(px(48.0))
+                            .w(GRID_ICON_SIZE)
+                            .h(GRID_ICON_SIZE)
                             .flex()
                             .items_center()
                             .justify_center()

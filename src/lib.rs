@@ -117,6 +117,7 @@ pub mod sync;
 pub mod templates;
 pub mod todo;
 pub mod transfer;
+pub mod updater;
 pub mod util;
 
 /// Re-export commonly used types for convenient access

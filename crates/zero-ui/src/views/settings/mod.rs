@@ -7,20 +7,20 @@ use std::time::Duration;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
-use gpui_component::theme::{Theme, ThemeMode};
 use gpui_component::{
-    Sizable as _,
+    IndexPath, Sizable as _,
     button::{Button, ButtonVariants as _},
     h_flex,
     input::InputState,
+    select::{SelectEvent, SelectState},
     v_flex,
 };
 
 use zero::scanner::CrawlProgress;
 
-use crate::services::SearchService;
+use crate::services::{SearchEvent, SearchService};
 use crate::session::Settings;
-use crate::theme::{self, FONT_SIZE_BODY};
+use crate::theme::{self, FONT_SIZE_BODY, THEME_NAMES};
 
 // -- Events emitted to the parent ZeroApp ------------------------------------
 
@@ -45,12 +45,12 @@ pub struct SettingsView {
     pub(super) active_tab: SettingsTab,
     pub(super) settings: Settings,
     pub(super) search: Entity<SearchService>,
+    pub(super) theme_select: Entity<SelectState<Vec<String>>>,
 
     // Search tab
     pub(super) adding_root: bool,
     pub(super) root_input: Entity<InputState>,
     pub(super) root_error: Option<String>,
-    pub(super) indexed_file_count: u64,
     pub(super) reindexing_root: Option<usize>,
     pub(super) reindexing_all: bool,
 
@@ -64,6 +64,7 @@ pub struct SettingsView {
 
     #[allow(dead_code)]
     focus_handle: FocusHandle,
+    _subs: Vec<Subscription>,
 }
 
 impl SettingsView {
@@ -71,16 +72,44 @@ impl SettingsView {
         let root_input =
             cx.new(|cx| InputState::new(window, cx).placeholder("~/Documents, ~/Photos, ..."));
 
-        let file_count = search.read(cx).file_count();
+        let settings = Settings::load();
+
+        // Theme selector dropdown
+        let items: Vec<String> = THEME_NAMES.iter().map(|s| s.to_string()).collect();
+        let selected_idx = THEME_NAMES
+            .iter()
+            .position(|&n| n == settings.theme)
+            .unwrap_or(0);
+        let theme_select =
+            cx.new(|cx| SelectState::new(items, Some(IndexPath::new(selected_idx)), window, cx));
+
+        let select_sub = cx.subscribe(
+            &theme_select,
+            |this, _, event: &SelectEvent<Vec<String>>, cx| {
+                if let SelectEvent::Confirm(Some(name)) = event {
+                    this.set_theme_name(name, cx);
+                }
+            },
+        );
+
+        // Re-render when index state changes (loaded, finished, etc.)
+        let search_sub = cx.subscribe(&search, |this, _, event: &SearchEvent, cx| match event {
+            SearchEvent::IndexingFinished | SearchEvent::IndexLoaded => {
+                this.reindexing_all = false;
+                this.reindexing_root = None;
+                cx.notify();
+            }
+            _ => cx.notify(),
+        });
 
         Self {
             active_tab: SettingsTab::General,
-            settings: Settings::load(),
+            settings,
             search,
+            theme_select,
             adding_root: false,
             root_input,
             root_error: None,
-            indexed_file_count: file_count,
             reindexing_root: None,
             reindexing_all: false,
             confirm_clear_index: false,
@@ -88,46 +117,26 @@ impl SettingsView {
             rebuilding: false,
             rebuild_files: 0,
             focus_handle: cx.focus_handle(),
+            _subs: vec![search_sub, select_sub],
         }
     }
 
     // -- Actions -------------------------------------------------------------
 
-    pub(super) fn set_theme(&mut self, mode: &str, cx: &mut Context<Self>) {
-        let new_mode = if mode == "system" {
-            Self::detect_system_theme()
-        } else if mode == "dark" {
-            ThemeMode::Dark
-        } else {
-            ThemeMode::Light
-        };
+    pub(super) fn set_theme_name(&mut self, name: &str, cx: &mut Context<Self>) {
+        self.settings.theme = name.to_string();
 
-        Theme::change(new_mode, None, cx);
+        // Single-mode themes force the mode to match
+        if let Some(forced) = theme::forced_mode_for_theme(name, cx) {
+            self.settings.theme_mode = match forced {
+                gpui_component::theme::ThemeMode::Light => "light".to_string(),
+                gpui_component::theme::ThemeMode::Dark => "dark".to_string(),
+            };
+        }
 
-        self.settings.theme_mode = mode.to_string();
+        theme::apply_named_theme(&self.settings.theme, &self.settings.theme_mode, cx);
         self.settings.save();
         cx.notify();
-    }
-
-    fn detect_system_theme() -> ThemeMode {
-        // On macOS, check system dark mode preference
-        #[cfg(target_os = "macos")]
-        {
-            let output = std::process::Command::new("defaults")
-                .args(["read", "-g", "AppleInterfaceStyle"])
-                .output();
-            if let Ok(out) = output {
-                let stdout = String::from_utf8_lossy(&out.stdout);
-                if stdout.trim().eq_ignore_ascii_case("dark") {
-                    return ThemeMode::Dark;
-                }
-            }
-            ThemeMode::Light
-        }
-        #[cfg(not(target_os = "macos"))]
-        {
-            ThemeMode::Dark
-        }
     }
 
     pub(super) fn rebuild_index(&mut self, cx: &mut Context<Self>) {
@@ -198,7 +207,6 @@ impl SettingsView {
         });
 
         self.reindexing_root = None;
-        self.indexed_file_count = self.search.read(cx).file_count();
         cx.notify();
     }
 
@@ -218,7 +226,6 @@ impl SettingsView {
         }
 
         self.reindexing_all = false;
-        self.indexed_file_count = self.search.read(cx).file_count();
         cx.notify();
     }
 
@@ -243,14 +250,7 @@ impl SettingsView {
         self.settings = Settings::default();
         self.settings.save();
 
-        let mode = if self.settings.theme_mode == "system" {
-            Self::detect_system_theme()
-        } else if self.settings.theme_mode == "dark" {
-            ThemeMode::Dark
-        } else {
-            ThemeMode::Light
-        };
-        Theme::change(mode, None, cx);
+        theme::apply_named_theme(&self.settings.theme, &self.settings.theme_mode, cx);
 
         cx.notify();
     }

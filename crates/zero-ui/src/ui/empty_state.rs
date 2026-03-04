@@ -2,7 +2,7 @@ use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use gpui_component::{ActiveTheme, Icon, IconName, Sizable as _, v_flex};
 
-use crate::theme::{FONT_SIZE_BODY, FONT_SIZE_CALLOUT};
+use crate::theme::{APP_ICON_MD, FONT_SIZE_BODY, FONT_SIZE_CALLOUT};
 
 /// Centered icon + message for empty views.
 #[derive(IntoElement)]
@@ -36,7 +36,7 @@ impl RenderOnce for EmptyState {
             .gap_2()
             .child(
                 Icon::new(self.icon)
-                    .large()
+                    .with_size(APP_ICON_MD)
                     .text_color(cx.theme().muted_foreground),
             )
             .child(

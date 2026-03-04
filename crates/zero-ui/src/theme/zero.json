@@ -133,6 +133,30 @@
         "base.magenta.light": "#d973db",
         "base.cyan": "#32b9cc",
         "base.cyan.light": "#5cc8d9"
+      },
+      "highlight": {
+        "editor.background": "#101010",
+        "editor.foreground": "#ededed",
+        "editor.active_line.background": "#1e1e1e",
+        "editor.line_number": "#525252",
+        "editor.active_line_number": "#ededed",
+        "syntax": {
+          "keyword": { "color": "#ce47d1" },
+          "string": { "color": "#60e0b2" },
+          "comment": { "color": "#525252" },
+          "comment.doc": { "color": "#666666" },
+          "function": { "color": "#4798ea" },
+          "type": { "color": "#f3ae24" },
+          "number": { "color": "#fe704d" },
+          "constant": { "color": "#fe704d" },
+          "variable": { "color": "#ededed" },
+          "property": { "color": "#32b9cc" },
+          "operator": { "color": "#60e0b2" },
+          "punctuation": { "color": "#8c8c8c" },
+          "boolean": { "color": "#fe704d" },
+          "attribute": { "color": "#f3ae24" },
+          "constructor": { "color": "#f3ae24" }
+        }
       }
     },
     {
@@ -266,6 +290,30 @@
         "base.magenta.light": "#e8a8ea",
         "base.cyan": "#32b9cc",
         "base.cyan.light": "#90dce8"
+      },
+      "highlight": {
+        "editor.background": "#f9f9f9",
+        "editor.foreground": "#191919",
+        "editor.active_line.background": "#ebebeb",
+        "editor.line_number": "#a3a3a3",
+        "editor.active_line_number": "#191919",
+        "syntax": {
+          "keyword": { "color": "#8839ef" },
+          "string": { "color": "#1a8a4c" },
+          "comment": { "color": "#a3a3a3" },
+          "comment.doc": { "color": "#666666" },
+          "function": { "color": "#2070c8" },
+          "type": { "color": "#cc8e0a" },
+          "number": { "color": "#e04520" },
+          "constant": { "color": "#e04520" },
+          "variable": { "color": "#191919" },
+          "property": { "color": "#1a8a8a" },
+          "operator": { "color": "#1a8a4c" },
+          "punctuation": { "color": "#666666" },
+          "boolean": { "color": "#e04520" },
+          "attribute": { "color": "#cc8e0a" },
+          "constructor": { "color": "#cc8e0a" }
+        }
       }
     }
   ]

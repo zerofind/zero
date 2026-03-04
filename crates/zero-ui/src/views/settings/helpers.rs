@@ -1,8 +1,8 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
-use gpui_component::{ActiveTheme, Icon, IconName, Sizable as _, h_flex, v_flex};
+use gpui_component::v_flex;
 
-use crate::theme::{self, FONT_SIZE_BODY, FONT_SIZE_CAPTION};
+use crate::theme::{self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, SPACE_XS};
 
 pub fn card_border(cx: &App) -> Hsla {
     theme::card_border(cx)
@@ -30,7 +30,7 @@ pub fn setting_row(
         })
         .child(
             v_flex()
-                .gap(px(2.0))
+                .gap(SPACE_XS)
                 .flex_1()
                 .child(
                     div()
@@ -54,85 +54,4 @@ pub fn group_label(text: &str, color: Hsla) -> Div {
         .font_weight(FontWeight::MEDIUM)
         .text_color(color)
         .child(text.to_string())
-}
-
-pub fn render_theme_picker(
-    cx: &App,
-    theme_mode: &str,
-    on_light: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
-    on_dark: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
-    on_system: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
-) -> AnyElement {
-    let pill_bg = cx.theme().secondary;
-    let is_dark = cx.theme().is_dark();
-    let is_system = theme_mode == "system";
-
-    h_flex()
-        .rounded(px(100.0))
-        .bg(pill_bg)
-        .p(px(3.0))
-        .gap(px(2.0))
-        .child(theme_option(
-            "Light",
-            IconName::Sun,
-            !is_dark && !is_system,
-            on_light,
-            cx,
-        ))
-        .child(theme_option(
-            "Dark",
-            IconName::Moon,
-            is_dark && !is_system,
-            on_dark,
-            cx,
-        ))
-        .child(theme_option(
-            "System",
-            IconName::Settings,
-            is_system,
-            on_system,
-            cx,
-        ))
-        .into_any_element()
-}
-
-fn theme_option(
-    label: &str,
-    icon: IconName,
-    active: bool,
-    on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
-    cx: &App,
-) -> impl IntoElement {
-    let (bg, text_color, weight) = if active {
-        (
-            cx.theme().list_active,
-            cx.theme().foreground,
-            FontWeight::SEMIBOLD,
-        )
-    } else {
-        (
-            gpui::transparent_black(),
-            cx.theme().muted_foreground,
-            FontWeight::NORMAL,
-        )
-    };
-
-    h_flex()
-        .id(SharedString::from(format!("theme-{label}")))
-        .cursor_pointer()
-        .rounded(px(100.0))
-        .bg(bg)
-        .px(px(12.0))
-        .py(px(4.0))
-        .gap(px(5.0))
-        .items_center()
-        .child(Icon::new(icon).xsmall().text_color(text_color))
-        .child(
-            div()
-                .text_size(FONT_SIZE_CAPTION)
-                .font_weight(weight)
-                .text_color(text_color)
-                .child(label.to_string()),
-        )
-        .on_click(on_click)
 }

@@ -9,7 +9,9 @@ use gpui_component::{
 };
 use std::sync::atomic::Ordering;
 
-use crate::theme::{self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, RADIUS_LG, brand_color};
+use crate::theme::{
+    self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, FONT_SIZE_DISPLAY, RADIUS_LG, RADIUS_SM, brand_color,
+};
 use crate::ui::format::format_bytes;
 
 use super::view::{ErasePhase, SecureEraseView};
@@ -41,7 +43,7 @@ impl Render for SecureEraseView {
                     .gap_4()
                     .child(
                         div()
-                            .text_size(px(20.0))
+                            .text_size(FONT_SIZE_DISPLAY)
                             .font_weight(FontWeight::BOLD)
                             .child("Secure Erase"),
                     )
@@ -106,11 +108,11 @@ impl SecureEraseView {
                             .id(SharedString::from(format!("vol-{i}")))
                             .px_3()
                             .py_2()
-                            .rounded(px(6.0))
+                            .rounded(RADIUS_SM)
                             .cursor_pointer()
                             .border_1()
                             .when(selected, |el| {
-                                el.border_color(brand_color())
+                                el.border_color(brand_color(cx))
                                     .bg(theme::selection_active_bg(cx))
                             })
                             .when(!selected, |el| {
@@ -145,7 +147,7 @@ impl SecureEraseView {
                     div()
                         .px_3()
                         .py_2()
-                        .rounded(px(6.0))
+                        .rounded(RADIUS_SM)
                         .border_1()
                         .border_color(cx.theme().warning)
                         .bg(cx.theme().warning.opacity(0.08))
@@ -368,7 +370,7 @@ impl SecureEraseView {
                         div()
                             .h_full()
                             .rounded(px(4.0))
-                            .bg(brand_color())
+                            .bg(brand_color(cx))
                             .w(relative(pct as f32 / 100.0)),
                     ),
             )

@@ -1,13 +1,11 @@
-use std::time::Duration;
+use std::sync::Arc;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use gpui_component::{ActiveTheme, Icon, IconName, Sizable as _, h_flex, v_flex};
 
 use super::format::{format_bytes, format_number};
-use crate::theme::{
-    self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, PROGRESS_BAR_HEIGHT, PROGRESS_BAR_RADIUS, RADIUS,
-};
+use crate::theme::{self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, ICON_XS, PROGRESS_BAR_HEIGHT, RADIUS};
 
 /// What kind of background operation is in progress.
 #[derive(Debug, Clone)]
@@ -21,7 +19,7 @@ pub enum BannerKind {
 }
 
 /// Data to drive the progress banner.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct BannerData {
     pub kind: BannerKind,
     pub message: String,
@@ -33,6 +31,8 @@ pub struct BannerData {
     pub phase: Option<String>,
     /// True when there's no known total (crawl/scan) — show pulsing bar
     pub indeterminate: bool,
+    /// Optional cancel callback — when present, a cancel button is shown
+    pub on_cancel: Option<Arc<dyn Fn() + Send + Sync>>,
 }
 
 impl BannerData {
@@ -43,6 +43,7 @@ impl BannerData {
         (self.bytes_done as f32 / self.bytes_total as f32).min(1.0)
     }
 
+    #[allow(dead_code)]
     fn icon(&self) -> IconName {
         match self.kind {
             BannerKind::Sync => IconName::Redo,
@@ -86,81 +87,71 @@ impl RenderOnce for ProgressBanner {
             String::new()
         };
 
-        // Progress bar: either determinate (known total) or indeterminate (pulsing)
-        let progress_bar = if indeterminate {
-            // Pulsing indeterminate bar — fixed 30% width with animated opacity
-            div()
-                .w_full()
-                .h(PROGRESS_BAR_HEIGHT)
-                .rounded(PROGRESS_BAR_RADIUS)
-                .bg(theme::surface_active(cx))
-                .overflow_hidden()
-                .child(
-                    div()
-                        .id("indeterminate-pulse")
-                        .h_full()
-                        .rounded(PROGRESS_BAR_RADIUS)
-                        .bg(theme::brand_color())
-                        .w(relative(0.3))
-                        .with_animation(
-                            "indeterminate-slide",
-                            Animation::new(Duration::from_millis(1500))
-                                .repeat()
-                                .with_easing(bounce(ease_in_out)),
-                            |el, delta| {
-                                // Slide from left edge to right edge
-                                el.ml(relative(delta * 0.7))
-                            },
-                        ),
-                )
-        } else {
-            div()
-                .w_full()
-                .h(PROGRESS_BAR_HEIGHT)
-                .rounded(PROGRESS_BAR_RADIUS)
-                .bg(theme::surface_active(cx))
-                .child(
-                    div()
-                        .h_full()
-                        .rounded(PROGRESS_BAR_RADIUS)
-                        .bg(theme::brand_color())
-                        .w(relative(fraction)),
-                )
-        };
-
-        h_flex()
-            .w_full()
-            .px_3()
-            .py_2()
-            .gap_3()
-            .items_center()
-            .bg(theme::surface_hover(cx))
-            .rounded(RADIUS)
-            .child(
-                Icon::new(self.data.icon())
-                    .xsmall()
-                    .text_color(theme::brand_color()),
-            )
-            .child(
-                v_flex()
-                    .flex_1()
-                    .gap_1()
+        // Progress bar: only show for determinate progress (known total)
+        let progress_bar = if !indeterminate && fraction > 0.0 {
+            Some(
+                div()
+                    .w_full()
+                    .h(PROGRESS_BAR_HEIGHT)
+                    .bg(theme::surface_active(cx))
                     .child(
                         div()
+                            .h_full()
+                            .bg(theme::brand_color(cx))
+                            .w(relative(fraction)),
+                    ),
+            )
+        } else {
+            None
+        };
+
+        let on_cancel = self.data.on_cancel.clone();
+
+        v_flex()
+            .w_full()
+            .bg(theme::banner_bg(cx))
+            .child(
+                h_flex()
+                    .w_full()
+                    .px_3()
+                    .py(px(6.0))
+                    .gap_3()
+                    .items_center()
+                    .child(
+                        div()
+                            .flex_1()
                             .text_size(FONT_SIZE_BODY)
                             .text_color(cx.theme().foreground)
                             .child(SharedString::from(self.data.message)),
                     )
-                    .child(progress_bar),
+                    .when(!detail.is_empty(), |el| {
+                        el.child(
+                            div()
+                                .text_size(FONT_SIZE_CAPTION)
+                                .text_color(cx.theme().muted_foreground)
+                                .child(SharedString::from(detail)),
+                        )
+                    })
+                    .when_some(on_cancel, |el, cancel_fn| {
+                        el.child(
+                            div()
+                                .id("cancel-indexing")
+                                .cursor_pointer()
+                                .p_1()
+                                .rounded(RADIUS)
+                                .hover(|s| s.bg(theme::surface_active(cx)))
+                                .on_click(move |_, _, _| {
+                                    (cancel_fn)();
+                                })
+                                .child(
+                                    Icon::new(IconName::Close)
+                                        .with_size(ICON_XS)
+                                        .text_color(cx.theme().muted_foreground),
+                                ),
+                        )
+                    }),
             )
-            .when(!detail.is_empty(), |el| {
-                el.child(
-                    div()
-                        .text_size(FONT_SIZE_CAPTION)
-                        .text_color(cx.theme().muted_foreground)
-                        .child(SharedString::from(detail)),
-                )
-            })
+            .when_some(progress_bar, |el, bar| el.child(bar))
     }
 }
 

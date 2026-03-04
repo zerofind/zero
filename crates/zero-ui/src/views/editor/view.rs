@@ -3,14 +3,12 @@ use std::path::PathBuf;
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use gpui_component::{
-    ActiveTheme, Sizable as _,
-    button::{Button, ButtonVariants as _},
-    h_flex,
+    ActiveTheme,
     input::{Input, InputEvent, InputState},
     v_flex,
 };
 
-use crate::theme::{self, FONT_SIZE_BODY, FONT_SIZE_CAPTION};
+use crate::theme::{self, FONT_SIZE_BODY};
 use crate::ui::ConfirmDialog;
 
 // -- Events ------------------------------------------------------------------
@@ -149,7 +147,7 @@ impl EditorView {
         cx.emit(EditorEvent::Close);
     }
 
-    fn save(&mut self, cx: &mut Context<Self>) {
+    pub fn save(&mut self, cx: &mut Context<Self>) {
         if self.saving {
             return;
         }
@@ -185,86 +183,29 @@ impl EditorView {
         .detach();
     }
 
-    fn file_name(&self) -> String {
+    pub fn file_name(&self) -> String {
         self.path
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| self.path.to_string_lossy().to_string())
     }
 
-    fn render_toolbar(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-        let muted = cx.theme().muted_foreground;
-        let name = self.file_name();
-        let modified = self.modified;
-        let saving = self.saving;
-        let path_str = self.path.to_string_lossy().to_string();
+    pub fn is_modified(&self) -> bool {
+        self.modified
+    }
 
-        h_flex()
-            .w_full()
-            .px_4()
-            .py_2()
-            .items_center()
-            .gap_3()
-            .border_b_1()
-            .border_color(cx.theme().border)
-            .bg(theme::content_bg(cx))
-            .child(
-                Button::new("close-editor")
-                    .ghost()
-                    .compact()
-                    .small()
-                    .label("Back")
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.close(cx);
-                    })),
-            )
-            .child(
-                h_flex()
-                    .flex_1()
-                    .gap_2()
-                    .items_center()
-                    .child(
-                        div()
-                            .text_size(FONT_SIZE_BODY)
-                            .font_weight(FontWeight::MEDIUM)
-                            .child(name),
-                    )
-                    .when(modified, |el| {
-                        el.child(
-                            div()
-                                .w(px(8.0))
-                                .h(px(8.0))
-                                .rounded(px(4.0))
-                                .bg(theme::brand_color()),
-                        )
-                    }),
-            )
-            .when(modified || saving, |el| {
-                el.child(
-                    Button::new("save-editor")
-                        .compact()
-                        .small()
-                        .primary()
-                        .label(if saving { "Saving..." } else { "Save" })
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.save(cx);
-                        })),
-                )
-            })
-            .child(
-                div()
-                    .text_size(FONT_SIZE_CAPTION)
-                    .text_color(muted)
-                    .child(SharedString::from(path_str)),
-            )
+    pub fn is_saving(&self) -> bool {
+        self.saving
+    }
+
+    pub fn path_str(&self) -> String {
+        self.path.to_string_lossy().to_string()
     }
 }
 
 impl Render for EditorView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let muted = cx.theme().muted_foreground;
-
-        let toolbar = self.render_toolbar(cx).into_any_element();
 
         let content: AnyElement = if let Some(err) = &self.error {
             div()
@@ -344,7 +285,6 @@ impl Render for EditorView {
                     }))
                     .size_full()
                     .bg(theme::content_bg(cx))
-                    .child(toolbar)
                     .child(content),
             )
             .when_some(close_dialog, |el, dialog| el.child(dialog))

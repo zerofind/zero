@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 use gpui::*;
 use gpui_component::{Icon, IconName, Sizable as _, h_flex, v_flex};
 
-use crate::theme::{self, FONT_SIZE_CAPTION, RADIUS};
+use crate::theme::{self, FONT_SIZE_CAPTION, ICON_SM, RADIUS};
 
 /// Alert severity level.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -103,7 +103,7 @@ impl AlertStack {
                     .shadow_md()
                     .child(
                         Icon::new(alert.icon())
-                            .with_size(px(14.0))
+                            .with_size(ICON_SM)
                             .text_color(alert.accent_color(cx)),
                     )
                     .child(

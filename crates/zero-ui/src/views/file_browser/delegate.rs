@@ -6,7 +6,7 @@ use gpui_component::{
 };
 
 use crate::models::{SortDirection, SortField};
-use crate::theme::{FONT_SIZE_BODY, FONT_SIZE_CAPTION};
+use crate::theme::{FONT_SIZE_BODY, FONT_SIZE_CAPTION, ICON_XS};
 use crate::ui::FileIcon;
 
 use super::state::{self, BrowserEntry};
@@ -142,7 +142,7 @@ impl TableDelegate for FileBrowserDelegate {
                             div()
                                 .id(("chevron", row_ix))
                                 .cursor_pointer()
-                                .child(Icon::new(icon).with_size(px(10.0)).text_color(muted))
+                                .child(Icon::new(icon).with_size(ICON_XS).text_color(muted))
                                 .on_click(move |_, _, cx| {
                                     table.update(cx, |state, cx| {
                                         let delegate = state.delegate_mut();

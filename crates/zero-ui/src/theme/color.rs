@@ -3,43 +3,35 @@ use gpui_component::ActiveTheme;
 
 // -- Brand colors -------------------------------------------------------------
 
-/// Zero coral accent — #FE764B
-pub fn brand_color() -> Hsla {
-    hsla(0.033, 0.99, 0.65, 1.0)
+/// Primary accent color — reads from the active theme.
+pub fn brand_color(cx: &gpui::App) -> Hsla {
+    cx.theme().primary
 }
 
-/// Selection blue — #0074E9
-pub fn selection_color() -> Hsla {
-    hsla(0.590, 0.90, 0.52, 1.0)
+/// Selection accent — reads from the active theme.
+pub fn selection_color(cx: &gpui::App) -> Hsla {
+    cx.theme().selection
 }
 
 pub fn selection_active_bg(cx: &gpui::App) -> Hsla {
-    cx.theme().selection.opacity(0.15)
-}
-
-/// Success mint — #61DFB8
-pub fn success_color() -> Hsla {
-    hsla(0.440, 0.68, 0.63, 1.0)
-}
-
-/// Positive lime — #B7FA7B
-#[allow(dead_code)]
-pub fn positive_color() -> Hsla {
-    hsla(0.260, 0.93, 0.73, 1.0)
+    cx.theme().list_active
 }
 
 // -- Semantic aliases (matching Swift DS.Color) --------------------------------
 
-/// Warning color — coral (same as brand)
-#[allow(dead_code)]
-pub fn warning_color() -> Hsla {
-    brand_color()
+/// Success color — reads from the active theme.
+pub fn success_color(cx: &gpui::App) -> Hsla {
+    cx.theme().success
 }
 
-/// Error color — red
-#[allow(dead_code)]
-pub fn error_color() -> Hsla {
-    hsla(0.0, 0.75, 0.55, 1.0)
+/// Warning color — reads from the active theme.
+pub fn warning_color(cx: &gpui::App) -> Hsla {
+    cx.theme().warning
+}
+
+/// Error color — reads from the active theme.
+pub fn error_color(cx: &gpui::App) -> Hsla {
+    cx.theme().danger
 }
 
 // -- Alert-level colors -------------------------------------------------------

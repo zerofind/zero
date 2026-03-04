@@ -45,6 +45,7 @@ impl FileBrowserDelegate {
     }
 
     /// Move selection up by one row.
+    #[allow(dead_code)]
     pub fn select_prev(&mut self) {
         let current = self.selected.first().copied().unwrap_or(0);
         if current > 0 {
@@ -53,6 +54,7 @@ impl FileBrowserDelegate {
     }
 
     /// Move selection down by one row.
+    #[allow(dead_code)]
     pub fn select_next(&mut self) {
         let current = self.selected.last().copied().unwrap_or(0);
         if current + 1 < self.entries.len() {

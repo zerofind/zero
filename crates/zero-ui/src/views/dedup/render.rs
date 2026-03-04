@@ -7,7 +7,7 @@ use gpui_component::{
     h_flex, v_flex,
 };
 
-use crate::theme::{self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, RADIUS};
+use crate::theme::{self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, ICON_XS, RADIUS};
 use crate::ui::{ConfirmDialog, EmptyState, StatusPill, format_size};
 
 use super::{DedupFilter, DedupSort, DedupView};
@@ -285,7 +285,7 @@ impl Render for DedupView {
                                             } else {
                                                 IconName::ChevronRight
                                             })
-                                            .with_size(px(12.0))
+                                            .with_size(ICON_XS)
                                             .text_color(muted),
                                         )
                                         .child(
@@ -299,7 +299,7 @@ impl Render for DedupView {
                                         )
                                         .child(StatusPill::new(
                                             SharedString::from(format!("{copies} copies")),
-                                            theme::brand_color(),
+                                            theme::brand_color(cx),
                                         ))
                                         .child(
                                             div()
@@ -347,7 +347,7 @@ impl Render for DedupView {
                                                             div()
                                                                 .text_size(FONT_SIZE_CAPTION)
                                                                 .text_color(
-                                                                    theme::success_color(),
+                                                                    theme::success_color(cx),
                                                                 )
                                                                 .child("keep"),
                                                         )

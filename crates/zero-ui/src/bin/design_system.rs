@@ -12,8 +12,9 @@ use gpui_component::{
     v_flex,
 };
 use zero_ui::theme::{
-    self, FONT_SIZE_BODY, FONT_SIZE_CALLOUT, FONT_SIZE_CAPTION, FONT_SIZE_TITLE, RADIUS, RADIUS_LG,
-    brand_color, card_border, content_bg, sidebar_bg, surface_hover,
+    self, FONT_SIZE_BODY, FONT_SIZE_CALLOUT, FONT_SIZE_CAPTION, FONT_SIZE_TITLE, ICON_SM, RADIUS,
+    RADIUS_LG, SIDEBAR_WIDTH, SPACE_XS, brand_color, card_border, content_bg, sidebar_bg,
+    surface_hover,
 };
 use zero_ui::ui::{
     BannerData, BannerKind, Breadcrumb, EmptyState, FileIcon, ProgressBanner, SectionHeader,
@@ -129,7 +130,7 @@ impl DesignSystem {
 
         v_flex()
             .h_full()
-            .w(px(220.0))
+            .w(SIDEBAR_WIDTH)
             .flex_shrink_0()
             .bg(sidebar_bg(cx))
             .text_color(fg)
@@ -298,10 +299,10 @@ impl DesignSystem {
                         h_flex()
                             .gap_2()
                             .flex_wrap()
-                            .child(StatusPill::new("Synced", theme::success_color()))
+                            .child(StatusPill::new("Synced", theme::success_color(cx)))
                             .child(StatusPill::new("Pending", hsla(0.130, 0.80, 0.50, 1.0)))
                             .child(StatusPill::new("Error", hsla(0.000, 0.70, 0.55, 1.0)))
-                            .child(StatusPill::new("2 copies", brand_color()))
+                            .child(StatusPill::new("2 copies", brand_color(cx)))
                             .child(StatusPill::new("Duplicate", hsla(0.830, 0.60, 0.55, 1.0))),
                     ),
             )
@@ -431,6 +432,7 @@ impl DesignSystem {
                                 files_total: 34_000,
                                 phase: None,
                                 indeterminate: false,
+                                on_cancel: None,
                             }))
                             .child(ProgressBanner::new(BannerData {
                                 kind: BannerKind::Index,
@@ -441,6 +443,7 @@ impl DesignSystem {
                                 files_total: 0,
                                 phase: Some("Scanning... 1,700,000 files".to_string()),
                                 indeterminate: true,
+                                on_cancel: None,
                             })),
                     ),
             )
@@ -519,10 +522,9 @@ impl DesignSystem {
                     .child(
                         h_flex()
                             .gap_3()
-                            .child(color_swatch("Brand", brand_color(), cx))
-                            .child(color_swatch("Success", theme::success_color(), cx))
-                            .child(color_swatch("Selection", theme::selection_color(), cx))
-                            .child(color_swatch("Positive", theme::positive_color(), cx)),
+                            .child(color_swatch("Brand", brand_color(cx), cx))
+                            .child(color_swatch("Success", theme::success_color(cx), cx))
+                            .child(color_swatch("Selection", theme::selection_color(cx), cx)),
                     ),
             )
     }
@@ -700,7 +702,7 @@ fn nav_item(
         None
     };
     let text_color = if active {
-        brand_color()
+        brand_color(cx)
     } else {
         cx.theme().sidebar_foreground
     };
@@ -719,7 +721,7 @@ fn nav_item(
         .cursor_pointer()
         .when_some(active_bg, |el, bg| el.bg(bg))
         .hover(move |s: StyleRefinement| s.bg(hover_bg))
-        .child(Icon::new(icon).small())
+        .child(Icon::new(icon).with_size(ICON_SM))
         .child(label.to_string())
         .on_click(cx.listener(move |this, _, _, cx| {
             this.section = section;
@@ -749,7 +751,7 @@ fn setting_row(
         })
         .child(
             v_flex()
-                .gap(px(2.0))
+                .gap(SPACE_XS)
                 .flex_1()
                 .child(
                     div()

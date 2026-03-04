@@ -11,7 +11,10 @@ use zero::scanner::CrawlProgress;
 
 pub enum SearchEvent {
     IndexLoaded,
-    IndexingStarted,
+    IndexingStarted {
+        progress: Arc<CrawlProgress>,
+        path: String,
+    },
     IndexingFinished,
     IndexCleared,
     /// Live watcher detected changes; N files affected in rebuilt root(s).
@@ -27,7 +30,6 @@ pub struct SearchService {
     roots: Vec<PathBuf>,
     loading: bool,
     indexing: bool,
-    file_count: u64,
     watcher_active: bool,
 }
 
@@ -43,7 +45,6 @@ impl SearchService {
             roots: Vec::new(),
             loading: false,
             indexing: false,
-            file_count: 0,
             watcher_active: false,
         };
         svc.loading = true;
@@ -76,9 +77,8 @@ impl SearchService {
         self.indexing
     }
 
-    #[allow(dead_code)]
     pub fn file_count(&self) -> u64 {
-        self.file_count
+        self.manager.total_file_count() as u64
     }
 
     /// Provide read access to the IndexManager for operations that need it
@@ -100,17 +100,31 @@ impl SearchService {
         settings_roots: Vec<PathBuf>,
         cx: &mut Context<Self>,
     ) -> Arc<CrawlProgress> {
+        eprintln!(
+            "[zero-ui] rebuild: {} root(s) requested",
+            settings_roots.len()
+        );
         self.indexing = true;
-        self.file_count = 0;
         cx.notify();
 
         let progress = Arc::new(CrawlProgress::new());
-        cx.emit(SearchEvent::IndexingStarted);
 
         let roots_strings: Vec<String> = settings_roots
             .iter()
             .map(|p| p.to_string_lossy().to_string())
             .collect();
+
+        let path_label = if roots_strings.len() == 1 {
+            roots_strings[0].clone()
+        } else if roots_strings.is_empty() {
+            "search roots".to_string()
+        } else {
+            format!("{} roots", roots_strings.len())
+        };
+        cx.emit(SearchEvent::IndexingStarted {
+            progress: progress.clone(),
+            path: path_label,
+        });
 
         let p = progress.clone();
         cx.spawn(async move |this, cx| {
@@ -194,13 +208,19 @@ impl SearchService {
     }
 
     pub fn add_root(&mut self, path: &str, cx: &mut Context<Self>) {
+        eprintln!("[zero-ui] add_root: {}", path);
         let path_owned = path.to_string();
         let indexes_dir = self.manager.indexes_dir().to_path_buf();
 
+        let progress = Arc::new(CrawlProgress::new());
         self.indexing = true;
-        cx.emit(SearchEvent::IndexingStarted);
+        cx.emit(SearchEvent::IndexingStarted {
+            progress: progress.clone(),
+            path: path_owned.clone(),
+        });
         cx.notify();
 
+        let p = progress;
         cx.spawn(async move |this, cx| {
             // Build index on background thread
             let build_result = cx
@@ -208,7 +228,7 @@ impl SearchService {
                 .spawn(async move {
                     let root_path = std::path::Path::new(&path_owned);
                     let mut index = SearchIndex::new();
-                    index.build_from_path_with_progress(root_path, None)?;
+                    index.build_from_path_with_progress(root_path, Some(p))?;
                     let count = index.file_count();
                     let hash = hash_path(&path_owned);
                     let etch_dir = indexes_dir.join(&hash);
@@ -302,7 +322,10 @@ impl SearchService {
             };
 
             let home_str = home.to_string_lossy().to_string();
-            eprintln!("[zero-ui] no indexed roots, auto-indexing {}", home_str);
+            eprintln!(
+                "[zero-ui] no indexed roots, starting auto-index of {}",
+                home_str
+            );
 
             let progress = Arc::new(CrawlProgress::new());
             let p = progress.clone();
@@ -317,12 +340,20 @@ impl SearchService {
             // Extract indexes_dir on main thread before going to background
             let indexes_dir = this.update(cx, |svc, cx| {
                 svc.indexing = true;
-                cx.emit(SearchEvent::IndexingStarted);
+                eprintln!("[zero-ui] emitting IndexingStarted for {}", home_str);
+                cx.emit(SearchEvent::IndexingStarted {
+                    progress: progress.clone(),
+                    path: home_str.clone(),
+                });
                 cx.notify();
                 svc.manager.indexes_dir().to_path_buf()
             });
-            let Ok(indexes_dir) = indexes_dir else { return };
+            let Ok(indexes_dir) = indexes_dir else {
+                eprintln!("[zero-ui] auto-index: failed to get indexes_dir");
+                return;
+            };
 
+            eprintln!("[zero-ui] auto-index: building index on background thread...");
             // Build index on background thread
             let home_clone = home_str.clone();
             let build_result = cx
@@ -342,7 +373,10 @@ impl SearchService {
             // Apply result on main thread
             match build_result {
                 Ok((root_str, index, count)) => {
-                    eprintln!("[zero-ui] auto-index complete: {} files", count);
+                    eprintln!(
+                        "[zero-ui] auto-index complete: {} files indexed for {}",
+                        count, root_str
+                    );
                     this.update(cx, |svc, _| {
                         svc.manager
                             .insert_index_memory_only(&root_str, index, count);
@@ -351,7 +385,7 @@ impl SearchService {
                     .ok();
                 }
                 Err(e) => {
-                    eprintln!("[zero-ui] auto-index error: {}", e);
+                    eprintln!("[zero-ui] auto-index FAILED: {}", e);
                 }
             }
 

@@ -10,7 +10,10 @@ use gpui_component::{
 
 use zero::prelude::{Task, TodoManager};
 
-use crate::theme::{self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, RADIUS, brand_color};
+use crate::theme::{
+    self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, FONT_SIZE_MICRO, ICON_XS, RADIUS, RADIUS_XS,
+    brand_color,
+};
 use crate::ui::{ConfirmDialog, EmptyState};
 
 pub struct TodoView {
@@ -103,7 +106,11 @@ impl TodoView {
                         this.cancel_edit(cx);
                     }
                 }))
-                .child(Icon::new(IconName::Minus).xsmall().text_color(muted))
+                .child(
+                    Icon::new(IconName::Minus)
+                        .with_size(ICON_XS)
+                        .text_color(muted),
+                )
                 .child(div().flex_1().child(Input::new(input)))
                 .into_any_element();
         }
@@ -138,9 +145,9 @@ impl TodoView {
                         } else {
                             IconName::Minus
                         })
-                        .xsmall()
+                        .with_size(ICON_XS)
                         .text_color(if is_done {
-                            theme::success_color()
+                            theme::success_color(cx)
                         } else {
                             muted
                         }),
@@ -165,9 +172,9 @@ impl TodoView {
             .children(task.tags.iter().map(|tag| {
                 div()
                     .px_1()
-                    .rounded(px(3.0))
+                    .rounded(RADIUS_XS)
                     .bg(theme::surface_hover(cx))
-                    .text_size(px(10.0))
+                    .text_size(FONT_SIZE_MICRO)
                     .text_color(muted)
                     .child(SharedString::from(tag.clone()))
             }))
@@ -176,7 +183,7 @@ impl TodoView {
                 let pill_color = if task.is_overdue() {
                     cx.theme().danger
                 } else if task.is_due_today() {
-                    brand_color()
+                    brand_color(cx)
                 } else {
                     muted
                 };
@@ -190,8 +197,8 @@ impl TodoView {
                 el.child(
                     div()
                         .px_1()
-                        .rounded(px(3.0))
-                        .text_size(px(10.0))
+                        .rounded(RADIUS_XS)
+                        .text_size(FONT_SIZE_MICRO)
                         .text_color(pill_color)
                         .child(label),
                 )
@@ -215,7 +222,11 @@ impl TodoView {
                         this.pending_delete = Some(task_id);
                         cx.notify();
                     }))
-                    .child(Icon::new(IconName::Close).xsmall().text_color(muted)),
+                    .child(
+                        Icon::new(IconName::Close)
+                            .with_size(ICON_XS)
+                            .text_color(muted),
+                    ),
             )
             .into_any_element()
     }
@@ -306,11 +317,11 @@ impl TodoView {
                             .gap_0p5()
                             .items_center()
                             .px_1()
-                            .rounded(px(3.0))
+                            .rounded(RADIUS_XS)
                             .bg(theme::surface_hover(cx))
                             .child(
                                 div()
-                                    .text_size(px(10.0))
+                                    .text_size(FONT_SIZE_MICRO)
                                     .text_color(muted)
                                     .child(SharedString::from(tag.clone())),
                             )

@@ -2,67 +2,114 @@
 mod mod_test;
 
 mod color;
-mod container;
-mod icon;
-mod layout;
-mod shadow;
 mod surface;
+mod tokens;
 
-// Re-export everything so `use crate::theme::*` continues to work.
 pub use color::*;
-#[allow(unused_imports)]
-pub use container::*;
-#[allow(unused_imports)]
-pub use icon::*;
-pub use layout::*;
-#[allow(unused_imports)]
-pub use shadow::*;
 pub use surface::*;
+pub use tokens::*;
 
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use gpui::{Pixels, px};
+use gpui::Global;
 use gpui_component::theme::{Theme, ThemeMode, ThemeRegistry, ThemeSet};
 
-// -- Zero theme JSON ----------------------------------------------------------
+// -- Theme JSON sources -------------------------------------------------------
 
 pub const ZERO_THEME: &str = include_str!("./zero.json");
+const CATPPUCCIN_LATTE: &str = include_str!("./catppuccin-latte.json");
+const CATPPUCCIN_FRAPPE: &str = include_str!("./catppuccin-frappe.json");
+const CATPPUCCIN_MACCHIATO: &str = include_str!("./catppuccin-macchiato.json");
+const CATPPUCCIN_MOCHA: &str = include_str!("./catppuccin-mocha.json");
 
-// -- Typography ---------------------------------------------------------------
+/// All available theme names in display order.
+pub const THEME_NAMES: &[&str] = &[
+    "Zero",
+    "Catppuccin Latte",
+    "Catppuccin Frappe",
+    "Catppuccin Macchiato",
+    "Catppuccin Mocha",
+];
 
-pub const FONT_SIZE_CAPTION: Pixels = px(11.0);
-pub const FONT_SIZE_BODY: Pixels = px(13.0);
-#[allow(dead_code)] // Used by design-system binary via lib crate
-pub const FONT_SIZE_CALLOUT: Pixels = px(14.0);
-#[allow(dead_code)] // Used by design-system binary via lib crate
-pub const FONT_SIZE_TITLE: Pixels = px(16.0);
+// -- Theme store (global) -----------------------------------------------------
 
-// -- Corner radii -------------------------------------------------------------
-// Radius scale: SM(6) < DEFAULT(8) < MD(10) < LG(12)
-// DEFAULT is the most-used; SM/MD/LG match Swift DS.Radius.small/medium/large
+struct ThemeStore {
+    sets: Vec<ThemeSet>,
+}
 
-pub const RADIUS_SM: Pixels = px(6.0);
-pub const RADIUS: Pixels = px(8.0);
-#[allow(dead_code)]
-pub const RADIUS_MD: Pixels = px(10.0);
-pub const RADIUS_LG: Pixels = px(12.0);
+impl Global for ThemeStore {}
 
-// -- Spacing ------------------------------------------------------------------
+// -- Init + switching ---------------------------------------------------------
 
-#[allow(dead_code)]
-pub const PADDING_SM: Pixels = px(4.0);
-pub const PADDING_MD: Pixels = px(8.0);
-pub const PADDING_LG: Pixels = px(12.0);
-
-// -- Load Zero theme into the global Theme ------------------------------------
-
-/// Parse zero.json and register both dark/light variants as the default themes.
-/// Call this once at startup, before `Theme::change()`.
+/// Parse all built-in themes and apply the saved user preference.
+/// Call once at startup before the first render.
 pub fn init_zero_theme(cx: &mut gpui::App) {
-    let set: ThemeSet =
-        serde_json::from_str(ZERO_THEME).expect("zero.json must be valid ThemeSet JSON");
+    let jsons = [
+        ZERO_THEME,
+        CATPPUCCIN_LATTE,
+        CATPPUCCIN_FRAPPE,
+        CATPPUCCIN_MACCHIATO,
+        CATPPUCCIN_MOCHA,
+    ];
 
+    let sets: Vec<ThemeSet> = jsons
+        .iter()
+        .map(|j| serde_json::from_str(j).expect("theme JSON must be valid"))
+        .collect();
+
+    // Apply default (Zero) immediately
+    apply_theme_set(&sets[0], cx);
+
+    cx.set_global(ThemeStore { sets });
+
+    // Apply saved user preference
+    let settings = crate::session::Settings::load();
+    apply_named_theme(&settings.theme, &settings.theme_mode, cx);
+}
+
+/// Switch to a named theme. Finds the matching ThemeSet and applies it.
+pub fn apply_named_theme(name: &str, mode_pref: &str, cx: &mut gpui::App) {
+    let configs: Option<Vec<_>> = {
+        let store = cx.global::<ThemeStore>();
+        store
+            .sets
+            .iter()
+            .find(|s| s.name.as_ref() == name)
+            .map(|set| set.themes.clone())
+    };
+
+    if let Some(configs) = configs {
+        let theme = Theme::global_mut(cx);
+        for config in configs {
+            let rc = Rc::new(config.clone());
+            match config.mode {
+                ThemeMode::Dark => theme.dark_theme = rc,
+                ThemeMode::Light => theme.light_theme = rc,
+            }
+        }
+    }
+
+    let mode = match mode_pref {
+        "light" => ThemeMode::Light,
+        "system" => detect_system_theme(),
+        _ => ThemeMode::Dark,
+    };
+    Theme::change(mode, None, cx);
+}
+
+/// Returns the forced ThemeMode for single-mode themes, or None for dual-mode.
+pub fn forced_mode_for_theme(name: &str, cx: &gpui::App) -> Option<ThemeMode> {
+    let store = cx.global::<ThemeStore>();
+    store
+        .sets
+        .iter()
+        .find(|s| s.name.as_ref() == name)
+        .filter(|set| set.themes.len() == 1)
+        .map(|set| set.themes[0].mode)
+}
+
+fn apply_theme_set(set: &ThemeSet, cx: &mut gpui::App) {
     let theme = Theme::global_mut(cx);
     for config in &set.themes {
         let rc = Rc::new(config.clone());
@@ -70,6 +117,27 @@ pub fn init_zero_theme(cx: &mut gpui::App) {
             ThemeMode::Dark => theme.dark_theme = rc,
             ThemeMode::Light => theme.light_theme = rc,
         }
+    }
+}
+
+/// Detect macOS system appearance preference.
+pub fn detect_system_theme() -> ThemeMode {
+    #[cfg(target_os = "macos")]
+    {
+        let output = std::process::Command::new("defaults")
+            .args(["read", "-g", "AppleInterfaceStyle"])
+            .output();
+        if let Ok(out) = output {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            if stdout.trim().eq_ignore_ascii_case("dark") {
+                return ThemeMode::Dark;
+            }
+        }
+        ThemeMode::Light
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        ThemeMode::Dark
     }
 }
 
@@ -88,12 +156,4 @@ pub fn watch_user_themes(cx: &mut gpui::App) {
     if let Err(e) = ThemeRegistry::watch_dir(dir, cx, |_| {}) {
         eprintln!("theme watch failed: {e}");
     }
-}
-
-// -- Legacy branding (no-op, kept for compile compat during migration) --------
-
-/// Deprecated: colors now come from zero.json via `init_zero_theme()`.
-#[allow(dead_code)]
-pub fn apply_branding(_cx: &mut gpui::App) {
-    // Intentionally empty — all branding is in zero.json.
 }

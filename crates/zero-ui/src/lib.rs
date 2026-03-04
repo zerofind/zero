@@ -17,7 +17,7 @@ use gpui_component::{
 use actions::{
     CopyFiles, CopyPath, CutFiles, DuplicateFiles, FindInBrowser, GoBack, GoForward, GoUp,
     MoveToTrash, NewFolder, OpenCommandPalette, OpenSelected, PasteFiles, QuickLook, Quit, Refresh,
-    Rename, SelectAll, SelectNext, SelectPrev, ToggleSidebar, ToggleSplitView, ToggleViewMode,
+    Rename, SelectAll, ToggleSidebar, ToggleSplitView, ToggleViewMode,
 };
 use app::ZeroApp;
 
@@ -144,9 +144,6 @@ pub fn launch() {
             KeyBinding::new("cmd-f", FindInBrowser, None),
             #[cfg(not(target_os = "macos"))]
             KeyBinding::new("ctrl-f", FindInBrowser, None),
-            // Navigation
-            KeyBinding::new("up", SelectPrev, None),
-            KeyBinding::new("down", SelectNext, None),
             // Selection
             #[cfg(target_os = "macos")]
             KeyBinding::new("cmd-a", SelectAll, None),
