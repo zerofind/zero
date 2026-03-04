@@ -21,13 +21,14 @@ use app::ZeroApp;
 
 /// Launch the GPUI-based file manager window.
 pub fn launch() {
-    // Set up tracing before gpui (which installs its own subscriber if none exists)
+    // Set up tracing before gpui (which installs its own subscriber if none exists).
+    // Use try_init — the CLI may have already installed a subscriber.
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("zero_ui=info,warn"));
-    tracing_subscriber::fmt()
+    let _ = tracing_subscriber::fmt()
         .with_env_filter(filter)
         .with_target(true)
-        .init();
+        .try_init();
 
     tracing::info!(
         version = env!("CARGO_PKG_VERSION"),

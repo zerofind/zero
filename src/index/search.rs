@@ -18,9 +18,9 @@
 
 use std::collections::BTreeMap;
 use std::path::Path;
-use tracing::instrument;
 use std::sync::Arc;
 use std::time::SystemTime;
+use tracing::instrument;
 
 use jwalk::WalkDir;
 use serde::{Deserialize, Serialize};
@@ -587,6 +587,23 @@ impl SearchIndex {
         self.file_count = 0;
         self.dir_count = 0;
         self.total_bytes = 0;
+    }
+
+    /// Consume this index and return the raw node slab.
+    ///
+    /// Useful for chunked replay: deserialize the full index from disk,
+    /// extract the nodes, then insert them in batches into a fresh index.
+    pub fn into_nodes(self) -> Vec<FileNode> {
+        self.slab
+    }
+
+    /// Insert a batch of nodes. Equivalent to calling `insert()` per node
+    /// but communicates intent and allows future batch optimizations.
+    pub fn insert_batch(&mut self, nodes: Vec<FileNode>) {
+        self.slab.reserve(nodes.len());
+        for node in nodes {
+            self.insert(node);
+        }
     }
 
     /// Remove a file from the index by path

@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use gpui::*;
 
+use zero::index::load_index_chunked;
 use zero::prelude::{IndexManager, SearchIndex, SearchResult, hash_path, save_index_via_etch};
 use zero::scanner::CrawlProgress;
 
@@ -11,6 +12,11 @@ use zero::scanner::CrawlProgress;
 
 pub enum SearchEvent {
     IndexLoaded,
+    /// A single root's index finished loading from disk.
+    RootLoaded {
+        root: String,
+        file_count: usize,
+    },
     IndexingStarted {
         progress: Arc<CrawlProgress>,
         path: String,
@@ -87,6 +93,16 @@ impl SearchService {
 
     pub fn file_count(&self) -> u64 {
         self.manager.total_file_count() as u64
+    }
+
+    /// Number of in-memory indexes currently loaded.
+    pub fn indexes_count(&self) -> usize {
+        self.manager.indexes_count()
+    }
+
+    /// Total number of registered roots (including not-yet-loaded).
+    pub fn roots_count(&self) -> usize {
+        self.manager.roots_count()
     }
 
     /// Provide read access to the IndexManager for operations that need it
@@ -286,31 +302,114 @@ impl SearchService {
 
     fn async_load(&mut self, cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| {
-            // Load from disk on background thread
-            let loaded = cx
-                .background_executor()
-                .spawn(async { IndexManager::load().ok() })
-                .await;
+            // 1. Gather root metadata (already cached from IndexManager::new())
+            let root_info: Vec<(String, String)> = this
+                .update(cx, |svc, _| {
+                    svc.manager
+                        .roots()
+                        .into_iter()
+                        .filter_map(|root| {
+                            svc.manager
+                                .root_stats(&root)
+                                .map(|_| (root.clone(), hash_path(&root)))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
 
-            if let Some(loaded) = loaded {
-                this.update(cx, |svc, cx| {
-                    let root_count = loaded.roots().len();
-                    svc.manager = loaded;
-                    svc.roots = svc.manager.roots().into_iter().map(PathBuf::from).collect();
-                    svc.loading = false;
-                    tracing::info!(roots = root_count, "index loaded");
-                    cx.emit(SearchEvent::IndexLoaded);
-                    cx.notify();
-                })
-                .ok();
-            } else {
-                this.update(cx, |svc, cx| {
-                    svc.loading = false;
-                    cx.emit(SearchEvent::IndexLoaded);
-                    cx.notify();
-                })
-                .ok();
+            let indexes_dir = this
+                .update(cx, |svc, _| svc.manager.indexes_dir().to_path_buf())
+                .unwrap_or_default();
+
+            if !root_info.is_empty() {
+                tracing::info!(roots = root_info.len(), "progressive load: loading indexes");
+
+                // 2. Load each root independently with chunked replay
+                const CHUNK_SIZE: usize = 50_000;
+
+                for (root, hash) in &root_info {
+                    let dir = indexes_dir.clone();
+                    let h = hash.clone();
+
+                    // Deserialize + extract nodes on background thread
+                    let loader_result = cx
+                        .background_executor()
+                        .spawn(async move { load_index_chunked(&dir.join(&h), CHUNK_SIZE) })
+                        .await;
+
+                    let mut loader = match loader_result {
+                        Ok(l) => l,
+                        Err(e) => {
+                            tracing::warn!(root = %root, error = %e, "failed to load root index");
+                            this.update(cx, |svc, _| svc.manager.remove_stale_root(root))
+                                .ok();
+                            continue;
+                        }
+                    };
+
+                    let total = loader.total();
+
+                    // Insert empty index placeholder on main thread
+                    let r = root.clone();
+                    this.update(cx, |svc, _| {
+                        svc.manager.insert_index_memory_only(
+                            &r,
+                            SearchIndex::with_capacity(total),
+                            0,
+                        );
+                    })
+                    .ok();
+
+                    // Process chunks: extract on background, insert on main
+                    loop {
+                        // next_chunk() is cheap (slice + to_vec), run it inline
+                        let chunk = loader.next_chunk();
+                        match chunk {
+                            Some(nodes) => {
+                                let r = root.clone();
+                                this.update(cx, |svc, cx| {
+                                    svc.manager.with_index_mut(&r, |idx| {
+                                        idx.insert_batch(nodes);
+                                    });
+                                    cx.notify();
+                                })
+                                .ok();
+                            }
+                            None => break,
+                        }
+                    }
+
+                    // Finalize root: update metadata + emit event
+                    let r = root.clone();
+                    let file_count = this
+                        .update(cx, |svc, cx| {
+                            let count = svc
+                                .manager
+                                .with_index(root, |idx| idx.file_count())
+                                .unwrap_or(0);
+                            svc.roots =
+                                svc.manager.roots().into_iter().map(PathBuf::from).collect();
+                            cx.emit(SearchEvent::RootLoaded {
+                                root: r,
+                                file_count: count,
+                            });
+                            cx.notify();
+                            count
+                        })
+                        .unwrap_or(0);
+
+                    tracing::info!(root = %root, files = file_count, "root loaded");
+                }
             }
+
+            // 3. Finalize: clear loading state, emit IndexLoaded
+            this.update(cx, |svc, cx| {
+                svc.roots = svc.manager.roots().into_iter().map(PathBuf::from).collect();
+                svc.loading = false;
+                cx.emit(SearchEvent::IndexLoaded);
+                cx.notify();
+            })
+            .ok();
 
             // Check if we already have indexed roots
             let has_roots = this
@@ -321,7 +420,7 @@ impl SearchService {
                 return;
             }
 
-            // Auto-index home directory
+            // Auto-index home directory (first launch)
             let Some(home) = dirs::home_dir() else {
                 return;
             };

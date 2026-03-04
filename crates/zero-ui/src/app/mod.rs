@@ -226,6 +226,16 @@ impl ZeroApp {
                     cx.notify();
                 }
             }
+            SearchEvent::RootLoaded { root, file_count } => {
+                tracing::info!(root = %root, files = file_count, "root loaded");
+                let loaded = self.services.search.read(cx).indexes_count();
+                let total = self.services.search.read(cx).roots_count();
+
+                if let Some(banner) = &mut self.banner {
+                    banner.phase = Some(format!("{}/{} locations loaded", loaded, total));
+                }
+                cx.notify();
+            }
             SearchEvent::IndexingStarted { progress, path } => {
                 tracing::debug!(path = %path, "event: IndexingStarted");
                 self.active_progress = Some(progress.clone());

@@ -263,7 +263,7 @@ impl IndexManager {
 
         for root in roots {
             if let Err(e) = self.load_index(&root) {
-                eprintln!("Warning: Failed to load index for {}: {}", root, e);
+                tracing::warn!(root = %root, error = %e, "failed to load index");
                 // Remove from cache + ControlDb if index file is missing/corrupt
                 self.roots_cache.remove(&root);
                 let _ = self.control_db.remove_indexed_root(&root);
@@ -293,6 +293,40 @@ impl IndexManager {
         self.indexes.insert(root.to_string(), index);
 
         Ok(())
+    }
+
+    /// Number of loaded in-memory indexes.
+    pub fn indexes_count(&self) -> usize {
+        self.indexes.len()
+    }
+
+    /// Number of roots registered in the cache (may exceed indexes_count
+    /// while indexes are still loading).
+    pub fn roots_count(&self) -> usize {
+        self.roots_cache.len()
+    }
+
+    /// Remove a stale root from the cache and ControlDb without deleting
+    /// the etch directory on disk (the index file may just need a rebuild).
+    pub fn remove_stale_root(&mut self, root: &str) {
+        self.indexes.remove(root);
+        self.roots_cache.remove(root);
+        let _ = self.control_db.remove_indexed_root(root);
+    }
+
+    /// Provide mutable access to a loaded index for in-place operations
+    /// like chunked insertion.
+    pub fn with_index_mut<R>(
+        &mut self,
+        root: &str,
+        f: impl FnOnce(&mut SearchIndex) -> R,
+    ) -> Option<R> {
+        self.indexes.get_mut(root).map(f)
+    }
+
+    /// Provide read access to a loaded index.
+    pub fn with_index<R>(&self, root: &str, f: impl FnOnce(&SearchIndex) -> R) -> Option<R> {
+        self.indexes.get(root).map(f)
     }
 
     /// Save a single root's index to disk via etch store
@@ -1170,7 +1204,22 @@ pub fn default_indexes_dir() -> Option<PathBuf> {
     crate::dirs::indexes_dir()
 }
 
-/// Hash a path to create a filename
+/// Load a single root's index from its etch directory.
+///
+/// Pure function — safe to call on a background thread. Returns the
+/// deserialized `SearchIndex` without mutating any shared state.
+pub fn load_index_from_etch(indexes_dir: &Path, hash: &str) -> Result<SearchIndex, IndexError> {
+    let etch_dir = indexes_dir.join(hash);
+    if !etch_dir.is_dir() {
+        return Err(IndexError::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("Index dir not found: {:?}", etch_dir),
+        )));
+    }
+    let store = open_index_store(&etch_dir)?;
+    Ok(store.read().clone())
+}
+
 pub fn hash_path(path: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(path.as_bytes());

@@ -64,6 +64,7 @@
 //! manager.remove_root("/Users/me/Documents");
 //! ```
 
+pub mod chunked_loader;
 pub mod etch;
 mod manager;
 mod node;
@@ -71,8 +72,12 @@ mod search;
 pub mod type_index;
 mod watcher;
 
+pub use chunked_loader::{ChunkedIndexLoader, load_index_chunked};
 pub use etch::{open_index_store, save_index_via_etch};
-pub use manager::{IndexManager, RootStats, SharedIndexManager, default_indexes_dir, hash_path};
+pub use manager::{
+    IndexManager, RootStats, SharedIndexManager, default_indexes_dir, hash_path,
+    load_index_from_etch,
+};
 pub use node::{FileNode, NodeType};
 pub use search::{IndexError, SearchIndex, SearchOptions, SearchQuery, SearchResult, SortBy};
 pub use type_index::{FileTypeCategory, TypeIndex, TypeIndexStats};

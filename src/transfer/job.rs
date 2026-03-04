@@ -18,10 +18,10 @@
 
 use std::fs;
 use std::panic;
-use tracing::instrument;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::Instant;
+use tracing::instrument;
 
 use rayon::prelude::*;
 

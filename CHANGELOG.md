@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.4.8
+
+New:
+- index: progressive chunked loading so search is available per-root instead of blocking until all roots finish
+- index: UI shows loading progress as "N/M locations loaded" during startup
+- manager: with_index, with_index_mut, remove_stale_root accessors for fine-grained index control
+
+Fix:
+- ui: tracing subscriber panic when launched from CLI or .app bundle (init → try_init)
+
 ## v0.4.7
 
 New:

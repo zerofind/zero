@@ -148,7 +148,10 @@ impl Executor {
             {
                 Ok(run_id) => run_ids.push(run_id),
                 Err(ExecutorError::AlreadyRunning(_)) => {
-                    tracing::debug!(automation_id = automation.id, "Automation already running, skipping");
+                    tracing::debug!(
+                        automation_id = automation.id,
+                        "Automation already running, skipping"
+                    );
                 }
                 Err(e) => {
                     tracing::error!(automation_id = automation.id, error = %e, "Failed to run automation");
@@ -244,7 +247,10 @@ impl Executor {
             {
                 Ok(run_id) => run_ids.push(run_id),
                 Err(ExecutorError::AlreadyRunning(_)) => {
-                    tracing::debug!(automation_id = automation.id, "Automation already running, skipping");
+                    tracing::debug!(
+                        automation_id = automation.id,
+                        "Automation already running, skipping"
+                    );
                 }
                 Err(e) => {
                     tracing::error!(automation_id = automation.id, error = %e, "Failed to run automation");

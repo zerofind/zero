@@ -18,9 +18,9 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::mpsc;
-use tracing::instrument;
 use std::thread;
 use std::time::{Duration, Instant};
+use tracing::instrument;
 
 use crate::cache::{CacheEntry, ChecksumBatch, ControlDb, StorageDb};
 use crate::differ::{
