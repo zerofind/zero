@@ -100,7 +100,7 @@ impl ZeroApp {
         on_cancel: Option<Arc<dyn Fn() + Send + Sync>>,
         cx: &mut Context<Self>,
     ) {
-        eprintln!("[zero-ui] start_crawl_progress_polling: {}", message);
+        tracing::debug!(message = %message, "start_crawl_progress_polling");
         self.banner = Some(BannerData {
             kind,
             message,
@@ -125,7 +125,7 @@ impl ZeroApp {
                     .update(cx, |app, cx| {
                         // Banner was cleared — stop polling
                         let Some(banner) = &mut app.banner else {
-                            eprintln!("[zero-ui] poll: banner gone, stopping");
+                            tracing::debug!("poll: banner gone, stopping");
                             return true;
                         };
 
@@ -144,10 +144,10 @@ impl ZeroApp {
                         // Log every ~3s (20 ticks × 150ms)
                         ticks += 1;
                         if ticks == 1 || ticks.is_multiple_of(20) {
-                            eprintln!(
-                                "[zero-ui] poll: {} files, {}",
+                            tracing::info!(
                                 files,
-                                crate::ui::format_bytes(bytes)
+                                bytes = %crate::ui::format_bytes(bytes),
+                                "indexing progress"
                             );
                         }
 
@@ -155,7 +155,7 @@ impl ZeroApp {
                         false
                     })
                     .unwrap_or_else(|_| {
-                        eprintln!("[zero-ui] poll: entity update failed, stopping");
+                        tracing::warn!("poll: entity update failed, stopping");
                         true
                     });
 

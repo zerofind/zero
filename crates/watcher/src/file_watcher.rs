@@ -124,7 +124,7 @@ impl FileWatcher {
         match self.rx.try_recv() {
             Ok(Ok(event)) => self.process_notify_event(event),
             Ok(Err(e)) => {
-                tracing::warn!("File watcher error: {}", e);
+                tracing::warn!(error = %e, "File watcher error");
                 None
             }
             Err(mpsc::TryRecvError::Empty) => None,
@@ -140,7 +140,7 @@ impl FileWatcher {
         match self.rx.recv() {
             Ok(Ok(event)) => self.process_notify_event(event),
             Ok(Err(e)) => {
-                tracing::warn!("File watcher error: {}", e);
+                tracing::warn!(error = %e, "File watcher error");
                 None
             }
             Err(_) => {
@@ -155,7 +155,7 @@ impl FileWatcher {
         match self.rx.recv_timeout(timeout) {
             Ok(Ok(event)) => self.process_notify_event(event),
             Ok(Err(e)) => {
-                tracing::warn!("File watcher error: {}", e);
+                tracing::warn!(error = %e, "File watcher error");
                 None
             }
             Err(mpsc::RecvTimeoutError::Timeout) => None,

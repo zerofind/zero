@@ -1,10 +1,10 @@
 [package]
 name = "zero-cli"
-version = "0.4.3"
+version.workspace = true
 edition = "2024"
 rust-version = "1.92"
 description = "CLI binary for zero - resilient file sync"
-license = "MIT"
+license.workspace = true
 
 [[bin]]
 name = "zero"

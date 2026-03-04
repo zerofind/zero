@@ -51,10 +51,10 @@ impl Executor {
             .start_run(automation.id, trigger, Some(initial_progress.clone()))?;
 
         tracing::info!(
-            "Started run {} for automation '{}' (trigger: {:?})",
-            run.id,
-            automation.name,
-            trigger
+            run_id = run.id,
+            automation = %automation.name,
+            trigger = ?trigger,
+            "Started run"
         );
 
         // Set up cancellation
@@ -91,12 +91,12 @@ impl Executor {
                 self.db.complete_run_success(run.id, &run_result)?;
 
                 tracing::info!(
-                    "Run {} completed successfully: {} files, {} bytes",
-                    run.id,
-                    run_result.summary.files_added
+                    run_id = run.id,
+                    files = run_result.summary.files_added
                         + run_result.summary.files_modified
                         + run_result.summary.files_deleted,
-                    run_result.summary.bytes_transferred
+                    bytes = run_result.summary.bytes_transferred,
+                    "Run completed successfully"
                 );
 
                 Ok(run.id)
@@ -105,7 +105,7 @@ impl Executor {
                 let partial_result = RunResult::default();
                 self.db.mark_run_partial(run.id, &partial_result, None)?;
 
-                tracing::info!("Run {} was cancelled", run.id);
+                tracing::info!(run_id = run.id, "Run was cancelled");
                 Ok(run.id)
             }
             Err(e) => {
@@ -116,7 +116,7 @@ impl Executor {
                 };
                 self.db.complete_run_failed(run.id, &error_result)?;
 
-                tracing::error!("Run {} failed: {}", run.id, e);
+                tracing::error!(run_id = run.id, error = %e, "Run failed");
                 Err(e)
             }
         }
@@ -198,7 +198,7 @@ impl Executor {
                 mount_point.join(&path_mapping.dest)
             };
 
-            tracing::debug!("Syncing {} -> {}", source.display(), dest.display());
+            tracing::debug!(source = %source.display(), dest = %dest.display(), "Syncing");
 
             match self
                 .sync_single_path(
@@ -233,7 +233,7 @@ impl Executor {
                         .push(format!("{}: {}", path_mapping.source, e));
 
                     // Continue with other paths even if one fails
-                    tracing::error!("Failed to sync {}: {}", path_mapping.source, e);
+                    tracing::error!(source = %path_mapping.source, error = %e, "Failed to sync");
                 }
             }
         }

@@ -63,31 +63,54 @@ pub fn init_zero_theme(cx: &mut gpui::App) {
 
     cx.set_global(ThemeStore { sets });
 
-    // Apply saved user preference
+    // Apply saved user preference (dual-theme model)
     let settings = crate::session::Settings::load();
-    apply_named_theme(&settings.theme, &settings.theme_mode, cx);
+    apply_dual_themes(
+        &settings.light_theme,
+        &settings.dark_theme,
+        &settings.theme_mode,
+        cx,
+    );
 }
 
-/// Switch to a named theme. Finds the matching ThemeSet and applies it.
-pub fn apply_named_theme(name: &str, mode_pref: &str, cx: &mut gpui::App) {
-    let configs: Option<Vec<_>> = {
+/// Apply separate light and dark themes, then activate the given mode.
+pub fn apply_dual_themes(light_name: &str, dark_name: &str, mode_pref: &str, cx: &mut gpui::App) {
+    let (light_config, dark_config) = {
         let store = cx.global::<ThemeStore>();
-        store
+
+        let light = store
             .sets
             .iter()
-            .find(|s| s.name.as_ref() == name)
-            .map(|set| set.themes.clone())
+            .find(|s| s.name.as_ref() == light_name)
+            .and_then(|set| {
+                set.themes
+                    .iter()
+                    .find(|t| t.mode == ThemeMode::Light)
+                    .or(set.themes.first())
+            })
+            .cloned();
+
+        let dark = store
+            .sets
+            .iter()
+            .find(|s| s.name.as_ref() == dark_name)
+            .and_then(|set| {
+                set.themes
+                    .iter()
+                    .find(|t| t.mode == ThemeMode::Dark)
+                    .or(set.themes.first())
+            })
+            .cloned();
+
+        (light, dark)
     };
 
-    if let Some(configs) = configs {
-        let theme = Theme::global_mut(cx);
-        for config in configs {
-            let rc = Rc::new(config.clone());
-            match config.mode {
-                ThemeMode::Dark => theme.dark_theme = rc,
-                ThemeMode::Light => theme.light_theme = rc,
-            }
-        }
+    let theme = Theme::global_mut(cx);
+    if let Some(config) = light_config {
+        theme.light_theme = Rc::new(config);
+    }
+    if let Some(config) = dark_config {
+        theme.dark_theme = Rc::new(config);
     }
 
     let mode = match mode_pref {
@@ -98,15 +121,20 @@ pub fn apply_named_theme(name: &str, mode_pref: &str, cx: &mut gpui::App) {
     Theme::change(mode, None, cx);
 }
 
-/// Returns the forced ThemeMode for single-mode themes, or None for dual-mode.
-pub fn forced_mode_for_theme(name: &str, cx: &gpui::App) -> Option<ThemeMode> {
+/// Returns theme names that have a variant matching the given mode.
+pub fn theme_names_for_mode(mode: ThemeMode, cx: &gpui::App) -> Vec<String> {
     let store = cx.global::<ThemeStore>();
-    store
-        .sets
+    THEME_NAMES
         .iter()
-        .find(|s| s.name.as_ref() == name)
-        .filter(|set| set.themes.len() == 1)
-        .map(|set| set.themes[0].mode)
+        .filter(|name| {
+            store
+                .sets
+                .iter()
+                .find(|s| s.name.as_ref() == **name)
+                .is_some_and(|set| set.themes.iter().any(|t| t.mode == mode))
+        })
+        .map(|s| s.to_string())
+        .collect()
 }
 
 fn apply_theme_set(set: &ThemeSet, cx: &mut gpui::App) {

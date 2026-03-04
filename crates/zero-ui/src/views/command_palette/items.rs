@@ -84,7 +84,6 @@ impl RenderOnce for PaletteItem {
             .rounded(RADIUS)
             .cursor_pointer()
             .when(self.selected, |el| el.bg(theme::surface_active(cx)))
-            .hover(|s| s.bg(theme::surface_hover(cx)))
             .child(FileIcon::new(self.extension.as_deref(), self.is_dir))
             .child(
                 div()
@@ -97,14 +96,16 @@ impl RenderOnce for PaletteItem {
                             .whitespace_nowrap()
                             .child(self.name),
                     )
-                    .child(
-                        div()
-                            .text_size(FONT_SIZE_CAPTION)
-                            .text_color(muted)
-                            .text_ellipsis()
-                            .whitespace_nowrap()
-                            .child(self.path),
-                    ),
+                    .when(!self.path.is_empty(), |el| {
+                        el.child(
+                            div()
+                                .text_size(FONT_SIZE_CAPTION)
+                                .text_color(muted)
+                                .text_ellipsis()
+                                .whitespace_nowrap()
+                                .child(self.path),
+                        )
+                    }),
             )
             // Right side: category + shortcut badge + action label
             .child(

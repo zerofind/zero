@@ -96,8 +96,15 @@ fn main() -> Result<()> {
         .with_env_filter(
             EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(filter)),
         )
-        .with_target(false)
+        .with_target(true)
         .init();
+
+    tracing::info!(
+        version = env!("CARGO_PKG_VERSION"),
+        platform = std::env::consts::OS,
+        arch = std::env::consts::ARCH,
+        "zero-watcher starting"
+    );
 
     match cli.command {
         Commands::Files {

@@ -12,7 +12,8 @@ use super::UpdateError;
 /// 2. Copy new binary to `{path}`
 /// 3. Set executable permissions
 /// 4. Remove `.bak`
-pub fn install_binary(new_binary: &Path) -> Result<(), UpdateError> {
+/// 5. Update app bundle Info.plist version if inside a .app bundle
+pub fn install_binary(new_binary: &Path, version: &str) -> Result<(), UpdateError> {
     let current = std::env::current_exe().map_err(|e| UpdateError::Install(e.to_string()))?;
 
     let backup = current.with_extension("bak");
@@ -45,6 +46,9 @@ pub fn install_binary(new_binary: &Path) -> Result<(), UpdateError> {
             let _ = fs::remove_file(&backup);
             let _ = fs::remove_file(new_binary);
 
+            // Update Info.plist if binary lives inside a .app bundle
+            update_bundle_version(&current, version);
+
             Ok(())
         }
         Err(e) => {
@@ -56,4 +60,57 @@ pub fn install_binary(new_binary: &Path) -> Result<(), UpdateError> {
             )))
         }
     }
+}
+
+/// If the binary is inside a macOS .app bundle, update the Info.plist version.
+/// Looks for `Contents/MacOS/<binary>` pattern and writes to sibling `Info.plist`.
+/// Failures are non-fatal — the binary is already updated.
+fn update_bundle_version(binary_path: &Path, version: &str) {
+    // Expected: .../Zero.app/Contents/MacOS/zero
+    let Some(macos_dir) = binary_path.parent() else {
+        return;
+    };
+    if macos_dir.file_name().and_then(|n| n.to_str()) != Some("MacOS") {
+        return;
+    }
+    let Some(contents_dir) = macos_dir.parent() else {
+        return;
+    };
+    if contents_dir.file_name().and_then(|n| n.to_str()) != Some("Contents") {
+        return;
+    }
+
+    let plist_path = contents_dir.join("Info.plist");
+    if !plist_path.exists() {
+        return;
+    }
+
+    let Ok(plist) = fs::read_to_string(&plist_path) else {
+        return;
+    };
+
+    // Replace version strings in the plist
+    let updated = replace_plist_value(&plist, "CFBundleVersion", version);
+    let updated = replace_plist_value(&updated, "CFBundleShortVersionString", version);
+
+    let _ = fs::write(&plist_path, updated);
+}
+
+/// Replace the string value following a given key in a plist XML.
+fn replace_plist_value(plist: &str, key: &str, value: &str) -> String {
+    let needle = format!("<key>{key}</key>");
+    let Some(key_pos) = plist.find(&needle) else {
+        return plist.to_string();
+    };
+    let after_key = key_pos + needle.len();
+    let Some(str_start) = plist[after_key..].find("<string>") else {
+        return plist.to_string();
+    };
+    let str_start = after_key + str_start + "<string>".len();
+    let Some(str_end) = plist[str_start..].find("</string>") else {
+        return plist.to_string();
+    };
+    let str_end = str_start + str_end;
+
+    format!("{}{}{}", &plist[..str_start], value, &plist[str_end..])
 }

@@ -72,7 +72,7 @@
         "list.head.background": "#161616",
 
         "table.background": "#101010",
-        "table.hover.background": "#ffffff14",
+        "table.hover.background": "#00000000",
         "table.active.background": "#167bf233",
         "table.active.border": "#167bf2",
         "table.even.background": "#161616",
@@ -229,7 +229,7 @@
         "list.head.background": "#f4f4f4",
 
         "table.background": "#f9f9f9",
-        "table.hover.background": "#0000000c",
+        "table.hover.background": "#00000000",
         "table.active.background": "#167bf21a",
         "table.active.border": "#167bf2",
         "table.even.background": "#f4f4f4",

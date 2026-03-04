@@ -19,7 +19,10 @@ impl ZeroApp {
             match self.view_mode {
                 crate::models::ViewMode::List => {
                     if let Some(view) = &self.file_browser {
-                        view.read(cx).focus_handle.focus(window);
+                        // Focus the Table's own handle so arrow-key navigation works.
+                        // Actions on the parent v_flex still fire via bubbling.
+                        let table_handle = view.read(cx).table_state.focus_handle(cx);
+                        table_handle.focus(window);
                         return;
                     }
                 }
@@ -104,9 +107,13 @@ impl ZeroApp {
         if let Some(view) = &self.sidebar {
             let active = self.active_view.clone();
             let path = self.current_path.clone();
+            let toolbar_visible = self.toolbar_visible;
+            let can_back = self.can_go_back();
+            let can_forward = self.can_go_forward();
             view.update(cx, |sidebar, cx| {
                 sidebar.set_active_view(active, cx);
                 sidebar.set_current_path(path, cx);
+                sidebar.set_toolbar_state(toolbar_visible, can_back, can_forward);
             });
             return view.clone();
         }
@@ -116,7 +123,15 @@ impl ZeroApp {
         let regular = settings.sidebar_regular_bookmarks;
         let active = self.active_view.clone();
         let path = self.current_path.clone();
-        let view = cx.new(|cx| AppSidebar::new(active, path, pinned, regular, cx));
+        let view = cx.new(|cx| {
+            let mut sidebar = AppSidebar::new(active, path, pinned, regular, cx);
+            sidebar.set_toolbar_state(
+                self.toolbar_visible,
+                self.can_go_back(),
+                self.can_go_forward(),
+            );
+            sidebar
+        });
 
         let sub = cx.subscribe_in(&view, window, Self::on_sidebar_event);
         self._subs.push(sub);
@@ -198,6 +213,19 @@ impl ZeroApp {
                     settings.save();
                 }
             }
+            SidebarEvent::GoBack => {
+                self.go_back(window, cx);
+            }
+            SidebarEvent::GoForward => {
+                self.go_forward(window, cx);
+            }
+            SidebarEvent::ToggleSidebar => {
+                self.sidebar_open = !self.sidebar_open;
+                cx.notify();
+            }
+            SidebarEvent::OpenSearch => {
+                self.open_command_palette(window, cx);
+            }
             SidebarEvent::EjectDrive(path) => {
                 #[cfg(target_os = "macos")]
                 {
@@ -213,7 +241,7 @@ impl ZeroApp {
                             .await;
 
                         if let Err(e) = result {
-                            eprintln!("[zero-ui] eject error: {e}");
+                            tracing::error!(error = %e, "eject failed");
                         }
                         // Refresh drives list
                         if let Some(sidebar) = sidebar {
@@ -229,7 +257,7 @@ impl ZeroApp {
                 #[cfg(not(target_os = "macos"))]
                 {
                     let _ = path;
-                    eprintln!("[zero-ui] eject not supported on this platform");
+                    tracing::warn!("eject not supported on this platform");
                 }
             }
         }
@@ -252,7 +280,7 @@ impl ZeroApp {
         self._subs.push(sub);
         self.file_browser = Some(view.clone());
 
-        view.read(cx).focus_handle.focus(window);
+        view.read(cx).table_state.focus_handle(cx).focus(window);
 
         view
     }
@@ -681,15 +709,9 @@ impl ZeroApp {
                         cx.notify();
                         return;
                     }
-                    if let Some(type_name) = path_str.strip_prefix("type://") {
-                        let prefix = format!("@{} ", type_name);
-                        self.command_palette_open = true;
-                        if let Some(palette) = &self.command_palette {
-                            palette.update(cx, |view, cx| {
-                                view.set_query(&prefix, window, cx);
-                            });
-                        }
-                        cx.notify();
+                    if path_str.starts_with("type://") {
+                        // type:// paths are now handled internally by PaletteView::drill_into()
+                        tracing::warn!(path = %path_str, "unexpected type:// path reached navigation");
                         return;
                     }
                 }
@@ -806,7 +828,7 @@ impl ZeroApp {
             }
             DrivesPopoverEvent::RunAutomation(name) => {
                 // TODO: Trigger automation runner with the given automation name
-                eprintln!("[zero-ui] run automation: {}", name);
+                tracing::info!(automation = %name, "run automation");
             }
             DrivesPopoverEvent::EjectDrive(path) => {
                 #[cfg(target_os = "macos")]
@@ -824,7 +846,7 @@ impl ZeroApp {
                             .await;
 
                         if let Err(e) = result {
-                            eprintln!("[zero-ui] eject error: {e}");
+                            tracing::error!(error = %e, "eject failed");
                         }
                         _this
                             .update(cx, |_app, cx| {
@@ -842,7 +864,7 @@ impl ZeroApp {
                 #[cfg(not(target_os = "macos"))]
                 {
                     let _ = path;
-                    eprintln!("[zero-ui] eject not supported on this platform");
+                    tracing::warn!("eject not supported on this platform");
                 }
             }
         }

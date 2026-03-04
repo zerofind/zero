@@ -28,6 +28,12 @@ impl EventEmitter<PaletteEvent> for PaletteView {}
 
 // -- View --------------------------------------------------------------------
 
+#[derive(Clone, PartialEq)]
+enum PaletteMode {
+    Root,
+    DrilledIn { type_filter: String, label: String },
+}
+
 /// Action entry for the palette's default section.
 struct PaletteAction {
     name: &'static str,
@@ -71,14 +77,14 @@ const DEFAULT_ACTIONS: &[PaletteAction] = &[
         icon: || IconName::ArrowLeft,
         path: "action://go_back",
         category: "Navigation",
-        shortcut: Some("\u{2318}["),
+        shortcut: Some("\u{2318}\u{2190}"),
     },
     PaletteAction {
         name: "Go Forward",
         icon: || IconName::ArrowRight,
         path: "action://go_forward",
         category: "Navigation",
-        shortcut: Some("\u{2318}]"),
+        shortcut: Some("\u{2318}\u{2192}"),
     },
     PaletteAction {
         name: "Go Up",
@@ -109,17 +115,17 @@ const DEFAULT_ACTIONS: &[PaletteAction] = &[
         shortcut: None,
     },
     PaletteAction {
-        name: "Secure Erase",
-        icon: || IconName::Delete,
-        path: "action://secure_erase",
-        category: "View",
-        shortcut: None,
-    },
-    PaletteAction {
         name: "Automations",
         icon: || IconName::Settings,
         path: "action://automations",
         category: "View",
+        shortcut: None,
+    },
+    PaletteAction {
+        name: "Browse Applications",
+        icon: || IconName::LayoutDashboard,
+        path: "apps://",
+        category: "Search",
         shortcut: None,
     },
     PaletteAction {
@@ -168,7 +174,9 @@ pub struct PaletteView {
     bookmarks: Vec<PathBuf>,
     selected_idx: usize,
     query: String,
+    mode: PaletteMode,
     focus_handle: FocusHandle,
+    _input_sub: Subscription,
     scroll_handle: ScrollHandle,
 }
 
@@ -189,8 +197,6 @@ impl PaletteView {
                 cx.notify();
             },
         );
-        let _ = input_sub;
-
         let bookmarks = crate::session::Settings::load().sidebar_bookmarks;
 
         Self {
@@ -202,7 +208,9 @@ impl PaletteView {
             bookmarks,
             selected_idx: 0,
             query: String::new(),
+            mode: PaletteMode::Root,
             focus_handle: cx.focus_handle(),
+            _input_sub: input_sub,
             scroll_handle: ScrollHandle::new(),
         }
     }
@@ -211,6 +219,7 @@ impl PaletteView {
         self.query.clear();
         self.results.clear();
         self.selected_idx = 0;
+        self.mode = PaletteMode::Root;
         self.input.update(cx, |state, cx| {
             state.set_value("", window, cx);
         });
@@ -218,14 +227,41 @@ impl PaletteView {
         cx.notify();
     }
 
-    /// Set the query text programmatically (e.g. from type search action).
-    pub fn set_query(&mut self, query: &str, window: &mut Window, cx: &mut Context<Self>) {
-        let query = query.to_string();
+    fn drill_into(
+        &mut self,
+        type_filter: &str,
+        label: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.mode = PaletteMode::DrilledIn {
+            type_filter: type_filter.to_string(),
+            label: label.to_string(),
+        };
+        self.query.clear();
+        self.selected_idx = 0;
         self.input.update(cx, |state, cx| {
-            state.set_value(&query, window, cx);
+            state.set_value("", window, cx);
         });
-        self.perform_search(&query, cx);
-        self.input.focus_handle(cx).focus(window);
+        if type_filter == "apps" {
+            self.results.clear();
+            self.app_results = self.apps.read(cx).list(50);
+        } else {
+            self.app_results.clear();
+            self.results = self.search.read(cx).search_by_type(type_filter, 50);
+        }
+        cx.notify();
+    }
+
+    fn exit_drill(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.mode = PaletteMode::Root;
+        self.query.clear();
+        self.results.clear();
+        self.app_results.clear();
+        self.selected_idx = 0;
+        self.input.update(cx, |state, cx| {
+            state.set_value("", window, cx);
+        });
         cx.notify();
     }
 
@@ -233,43 +269,44 @@ impl PaletteView {
         self.query = query.to_string();
         self.selected_idx = 0;
 
-        if query.is_empty() {
-            self.results.clear();
-            self.app_results.clear();
-            return;
-        }
-
-        // Handle @type prefix: e.g. "@images sunset" searches images for "sunset"
-        if let Some(rest) = query.strip_prefix('@') {
-            let (type_str, text_query) = match rest.split_once(' ') {
-                Some((t, q)) => (t, q.trim()),
-                None => (rest, ""),
-            };
-
-            // Type-only search (no text query)
-            if text_query.is_empty() {
-                self.results = self.search.read(cx).search_by_type(type_str, 50);
-            } else {
-                // Search by type, then filter by text query
-                let type_results = self.search.read(cx).search_by_type(type_str, 200);
-                let query_lower = text_query.to_lowercase();
-                self.results = type_results
-                    .into_iter()
-                    .filter(|r| r.node.name.to_lowercase().contains(&query_lower))
-                    .take(50)
-                    .collect();
+        match &self.mode {
+            PaletteMode::Root => {
+                if query.is_empty() {
+                    self.results.clear();
+                    self.app_results.clear();
+                    return;
+                }
+                self.results = self.search.read(cx).search(query, 50);
+                self.app_results = self.apps.read(cx).search(query, 5);
             }
-            self.app_results.clear();
-            return;
+            PaletteMode::DrilledIn { type_filter, .. } => {
+                let tf = type_filter.clone();
+                if tf == "apps" {
+                    self.results.clear();
+                    if query.is_empty() {
+                        self.app_results = self.apps.read(cx).list(50);
+                    } else {
+                        self.app_results = self.apps.read(cx).search(query, 50);
+                    }
+                } else {
+                    self.app_results.clear();
+                    if query.is_empty() {
+                        self.results = self.search.read(cx).search_by_type(&tf, 50);
+                    } else {
+                        self.results = self.search.read(cx).search_with_type(query, &tf, 50);
+                    }
+                }
+            }
         }
+    }
 
-        self.results = self.search.read(cx).search(query, 50);
-        self.app_results = self.apps.read(cx).search(query, 5);
+    fn is_showing_results(&self) -> bool {
+        !self.query.is_empty() || matches!(self.mode, PaletteMode::DrilledIn { .. })
     }
 
     /// Compute the scroll child index accounting for section headers.
     fn scroll_child_index(&self) -> usize {
-        if !self.query.is_empty() {
+        if self.is_showing_results() {
             // With results: items are file results, then optionally "Applications" header + apps
             if self.selected_idx < self.results.len() {
                 self.selected_idx
@@ -302,10 +339,10 @@ impl PaletteView {
     }
 
     fn select_next(&mut self, cx: &mut Context<Self>) {
-        let max = if self.query.is_empty() {
-            self.default_item_count()
-        } else {
+        let max = if self.is_showing_results() {
             self.results.len() + self.app_results.len()
+        } else {
+            self.default_item_count()
         };
         if self.selected_idx + 1 < max {
             self.selected_idx += 1;
@@ -318,8 +355,8 @@ impl PaletteView {
         self.bookmarks.len() + DEFAULT_ACTIONS.len()
     }
 
-    fn confirm_selection(&mut self, cx: &mut Context<Self>) {
-        if !self.query.is_empty() {
+    fn confirm_selection(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.is_showing_results() {
             // File results first, then app results
             if let Some(result) = self.results.get(self.selected_idx) {
                 let path = PathBuf::from(&result.node.path);
@@ -342,6 +379,16 @@ impl PaletteView {
         } else {
             let action_idx = self.selected_idx - bookmark_count;
             if let Some(action) = DEFAULT_ACTIONS.get(action_idx) {
+                // Handle type:// drill-in internally
+                if let Some(type_name) = action.path.strip_prefix("type://") {
+                    self.drill_into(type_name, action.name, window, cx);
+                    return;
+                }
+                // Handle apps:// drill-in
+                if action.path == "apps://" {
+                    self.drill_into("apps", action.name, window, cx);
+                    return;
+                }
                 cx.emit(PaletteEvent::OpenResult(PathBuf::from(action.path)));
             }
         }
@@ -357,7 +404,7 @@ impl PaletteView {
     }
 
     fn action_label_for_action(action: &PaletteAction) -> &'static str {
-        if action.path.starts_with("type://") {
+        if action.path.starts_with("type://") || action.path == "apps://" {
             "Search >"
         } else if action.path.starts_with("app://") {
             "Launch \u{21b5}"
@@ -370,7 +417,12 @@ impl PaletteView {
 impl Render for PaletteView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let has_results = !self.results.is_empty();
-        let has_query = !self.query.is_empty();
+        let show_results = self.is_showing_results();
+        let is_drilled = matches!(self.mode, PaletteMode::DrilledIn { .. });
+        let drill_label = match &self.mode {
+            PaletteMode::DrilledIn { label, .. } => Some(label.clone()),
+            PaletteMode::Root => None,
+        };
 
         v_flex()
             .track_focus(&self.focus_handle)
@@ -378,18 +430,32 @@ impl Render for PaletteView {
             .on_action(cx.listener(|this, _: &crate::actions::GoBack, _, cx| {
                 this.dismiss(cx);
             }))
-            .on_key_down(cx.listener(|this, ev: &KeyDownEvent, _, cx| {
+            .on_key_down(cx.listener(|this, ev: &KeyDownEvent, window, cx| {
                 match &ev.keystroke.key {
-                    key if key == "escape" => this.dismiss(cx),
+                    key if key == "escape" => {
+                        if matches!(this.mode, PaletteMode::DrilledIn { .. }) {
+                            this.exit_drill(window, cx);
+                        } else {
+                            this.dismiss(cx);
+                        }
+                    }
                     key if key == "enter" && ev.keystroke.modifiers.platform => {
                         // Cmd+Enter: show all results in file browser
                         if !this.query.is_empty() {
                             cx.emit(PaletteEvent::ShowInBrowser(this.query.clone()));
                         }
                     }
-                    key if key == "enter" => this.confirm_selection(cx),
+                    key if key == "enter" => this.confirm_selection(window, cx),
                     key if key == "up" => this.select_prev(cx),
                     key if key == "down" => this.select_next(cx),
+                    key if key == "backspace" => {
+                        // Backspace on empty query in DrilledIn → return to Root
+                        if this.query.is_empty()
+                            && matches!(this.mode, PaletteMode::DrilledIn { .. })
+                        {
+                            this.exit_drill(window, cx);
+                        }
+                    }
                     _ => {}
                 }
             }))
@@ -411,15 +477,34 @@ impl Render for PaletteView {
                     .border_b_1()
                     .border_color(cx.theme().border)
                     .child(
-                        Input::new(&self.input).appearance(false).prefix(
-                            Icon::new(IconName::Search)
-                                .with_size(ICON_XS)
-                                .text_color(cx.theme().muted_foreground),
-                        ),
+                        Input::new(&self.input)
+                            .appearance(false)
+                            .prefix(if is_drilled {
+                                h_flex()
+                                    .gap_1()
+                                    .items_center()
+                                    .child(
+                                        Icon::new(IconName::ChevronLeft)
+                                            .with_size(ICON_XS)
+                                            .text_color(cx.theme().muted_foreground),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_size(FONT_SIZE_CAPTION)
+                                            .text_color(cx.theme().muted_foreground)
+                                            .child(drill_label.unwrap_or_default()),
+                                    )
+                                    .into_any_element()
+                            } else {
+                                Icon::new(IconName::Search)
+                                    .with_size(ICON_XS)
+                                    .text_color(cx.theme().muted_foreground)
+                                    .into_any_element()
+                            }),
                     ),
             )
             // Results list (files + apps)
-            .when(has_query, |el| {
+            .when(show_results, |el| {
                 let has_any = has_results || !self.app_results.is_empty();
 
                 if !has_any {
@@ -449,9 +534,9 @@ impl Render for PaletteView {
 
                         div()
                             .id(SharedString::from(format!("click-result-{i}")))
-                            .on_click(cx.listener(move |this, _, _, cx| {
+                            .on_click(cx.listener(move |this, _, window, cx| {
                                 this.selected_idx = i;
-                                this.confirm_selection(cx);
+                                this.confirm_selection(window, cx);
                             }))
                             .child(
                                 PaletteItem::new(
@@ -479,9 +564,9 @@ impl Render for PaletteView {
 
                         div()
                             .id(SharedString::from(format!("click-app-{ai}")))
-                            .on_click(cx.listener(move |this, _, _, cx| {
+                            .on_click(cx.listener(move |this, _, window, cx| {
                                 this.selected_idx = item_idx;
-                                this.confirm_selection(cx);
+                                this.confirm_selection(window, cx);
                             }))
                             .child(
                                 PaletteItem::new(
@@ -520,8 +605,8 @@ impl Render for PaletteView {
                         }),
                 )
             })
-            // Default sections when no query
-            .when(!has_query, |el| {
+            // Default sections when no query and in root mode
+            .when(!show_results, |el| {
                 let muted = cx.theme().muted_foreground;
                 let bookmark_count = self.bookmarks.len();
 
@@ -536,19 +621,18 @@ impl Render for PaletteView {
                             .file_name()
                             .map(|n| n.to_string_lossy().to_string())
                             .unwrap_or_else(|| path.to_string_lossy().to_string());
-                        let path_str = path.to_string_lossy().to_string();
 
                         div()
                             .id(SharedString::from(format!("click-bm-{bi}")))
-                            .on_click(cx.listener(move |this, _, _, cx| {
+                            .on_click(cx.listener(move |this, _, window, cx| {
                                 this.selected_idx = item_idx;
-                                this.confirm_selection(cx);
+                                this.confirm_selection(window, cx);
                             }))
                             .child(
                                 PaletteItem::new(
                                     SharedString::from(format!("bm-{bi}")),
                                     SharedString::from(name),
-                                    SharedString::from(path_str),
+                                    SharedString::from(""),
                                     None,
                                     true,
                                 )
@@ -565,7 +649,8 @@ impl Render for PaletteView {
                     .map(|(ai, action)| {
                         let item_idx = bookmark_count + ai;
                         let selected = self.selected_idx == item_idx;
-                        let is_type_search = action.path.starts_with("type://");
+                        let is_type_search =
+                            action.path.starts_with("type://") || action.path == "apps://";
                         let label = Self::action_label_for_action(action);
 
                         h_flex()
@@ -578,10 +663,9 @@ impl Render for PaletteView {
                             .rounded(RADIUS)
                             .cursor_pointer()
                             .when(selected, |el| el.bg(crate::theme::surface_active(cx)))
-                            .hover(|s| s.bg(crate::theme::surface_hover(cx)))
-                            .on_click(cx.listener(move |this, _, _, cx| {
+                            .on_click(cx.listener(move |this, _, window, cx| {
                                 this.selected_idx = item_idx;
-                                this.confirm_selection(cx);
+                                this.confirm_selection(window, cx);
                             }))
                             .child(
                                 Icon::new((action.icon)())

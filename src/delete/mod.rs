@@ -413,10 +413,7 @@ fn move_to_trash(path: &Path) -> Result<(), DeleteError> {
     // - Windows: SHFileOperation with FO_DELETE and FOF_ALLOWUNDO
 
     // For now, just warn and do permanent delete
-    tracing::warn!(
-        "Trash not implemented on this platform, permanently deleting: {}",
-        path.display()
-    );
+    tracing::warn!(path = %path.display(), "Trash not implemented on this platform, permanently deleting");
 
     let is_dir = path.is_dir();
     permanent_delete(path, is_dir)

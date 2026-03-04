@@ -18,6 +18,7 @@
 
 use std::collections::BTreeMap;
 use std::path::Path;
+use tracing::instrument;
 use std::sync::Arc;
 use std::time::SystemTime;
 
@@ -413,6 +414,7 @@ impl SearchIndex {
     }
 
     /// Add a root directory with progress tracking
+    #[instrument(skip(self, progress), fields(root = %root.display()))]
     pub fn add_root_with_progress(
         &mut self,
         root: &Path,
@@ -422,7 +424,7 @@ impl SearchIndex {
 
         // Check if already indexed
         if self.has_root(&root_str) {
-            tracing::info!("Root {} already indexed, skipping", root_str);
+            tracing::info!(root = %root_str, "Root already indexed, skipping");
             return Ok(());
         }
 
@@ -501,7 +503,7 @@ impl SearchIndex {
                     // Skip symlinks and special files
                 }
                 Err(e) => {
-                    tracing::warn!("Walk error: {}", e);
+                    tracing::warn!(depth = e.depth(), "Walk error: {}", e);
                 }
             }
         }
@@ -512,6 +514,7 @@ impl SearchIndex {
     /// Remove all entries from a specific root directory
     ///
     /// Returns the number of entries removed.
+    #[instrument(skip(self), fields(root = %root.display()))]
     pub fn remove_root(&mut self, root: &Path) -> usize {
         let root_str = root.to_string_lossy().to_string();
         let root_prefix = if root_str.ends_with('/') {
@@ -675,6 +678,7 @@ impl SearchIndex {
     ///
     /// This is the preferred entry point. All other search methods are kept for
     /// backward compatibility.
+    #[instrument(skip(self), fields(query = %q.text, limit = q.limit))]
     pub fn query(&self, q: SearchQuery) -> Vec<SearchResult> {
         match (q.text.is_empty(), &q.type_filter, &q.sort) {
             // Recent files (with optional text + type)

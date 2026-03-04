@@ -54,7 +54,7 @@ impl FileBrowserView {
     /// Toggle the in-browser search bar.
     pub fn toggle_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.search_active {
-            self.dismiss_search(cx);
+            self.dismiss_search(window, cx);
         } else {
             self.search_active = true;
             let input = cx.new(|cx| InputState::new(window, cx).placeholder("Filter files..."));
@@ -67,13 +67,14 @@ impl FileBrowserView {
                 },
             )
             .detach();
+            input.focus_handle(cx).focus(window);
             self.search_input = Some(input);
             cx.notify();
         }
     }
 
     /// Dismiss the search bar and restore original entries.
-    pub fn dismiss_search(&mut self, cx: &mut Context<Self>) {
+    pub fn dismiss_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.search_active = false;
         self.search_input = None;
 
@@ -96,6 +97,8 @@ impl FileBrowserView {
             None => {}
         }
         self.display_mode = None;
+        // Restore focus to the table
+        self.table_state.focus_handle(cx).focus(window);
         cx.notify();
     }
 
@@ -188,9 +191,9 @@ impl FileBrowserView {
                 .items_center()
                 .border_b_1()
                 .border_color(cx.theme().border)
-                .on_key_down(cx.listener(|this, ev: &KeyDownEvent, _window, cx| {
+                .on_key_down(cx.listener(|this, ev: &KeyDownEvent, window, cx| {
                     if ev.keystroke.key == "escape" {
-                        this.dismiss_search(cx);
+                        this.dismiss_search(window, cx);
                     }
                 }))
                 .child(div().flex_1().child(Input::new(input)))
@@ -209,8 +212,8 @@ impl FileBrowserView {
                         .compact()
                         .icon(IconName::Close)
                         .text_color(muted)
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.dismiss_search(cx);
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            this.dismiss_search(window, cx);
                         })),
                 )
                 .into_any_element(),

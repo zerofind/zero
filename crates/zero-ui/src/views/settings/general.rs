@@ -28,7 +28,7 @@ impl SettingsView {
 
         let content = v_flex()
             .gap_6()
-            // Appearance — theme selector
+            // Appearance — mode + light/dark theme selectors
             .child(
                 v_flex()
                     .gap_3()
@@ -40,9 +40,33 @@ impl SettingsView {
                             .border_color(border)
                             .overflow_hidden()
                             .child(setting_row(
-                                "Color theme",
-                                "Choose a color palette for the interface.",
-                                Select::new(&self.theme_select)
+                                "Mode",
+                                "Use light, dark, or follow the OS appearance.",
+                                Select::new(&self.mode_select)
+                                    .small()
+                                    .menu_width(px(160.0))
+                                    .into_any_element(),
+                                muted,
+                                fg,
+                                border,
+                                true,
+                            ))
+                            .child(setting_row(
+                                "Light theme",
+                                "Theme used in light mode.",
+                                Select::new(&self.light_theme_select)
+                                    .small()
+                                    .menu_width(px(220.0))
+                                    .into_any_element(),
+                                muted,
+                                fg,
+                                border,
+                                true,
+                            ))
+                            .child(setting_row(
+                                "Dark theme",
+                                "Theme used in dark mode.",
+                                Select::new(&self.dark_theme_select)
                                     .small()
                                     .menu_width(px(220.0))
                                     .into_any_element(),

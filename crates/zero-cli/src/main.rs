@@ -98,7 +98,7 @@ fn setup_rayon_global_pool() {
 
     if let Err(e) = result {
         // Global pool already initialized (e.g., in tests), that's fine
-        tracing::debug!("Rayon global pool already initialized: {}", e);
+        tracing::debug!(error = %e, "Rayon global pool already initialized");
     }
 }
 
@@ -194,9 +194,16 @@ fn main() -> anyhow::Result<()> {
 
         FmtSubscriber::builder()
             .with_env_filter(filter)
-            .with_target(false)
+            .with_target(true)
             .without_time()
             .init();
+
+        tracing::info!(
+            version = env!("CARGO_PKG_VERSION"),
+            platform = std::env::consts::OS,
+            arch = std::env::consts::ARCH,
+            "zero starting"
+        );
     }
 
     // Handle no command: launch GUI

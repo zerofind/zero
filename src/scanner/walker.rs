@@ -16,6 +16,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::SystemTime;
 
 use jwalk::WalkDir;
+use tracing::instrument;
 
 use super::entry::FileEntry;
 use super::filter::ScanFilter;
@@ -206,6 +207,7 @@ pub fn scan(
 ///     // process entries...
 /// }
 /// ```
+#[instrument(skip(options, progress), fields(root = %root.display()))]
 pub fn scan_with_progress(
     root: &Path,
     options: ScanOptions,

@@ -220,7 +220,7 @@ impl IndexWatcher {
         let mut index = match self.index.write() {
             Ok(guard) => guard,
             Err(e) => {
-                tracing::error!("Failed to acquire index write lock: {}", e);
+                tracing::error!(error = %e, "Failed to acquire index write lock");
                 return;
             }
         };

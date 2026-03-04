@@ -68,6 +68,10 @@ jobs:
           mkdir -p dist/${ARTIFACT_NAME}
           cp target/${{ matrix.target }}/release/${BINARY_NAME} dist/${ARTIFACT_NAME}/
           cp LICENSE README.md dist/${ARTIFACT_NAME}/ 2>/dev/null || true
+          # Include macOS app icon for bundle creation during install
+          if [[ "${{ matrix.os_arch }}" == macos-* ]] && [ -f resources/AppIcon.icns ]; then
+            cp resources/AppIcon.icns dist/${ARTIFACT_NAME}/
+          fi
           cd dist
           tar -czf ${ARTIFACT_NAME}.tgz ${ARTIFACT_NAME}
           shasum -a 512 ${ARTIFACT_NAME}.tgz | cut -d' ' -f1 > ${ARTIFACT_NAME}.tgz.sha512

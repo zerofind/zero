@@ -9,58 +9,39 @@ pub mod ui;
 mod views;
 
 use gpui::*;
-use gpui_component::{
-    Root,
-    theme::{Theme, ThemeMode},
-};
+use gpui_component::Root;
 
 use actions::{
     CopyFiles, CopyPath, CutFiles, DuplicateFiles, FindInBrowser, GoBack, GoForward, GoUp,
-    MoveToTrash, NewFolder, OpenCommandPalette, OpenSelected, PasteFiles, QuickLook, Quit, Refresh,
-    Rename, SelectAll, ToggleSidebar, ToggleSplitView, ToggleViewMode,
+    MoveToTrash, NewFolder, OpenCommandPalette, OpenSelected, OpenSettings, PasteFiles, QuickLook,
+    Quit, Refresh, Rename, SelectAll, ToggleSidebar, ToggleSplitView, ToggleToolbar,
+    ToggleViewMode,
 };
 use app::ZeroApp;
 
 /// Launch the GPUI-based file manager window.
 pub fn launch() {
+    // Set up tracing before gpui (which installs its own subscriber if none exists)
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("zero_ui=info,warn"));
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_target(true)
+        .init();
+
+    tracing::info!(
+        version = env!("CARGO_PKG_VERSION"),
+        platform = std::env::consts::OS,
+        arch = std::env::consts::ARCH,
+        "zero-app starting"
+    );
+
     let app = Application::new().with_assets(gpui_component_assets::Assets);
 
     app.run(move |cx| {
         gpui_component::init(cx);
 
-        let settings = crate::session::Settings::load();
-        let mode = match settings.theme_mode.as_str() {
-            "light" => ThemeMode::Light,
-            "system" => {
-                // Detect OS preference
-                #[cfg(target_os = "macos")]
-                {
-                    let output = std::process::Command::new("defaults")
-                        .args(["read", "-g", "AppleInterfaceStyle"])
-                        .output();
-                    if output
-                        .ok()
-                        .map(|o| {
-                            String::from_utf8_lossy(&o.stdout)
-                                .trim()
-                                .eq_ignore_ascii_case("dark")
-                        })
-                        .unwrap_or(false)
-                    {
-                        ThemeMode::Dark
-                    } else {
-                        ThemeMode::Light
-                    }
-                }
-                #[cfg(not(target_os = "macos"))]
-                {
-                    ThemeMode::Dark
-                }
-            }
-            _ => ThemeMode::Dark,
-        };
         theme::init_zero_theme(cx);
-        Theme::change(mode, None, cx);
         theme::watch_user_themes(cx);
 
         cx.bind_keys([
@@ -72,6 +53,10 @@ pub fn launch() {
             KeyBinding::new("cmd-b", ToggleSidebar, None),
             #[cfg(not(target_os = "macos"))]
             KeyBinding::new("ctrl-b", ToggleSidebar, None),
+            #[cfg(target_os = "macos")]
+            KeyBinding::new("cmd-,", OpenSettings, None),
+            #[cfg(not(target_os = "macos"))]
+            KeyBinding::new("ctrl-,", OpenSettings, None),
             #[cfg(target_os = "macos")]
             KeyBinding::new("cmd-k", OpenCommandPalette, None),
             #[cfg(not(target_os = "macos"))]
@@ -92,6 +77,11 @@ pub fn launch() {
             KeyBinding::new("cmd-up", GoUp, None),
             #[cfg(not(target_os = "macos"))]
             KeyBinding::new("alt-up", GoUp, None),
+            // Toolbar toggle
+            #[cfg(target_os = "macos")]
+            KeyBinding::new("cmd-/", ToggleToolbar, None),
+            #[cfg(not(target_os = "macos"))]
+            KeyBinding::new("ctrl-/", ToggleToolbar, None),
             // View mode toggle
             #[cfg(target_os = "macos")]
             KeyBinding::new("cmd-2", ToggleViewMode, None),
@@ -175,12 +165,14 @@ pub fn launch() {
                 Bounds::centered(None, s, cx)
             });
 
-            cx.open_window(
+            let window = cx.open_window(
                 WindowOptions {
                     titlebar: Some(TitlebarOptions {
                         title: None,
                         appears_transparent: true,
-                        traffic_light_position: Some(point(px(11.0), px(11.0))),
+                        // Native traffic lights moved off-screen; custom ones
+                        // rendered in sidebar for proper inactive-window tinting.
+                        traffic_light_position: Some(point(px(-1000.0), px(-1000.0))),
                     }),
                     window_bounds: Some(WindowBounds::Windowed(window_bounds?)),
                     ..Default::default()
@@ -190,6 +182,10 @@ pub fn launch() {
                     cx.new(|cx| Root::new(view, window, cx))
                 },
             )?;
+
+            // Bring app to foreground — required for CLI-launched GUI on macOS
+            cx.update(|cx| cx.activate(true))?;
+            window.update(cx, |_, window, _| window.activate_window())?;
 
             Ok::<_, anyhow::Error>(())
         })

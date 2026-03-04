@@ -270,7 +270,7 @@ impl FileBrowserView {
                             }
                         };
                         if let Err(e) = result {
-                            eprintln!("[zero-ui] paste error: {e}");
+                            tracing::error!(error = %e, "paste failed");
                         }
                     }
                 })
@@ -358,7 +358,7 @@ impl FileBrowserView {
             let parent = entry.path.parent().unwrap_or(&self.path);
             let target = unique_path(&parent.join(file_name));
             if let Err(e) = copy_recursive(&entry.path, &target) {
-                eprintln!("[zero-ui] duplicate error: {}", e);
+                tracing::error!(error = %e, "duplicate failed");
             }
         }
         self.reload(cx);

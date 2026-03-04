@@ -18,6 +18,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::mpsc;
+use tracing::instrument;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -175,6 +176,7 @@ impl SyncJob {
     ///
     /// # Returns
     /// The sync result, or an error if the sync failed or was cancelled
+    #[instrument(skip(self, sync_atomic_progress), fields(source = %self.source.display(), dest = %self.dest.display()))]
     pub fn run_with_atomic_progress(
         &self,
         sync_atomic_progress: Arc<SyncAtomicProgress>,
@@ -185,6 +187,7 @@ impl SyncJob {
     /// Run the sync job with a callback for progress updates
     ///
     /// This is the original CLI-oriented method. For FFI, prefer `run_with_atomic_progress`.
+    #[instrument(skip(self, on_progress), fields(source = %self.source.display(), dest = %self.dest.display()))]
     pub fn run(&self, mut on_progress: impl FnMut(&SyncProgress)) -> Result<SyncResult, SyncError> {
         // Wrap the callback - we can't use Box<dyn> due to lifetime issues
         // so we call run_internal_with_callback directly
@@ -817,7 +820,7 @@ impl SyncJob {
             match sync_dir_permissions(&self.source, &self.dest) {
                 Ok(result) => result.dirs_synced,
                 Err(e) => {
-                    tracing::warn!("Failed to sync directory permissions: {}", e);
+                    tracing::warn!(error = %e, "Failed to sync directory permissions");
                     0
                 }
             }

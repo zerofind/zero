@@ -17,9 +17,11 @@ use gpui_component::{
 
 use zero::scanner::CrawlProgress;
 
+use gpui_component::theme::ThemeMode;
+
 use crate::services::{SearchEvent, SearchService};
 use crate::session::Settings;
-use crate::theme::{self, FONT_SIZE_BODY, THEME_NAMES};
+use crate::theme::{self, FONT_SIZE_BODY};
 
 // -- Events emitted to the parent ZeroApp ------------------------------------
 
@@ -40,11 +42,15 @@ pub(super) enum SettingsTab {
 
 // -- View state --------------------------------------------------------------
 
+const MODE_LABELS: &[&str] = &["Light", "Dark", "System"];
+
 pub struct SettingsView {
     pub(super) active_tab: SettingsTab,
     pub(super) settings: Settings,
     pub(super) search: Entity<SearchService>,
-    pub(super) theme_select: Entity<SelectState<Vec<String>>>,
+    pub(super) mode_select: Entity<SelectState<Vec<String>>>,
+    pub(super) light_theme_select: Entity<SelectState<Vec<String>>>,
+    pub(super) dark_theme_select: Entity<SelectState<Vec<String>>>,
 
     // Search tab
     pub(super) adding_root: bool,
@@ -73,20 +79,62 @@ impl SettingsView {
 
         let settings = Settings::load();
 
-        // Theme selector dropdown
-        let items: Vec<String> = THEME_NAMES.iter().map(|s| s.to_string()).collect();
-        let selected_idx = THEME_NAMES
-            .iter()
-            .position(|&n| n == settings.theme)
-            .unwrap_or(0);
-        let theme_select =
-            cx.new(|cx| SelectState::new(items, Some(IndexPath::new(selected_idx)), window, cx));
+        // Mode selector (Light / Dark / System)
+        let mode_items: Vec<String> = MODE_LABELS.iter().map(|s| s.to_string()).collect();
+        let mode_idx = match settings.theme_mode.as_str() {
+            "light" => 0,
+            "dark" => 1,
+            _ => 2, // system
+        };
+        let mode_select =
+            cx.new(|cx| SelectState::new(mode_items, Some(IndexPath::new(mode_idx)), window, cx));
 
-        let select_sub = cx.subscribe(
-            &theme_select,
+        let mode_sub = cx.subscribe(
+            &mode_select,
+            |this, _, event: &SelectEvent<Vec<String>>, cx| {
+                if let SelectEvent::Confirm(Some(label)) = event {
+                    let mode = match label.as_str() {
+                        "Light" => "light",
+                        "Dark" => "dark",
+                        _ => "system",
+                    };
+                    this.set_mode(mode, cx);
+                }
+            },
+        );
+
+        // Light theme selector
+        let light_items = theme::theme_names_for_mode(ThemeMode::Light, cx);
+        let light_idx = light_items
+            .iter()
+            .position(|n| n == &settings.light_theme)
+            .unwrap_or(0);
+        let light_theme_select =
+            cx.new(|cx| SelectState::new(light_items, Some(IndexPath::new(light_idx)), window, cx));
+
+        let light_sub = cx.subscribe(
+            &light_theme_select,
             |this, _, event: &SelectEvent<Vec<String>>, cx| {
                 if let SelectEvent::Confirm(Some(name)) = event {
-                    this.set_theme_name(name, cx);
+                    this.set_light_theme(name, cx);
+                }
+            },
+        );
+
+        // Dark theme selector
+        let dark_items = theme::theme_names_for_mode(ThemeMode::Dark, cx);
+        let dark_idx = dark_items
+            .iter()
+            .position(|n| n == &settings.dark_theme)
+            .unwrap_or(0);
+        let dark_theme_select =
+            cx.new(|cx| SelectState::new(dark_items, Some(IndexPath::new(dark_idx)), window, cx));
+
+        let dark_sub = cx.subscribe(
+            &dark_theme_select,
+            |this, _, event: &SelectEvent<Vec<String>>, cx| {
+                if let SelectEvent::Confirm(Some(name)) = event {
+                    this.set_dark_theme(name, cx);
                 }
             },
         );
@@ -105,7 +153,9 @@ impl SettingsView {
             active_tab: SettingsTab::General,
             settings,
             search,
-            theme_select,
+            mode_select,
+            light_theme_select,
+            dark_theme_select,
             adding_root: false,
             root_input,
             root_error: None,
@@ -116,24 +166,34 @@ impl SettingsView {
             rebuilding: false,
             rebuild_files: 0,
             focus_handle: cx.focus_handle(),
-            _subs: vec![search_sub, select_sub],
+            _subs: vec![search_sub, mode_sub, light_sub, dark_sub],
         }
     }
 
     // -- Actions -------------------------------------------------------------
 
-    pub(super) fn set_theme_name(&mut self, name: &str, cx: &mut Context<Self>) {
-        self.settings.theme = name.to_string();
+    pub(super) fn set_mode(&mut self, mode: &str, cx: &mut Context<Self>) {
+        self.settings.theme_mode = mode.to_string();
+        self.apply_and_save(cx);
+    }
 
-        // Single-mode themes force the mode to match
-        if let Some(forced) = theme::forced_mode_for_theme(name, cx) {
-            self.settings.theme_mode = match forced {
-                gpui_component::theme::ThemeMode::Light => "light".to_string(),
-                gpui_component::theme::ThemeMode::Dark => "dark".to_string(),
-            };
-        }
+    pub(super) fn set_light_theme(&mut self, name: &str, cx: &mut Context<Self>) {
+        self.settings.light_theme = name.to_string();
+        self.apply_and_save(cx);
+    }
 
-        theme::apply_named_theme(&self.settings.theme, &self.settings.theme_mode, cx);
+    pub(super) fn set_dark_theme(&mut self, name: &str, cx: &mut Context<Self>) {
+        self.settings.dark_theme = name.to_string();
+        self.apply_and_save(cx);
+    }
+
+    fn apply_and_save(&mut self, cx: &mut Context<Self>) {
+        theme::apply_dual_themes(
+            &self.settings.light_theme,
+            &self.settings.dark_theme,
+            &self.settings.theme_mode,
+            cx,
+        );
         self.settings.save();
         cx.notify();
     }
@@ -249,7 +309,12 @@ impl SettingsView {
         self.settings = Settings::default();
         self.settings.save();
 
-        theme::apply_named_theme(&self.settings.theme, &self.settings.theme_mode, cx);
+        theme::apply_dual_themes(
+            &self.settings.light_theme,
+            &self.settings.dark_theme,
+            &self.settings.theme_mode,
+            cx,
+        );
 
         cx.notify();
     }

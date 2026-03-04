@@ -34,5 +34,7 @@ actions!(
         FindDuplicatesHere,
         MoveToOtherPane,
         CopyToOtherPane,
+        OpenSettings,
+        ToggleToolbar,
     ]
 );

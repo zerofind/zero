@@ -2,16 +2,19 @@ use std::path::PathBuf;
 
 use gpui::*;
 use gpui_component::{
-    ActiveTheme, Icon, IconName, Sizable as _, h_flex,
+    ActiveTheme, Disableable as _, Icon, IconName, Sizable as _,
+    button::{Button, ButtonVariants as _},
+    h_flex,
     menu::{ContextMenuExt as _, PopupMenuItem},
     v_flex,
 };
 
 use crate::models::ActiveView;
+use crate::platform::traffic_lights::TrafficLights;
 use crate::session::Settings;
 use crate::theme::{
-    self, BOOKMARK_TILE_HEIGHT, ICON_MD, PADDING_LG, PADDING_MD, RADIUS, SIDEBAR_TOP_INSET,
-    SIDEBAR_WIDTH,
+    self, BOOKMARK_TILE_HEIGHT, ICON_MD, ICON_XS, PADDING_LG, PADDING_MD, RADIUS, RADIUS_SM,
+    SIDEBAR_TOP_INSET, SIDEBAR_WIDTH, SPACE_XS,
 };
 use crate::ui::{SectionHeader, SidebarRow};
 
@@ -25,6 +28,10 @@ pub enum SidebarEvent {
     EjectDrive(PathBuf),
     FindDuplicates(PathBuf),
     IndexLocation(PathBuf),
+    GoBack,
+    GoForward,
+    ToggleSidebar,
+    OpenSearch,
 }
 
 impl EventEmitter<SidebarEvent> for AppSidebar {}
@@ -37,6 +44,10 @@ pub struct AppSidebar {
     /// Regular bookmarks shown as rows in the BOOKMARKS section.
     bookmarks: Vec<PathBuf>,
     drives: Vec<DriveEntry>,
+    /// When false, nav controls are shown in the sidebar header.
+    toolbar_visible: bool,
+    can_go_back: bool,
+    can_go_forward: bool,
     #[allow(dead_code)]
     focus_handle: FocusHandle,
 }
@@ -63,6 +74,9 @@ impl AppSidebar {
             pinned_bookmarks,
             bookmarks,
             drives,
+            toolbar_visible: true,
+            can_go_back: false,
+            can_go_forward: false,
             focus_handle: cx.focus_handle(),
         }
     }
@@ -115,6 +129,12 @@ impl AppSidebar {
         cx.notify();
     }
 
+    pub fn set_toolbar_state(&mut self, visible: bool, can_back: bool, can_forward: bool) {
+        self.toolbar_visible = visible;
+        self.can_go_back = can_back;
+        self.can_go_forward = can_forward;
+    }
+
     fn discover_drives() -> Vec<DriveEntry> {
         let mut drives = Vec::new();
 
@@ -140,6 +160,121 @@ impl AppSidebar {
         }
 
         drives
+    }
+
+    /// Nav controls shown in the sidebar header when toolbar is hidden.
+    fn render_nav_header(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let muted = cx.theme().muted_foreground;
+        let disabled_color = muted.opacity(0.35);
+        let can_back = self.can_go_back;
+        let can_forward = self.can_go_forward;
+
+        h_flex()
+            .w_full()
+            .items_center()
+            .gap(px(4.0))
+            .pl(px(70.0)) // after traffic lights
+            .pr(PADDING_MD)
+            .h(SIDEBAR_TOP_INSET)
+            // Sidebar toggle
+            .child(
+                Button::new("sb-sidebar-toggle")
+                    .ghost()
+                    .small()
+                    .icon(IconName::PanelLeftClose)
+                    .text_color(muted)
+                    .on_click(cx.listener(|_, _, _, cx| {
+                        cx.emit(SidebarEvent::ToggleSidebar);
+                    })),
+            )
+            // Back / Forward
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .items_center()
+                    .gap(SPACE_XS)
+                    .child(
+                        Button::new("sb-nav-back")
+                            .ghost()
+                            .small()
+                            .icon(IconName::ChevronLeft)
+                            .text_color(if can_back { muted } else { disabled_color })
+                            .disabled(!can_back)
+                            .on_click(cx.listener(|_, _, _, cx| {
+                                cx.emit(SidebarEvent::GoBack);
+                            })),
+                    )
+                    .child(
+                        Button::new("sb-nav-forward")
+                            .ghost()
+                            .small()
+                            .icon(IconName::ChevronRight)
+                            .text_color(if can_forward { muted } else { disabled_color })
+                            .disabled(!can_forward)
+                            .on_click(cx.listener(|_, _, _, cx| {
+                                cx.emit(SidebarEvent::GoForward);
+                            })),
+                    ),
+            )
+            // Spacer
+            .child(div().flex_1())
+            // Search button
+            .child(
+                Button::new("sb-search")
+                    .ghost()
+                    .small()
+                    .icon(IconName::Search)
+                    .text_color(muted)
+                    .on_click(cx.listener(|_, _, _, cx| {
+                        cx.emit(SidebarEvent::OpenSearch);
+                    })),
+            )
+    }
+
+    /// Path bar shown below nav header when toolbar is hidden.
+    fn render_path_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let muted = cx.theme().muted_foreground;
+        let folder_name = self
+            .current_path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "Macintosh HD".to_string());
+
+        div()
+            .id("sidebar-path-bar")
+            .cursor_pointer()
+            .flex()
+            .flex_row()
+            .items_center()
+            .gap(px(6.0))
+            .px(PADDING_MD)
+            .py(px(4.0))
+            .rounded(RADIUS_SM)
+            .hover(|s| s.bg(cx.theme().muted.opacity(0.5)))
+            .on_click(cx.listener(|_, _, _, cx| {
+                cx.emit(SidebarEvent::OpenSearch);
+            }))
+            .child(
+                Icon::new(IconName::Folder)
+                    .with_size(ICON_XS)
+                    .text_color(muted.opacity(0.6)),
+            )
+            .child(
+                div()
+                    .text_size(px(13.0))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(muted)
+                    .text_ellipsis()
+                    .whitespace_nowrap()
+                    .min_w_0()
+                    .child(SharedString::from(folder_name)),
+            )
+            .child(
+                Icon::new(IconName::ChevronDown)
+                    .with_size(px(9.0))
+                    .text_color(muted.opacity(0.4)),
+            )
     }
 
     fn render_settings_row(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -178,7 +313,7 @@ impl AppSidebar {
                 let p = path.clone();
 
                 let icon_color = if is_active {
-                    theme::selection_color(cx)
+                    cx.theme().foreground
                 } else {
                     muted
                 };
@@ -186,7 +321,7 @@ impl AppSidebar {
                 let bg = if is_active {
                     theme::selection_active_bg(cx)
                 } else {
-                    gpui::transparent_black()
+                    cx.theme().background
                 };
 
                 let ctx_open = path.clone();
@@ -487,27 +622,51 @@ fn bookmark_icon(name: &str) -> IconName {
 
 impl Render for AppSidebar {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        v_flex()
+        let toolbar_hidden = !self.toolbar_visible;
+
+        let top_padding = if toolbar_hidden {
+            px(0.0)
+        } else {
+            SIDEBAR_TOP_INSET
+        };
+
+        let mut root = v_flex()
             .id("sidebar")
+            .relative()
             .w(SIDEBAR_WIDTH)
             .h_full()
             .flex_shrink_0()
             .bg(theme::sidebar_bg(cx))
-            .pt(SIDEBAR_TOP_INSET) // below traffic lights
+            .pt(top_padding)
             .px(PADDING_MD)
             .pb(PADDING_LG)
+            // Custom traffic lights — positioned where native ones used to be
             .child(
-                v_flex()
-                    .id("sidebar-scroll")
-                    .flex_1()
-                    .min_h_0()
-                    .gap_4()
-                    .overflow_y_scroll()
-                    .child(self.render_pinned_bookmarks(cx))
-                    .child(self.render_regular_bookmarks(cx))
-                    .child(self.render_drives(cx)),
-            )
-            // Settings pinned at bottom
-            .child(self.render_settings_row(cx))
+                div()
+                    .absolute()
+                    .top(px(11.0))
+                    .left(px(11.0))
+                    .child(TrafficLights::new()),
+            );
+
+        if toolbar_hidden {
+            root = root
+                .child(self.render_nav_header(cx))
+                .child(self.render_path_bar(cx));
+        }
+
+        root.child(
+            v_flex()
+                .id("sidebar-scroll")
+                .flex_1()
+                .min_h_0()
+                .gap_4()
+                .overflow_y_scroll()
+                .child(self.render_pinned_bookmarks(cx))
+                .child(self.render_regular_bookmarks(cx))
+                .child(self.render_drives(cx)),
+        )
+        // Settings pinned at bottom
+        .child(self.render_settings_row(cx))
     }
 }

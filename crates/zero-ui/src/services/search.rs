@@ -58,9 +58,17 @@ impl SearchService {
         self.manager.search(query, limit)
     }
 
-    #[allow(dead_code)]
     pub fn search_by_type(&self, file_type: &str, limit: usize) -> Vec<SearchResult> {
         self.manager.search_by_type(file_type, limit)
+    }
+
+    pub fn search_with_type(
+        &self,
+        query: &str,
+        type_filter: &str,
+        limit: usize,
+    ) -> Vec<SearchResult> {
+        self.manager.search_with_type(query, type_filter, limit)
     }
 
     #[allow(dead_code)]
@@ -100,10 +108,7 @@ impl SearchService {
         settings_roots: Vec<PathBuf>,
         cx: &mut Context<Self>,
     ) -> Arc<CrawlProgress> {
-        eprintln!(
-            "[zero-ui] rebuild: {} root(s) requested",
-            settings_roots.len()
-        );
+        tracing::info!(roots = settings_roots.len(), "rebuild requested");
         self.indexing = true;
         cx.notify();
 
@@ -137,7 +142,7 @@ impl SearchService {
             };
 
             if roots.is_empty() {
-                eprintln!("[zero-ui] rebuild: no search roots configured");
+                tracing::warn!("rebuild: no search roots configured");
                 this.update(cx, |svc, cx| {
                     svc.indexing = false;
                     cx.emit(SearchEvent::IndexingFinished);
@@ -147,10 +152,10 @@ impl SearchService {
                 return;
             }
 
-            eprintln!("[zero-ui] rebuild: indexing {} root(s)", roots.len());
+            tracing::info!(roots = roots.len(), "rebuild: indexing");
 
             for root in &roots {
-                eprintln!("[zero-ui] rebuild: indexing {}", root);
+                tracing::debug!(root = %root, "rebuild: indexing root");
 
                 // Remove old index on main thread (fast HashMap remove)
                 let indexes_dir = this.update(cx, |svc, _| {
@@ -181,7 +186,7 @@ impl SearchService {
                 // Apply result on main thread (fast memory insert)
                 match build_result {
                     Ok((root_str, index, count)) => {
-                        eprintln!("[zero-ui] rebuild: {} — {} files", root_str, count);
+                        tracing::info!(root = %root_str, files = count, "rebuild: root complete");
                         this.update(cx, |svc, _| {
                             svc.manager
                                 .insert_index_memory_only(&root_str, index, count);
@@ -189,12 +194,12 @@ impl SearchService {
                         .ok();
                     }
                     Err(e) => {
-                        eprintln!("[zero-ui] rebuild: {} — error: {}", root, e);
+                        tracing::error!(root = %root, error = %e, "rebuild: root failed");
                     }
                 }
             }
 
-            eprintln!("[zero-ui] rebuild: complete");
+            tracing::info!("rebuild: complete");
             this.update(cx, |svc, cx| {
                 svc.indexing = false;
                 cx.emit(SearchEvent::IndexingFinished);
@@ -208,7 +213,7 @@ impl SearchService {
     }
 
     pub fn add_root(&mut self, path: &str, cx: &mut Context<Self>) {
-        eprintln!("[zero-ui] add_root: {}", path);
+        tracing::info!(root = %path, "add_root");
         let path_owned = path.to_string();
         let indexes_dir = self.manager.indexes_dir().to_path_buf();
 
@@ -241,12 +246,12 @@ impl SearchService {
             this.update(cx, |svc, cx| {
                 match build_result {
                     Ok((root_str, index, count)) => {
-                        eprintln!("[zero-ui] add_root: {} — {} files", root_str, count);
+                        tracing::info!(root = %root_str, files = count, "add_root: complete");
                         svc.manager
                             .insert_index_memory_only(&root_str, index, count);
                     }
                     Err(e) => {
-                        eprintln!("[zero-ui] add_root: error: {}", e);
+                        tracing::error!(error = %e, "add_root: failed");
                     }
                 }
                 svc.roots = svc.manager.roots().into_iter().map(PathBuf::from).collect();
@@ -293,7 +298,7 @@ impl SearchService {
                     svc.manager = loaded;
                     svc.roots = svc.manager.roots().into_iter().map(PathBuf::from).collect();
                     svc.loading = false;
-                    eprintln!("[zero-ui] index loaded: {} root(s)", root_count);
+                    tracing::info!(roots = root_count, "index loaded");
                     cx.emit(SearchEvent::IndexLoaded);
                     cx.notify();
                 })
@@ -322,10 +327,7 @@ impl SearchService {
             };
 
             let home_str = home.to_string_lossy().to_string();
-            eprintln!(
-                "[zero-ui] no indexed roots, starting auto-index of {}",
-                home_str
-            );
+            tracing::info!(path = %home_str, "no indexed roots, starting auto-index");
 
             let progress = Arc::new(CrawlProgress::new());
             let p = progress.clone();
@@ -340,7 +342,7 @@ impl SearchService {
             // Extract indexes_dir on main thread before going to background
             let indexes_dir = this.update(cx, |svc, cx| {
                 svc.indexing = true;
-                eprintln!("[zero-ui] emitting IndexingStarted for {}", home_str);
+                tracing::debug!(path = %home_str, "emitting IndexingStarted");
                 cx.emit(SearchEvent::IndexingStarted {
                     progress: progress.clone(),
                     path: home_str.clone(),
@@ -349,11 +351,11 @@ impl SearchService {
                 svc.manager.indexes_dir().to_path_buf()
             });
             let Ok(indexes_dir) = indexes_dir else {
-                eprintln!("[zero-ui] auto-index: failed to get indexes_dir");
+                tracing::error!("auto-index: failed to get indexes_dir");
                 return;
             };
 
-            eprintln!("[zero-ui] auto-index: building index on background thread...");
+            tracing::info!("auto-index: building index on background thread");
             // Build index on background thread
             let home_clone = home_str.clone();
             let build_result = cx
@@ -373,9 +375,10 @@ impl SearchService {
             // Apply result on main thread
             match build_result {
                 Ok((root_str, index, count)) => {
-                    eprintln!(
-                        "[zero-ui] auto-index complete: {} files indexed for {}",
-                        count, root_str
+                    tracing::info!(
+                        root = %root_str,
+                        files = count,
+                        "auto-index complete"
                     );
                     this.update(cx, |svc, _| {
                         svc.manager
@@ -385,7 +388,7 @@ impl SearchService {
                     .ok();
                 }
                 Err(e) => {
-                    eprintln!("[zero-ui] auto-index FAILED: {}", e);
+                    tracing::error!(error = %e, "auto-index failed");
                 }
             }
 
@@ -426,7 +429,7 @@ impl SearchService {
                     };
                     for root in &roots {
                         if let Err(e) = watcher.watch(root) {
-                            eprintln!("[zero-ui] watcher: failed to watch {}: {e}", root.display());
+                            tracing::warn!(path = %root.display(), error = %e, "watcher: failed to watch root");
                         }
                     }
                     Ok(watcher)
@@ -436,13 +439,13 @@ impl SearchService {
             let mut watcher = match watcher_result {
                 Ok(w) => w,
                 Err(e) => {
-                    eprintln!("[zero-ui] watcher: {e}");
+                    tracing::error!(error = %e, "watcher: failed to start");
                     this.update(cx, |svc, _| svc.watcher_active = false).ok();
                     return;
                 }
             };
 
-            eprintln!("[zero-ui] watcher: started");
+            tracing::info!("watcher: started");
 
             // Collect changed roots, rebuild after quiet period
             let mut dirty_roots: std::collections::HashSet<String> =
@@ -472,10 +475,7 @@ impl SearchService {
                         let roots_to_rebuild: Vec<String> = dirty_roots.drain().collect();
                         last_event_time = None;
 
-                        eprintln!(
-                            "[zero-ui] watcher: rebuilding {} root(s)",
-                            roots_to_rebuild.len()
-                        );
+                        tracing::info!(roots = roots_to_rebuild.len(), "watcher: rebuilding");
 
                         for root in &roots_to_rebuild {
                             // Remove old index on main thread (fast)
@@ -513,7 +513,7 @@ impl SearchService {
                                     .ok();
                                 }
                                 Err(e) => {
-                                    eprintln!("[zero-ui] watcher: rebuild {} — error: {}", root, e);
+                                    tracing::error!(root = %root, error = %e, "watcher: rebuild failed");
                                 }
                             }
                         }

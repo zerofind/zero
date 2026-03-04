@@ -150,7 +150,7 @@ impl UsbWatcher {
             Ok(event) => self.filter_event(event),
             Err(mpsc::TryRecvError::Empty) => None,
             Err(mpsc::TryRecvError::Disconnected) => {
-                tracing::error!("USB watcher channel disconnected");
+                tracing::error!("USB watcher channel disconnected (try_recv)");
                 None
             }
         }
@@ -161,7 +161,7 @@ impl UsbWatcher {
         match self.event_rx.recv() {
             Ok(event) => self.filter_event(event),
             Err(_) => {
-                tracing::error!("USB watcher channel disconnected");
+                tracing::error!("USB watcher channel disconnected (recv)");
                 None
             }
         }
@@ -173,7 +173,7 @@ impl UsbWatcher {
             Ok(event) => self.filter_event(event),
             Err(mpsc::RecvTimeoutError::Timeout) => None,
             Err(mpsc::RecvTimeoutError::Disconnected) => {
-                tracing::error!("USB watcher channel disconnected");
+                tracing::error!("USB watcher channel disconnected (recv_timeout)");
                 None
             }
         }
@@ -295,7 +295,7 @@ fn run_disk_arbitration_loop(state: Arc<Mutex<WatcherState>>, stop_rx: mpsc::Rec
         // Create a DiskArbitration session
         let session = DASessionCreate(kCFAllocatorDefault);
         if session.is_null() {
-            tracing::error!("Failed to create DiskArbitration session");
+            tracing::error!("Failed to create DiskArbitration session (null DASessionRef)");
             return;
         }
 
@@ -406,7 +406,7 @@ extern "C" fn disk_appeared_callback(disk: DADiskRef, context: *mut c_void) {
             let mut guard = match state.lock() {
                 Ok(g) => g,
                 Err(e) => {
-                    tracing::error!("Failed to lock state: {}", e);
+                    tracing::error!(error = %e, "Failed to lock watcher state");
                     return;
                 }
             };
@@ -451,7 +451,7 @@ extern "C" fn disk_disappeared_callback(disk: DADiskRef, context: *mut c_void) {
             let mut guard = match state.lock() {
                 Ok(g) => g,
                 Err(e) => {
-                    tracing::error!("Failed to lock state: {}", e);
+                    tracing::error!(error = %e, "Failed to lock watcher state");
                     return;
                 }
             };

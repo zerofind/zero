@@ -17,8 +17,8 @@ use gpui_component::{
 use zero::scanner::CrawlProgress;
 
 use crate::actions::{
-    GoBack, GoForward, GoUp, OpenCommandPalette, PasteFiles, ToggleSidebar, ToggleSplitView,
-    ToggleViewMode,
+    GoBack, GoForward, GoUp, OpenCommandPalette, OpenSettings, PasteFiles, ToggleSidebar,
+    ToggleSplitView, ToggleToolbar, ToggleViewMode,
 };
 use crate::models::{ActiveView, FileClipboard, PaneId, SplitPane, ViewMode};
 use crate::services::{SearchEvent, SearchService, ServiceHub};
@@ -39,6 +39,7 @@ pub struct ZeroApp {
     pub active_view: ActiveView,
     pub view_mode: ViewMode,
     pub sidebar_open: bool,
+    pub toolbar_visible: bool,
 
     // Services
     pub services: ServiceHub,
@@ -83,6 +84,7 @@ pub struct ZeroApp {
     pub sidebar: Option<Entity<AppSidebar>>,
 
     pub focus_handle: FocusHandle,
+    pub focus_redirect_registered: bool,
     pub _subs: Vec<Subscription>,
 }
 
@@ -127,6 +129,7 @@ impl ZeroApp {
             active_view: ActiveView::FileBrowser,
             view_mode,
             sidebar_open: settings.sidebar_open,
+            toolbar_visible: settings.toolbar_visible,
             services,
             file_browser: None,
             file_grid: None,
@@ -152,6 +155,7 @@ impl ZeroApp {
             onboarding: None,
             sidebar: None,
             focus_handle: cx.focus_handle(),
+            focus_redirect_registered: false,
             _subs: vec![search_sub],
         };
 
@@ -212,7 +216,7 @@ impl ZeroApp {
         match event {
             SearchEvent::IndexLoaded => {
                 let is_indexing = self.services.search.read(cx).is_indexing();
-                eprintln!("[zero-ui] event: IndexLoaded (is_indexing={})", is_indexing);
+                tracing::debug!(is_indexing, "event: IndexLoaded");
                 if !is_indexing {
                     self.banner = None;
                     // Start file watcher for live updates
@@ -223,7 +227,7 @@ impl ZeroApp {
                 }
             }
             SearchEvent::IndexingStarted { progress, path } => {
-                eprintln!("[zero-ui] event: IndexingStarted path={}", path);
+                tracing::debug!(path = %path, "event: IndexingStarted");
                 self.active_progress = Some(progress.clone());
 
                 // Abbreviate home dir prefix with ~
@@ -253,7 +257,7 @@ impl ZeroApp {
                 );
             }
             SearchEvent::IndexingFinished => {
-                eprintln!("[zero-ui] event: IndexingFinished");
+                tracing::debug!("event: IndexingFinished");
                 self.active_progress = None;
                 self.banner = None;
                 // Start file watcher after indexing completes
@@ -350,6 +354,7 @@ impl ZeroApp {
 impl Render for ZeroApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let sidebar_open = self.sidebar_open;
+        let toolbar_visible = self.toolbar_visible;
         let palette_open = self.command_palette_open;
 
         let has_alerts = !self.alerts.is_empty();
@@ -473,7 +478,11 @@ impl Render for ZeroApp {
         let has_split = self.split_pane.is_some();
 
         let sidebar_view = self.ensure_sidebar(window, cx);
-        let titlebar = self.render_titlebar(window, cx);
+        let titlebar = if toolbar_visible {
+            Some(self.render_titlebar(window, cx))
+        } else {
+            None
+        };
         let content = self.render_content(window, cx);
         let split_content = if has_split {
             Some(self.render_split_pane(window, cx))
@@ -492,16 +501,38 @@ impl Render for ZeroApp {
             None
         };
 
+        // Register focus redirector once: when the app root gets focus
+        // (sidebar click, window re-activation, etc.), redirect to content.
+        if !self.focus_redirect_registered {
+            let sub = cx.on_focus(&self.focus_handle, window, |this, window, cx| {
+                this.focus_content(window, cx);
+            });
+            self._subs.push(sub);
+            self.focus_redirect_registered = true;
+        }
+
         div()
             .id("app-root")
             .text_size(FONT_SIZE_BODY)
             .track_focus(&self.focus_handle)
+            .on_action(cx.listener(|this, _: &ToggleToolbar, _, cx| {
+                this.toolbar_visible = !this.toolbar_visible;
+                let mut settings = Settings::load();
+                settings.toolbar_visible = this.toolbar_visible;
+                settings.save();
+                cx.notify();
+            }))
             .on_action(cx.listener(|this, _: &ToggleSidebar, _, cx| {
                 this.sidebar_open = !this.sidebar_open;
                 cx.notify();
             }))
             .on_action(cx.listener(|this, _: &OpenCommandPalette, window, cx| {
                 this.open_command_palette(window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &OpenSettings, window, cx| {
+                this.active_view = ActiveView::Settings;
+                this.focus_content(window, cx);
+                cx.notify();
             }))
             .on_action(cx.listener(|this, _: &GoBack, window, cx| {
                 this.go_back(window, cx);
@@ -555,7 +586,7 @@ impl Render for ZeroApp {
                             .pb(CONTENT_INSET)
                             .when(sidebar_open, |el| el.pl(px(4.0)))
                             .when(!sidebar_open, |el| el.pl(CONTENT_INSET))
-                            .child(titlebar)
+                            .when_some(titlebar, |el, tb| el.child(tb))
                             .when_some(content_banner, |el, banner_el| el.child(banner_el))
                             .when_some(banner, |el, data| el.child(ProgressBanner::new(data)))
                             .child(

@@ -136,7 +136,7 @@ impl DrivesPopover {
                         view.history = history;
                     }
                     Err(e) => {
-                        eprintln!("[zero-ui] drives popover DB load error: {e}");
+                        tracing::error!(error = %e, "drives popover DB load failed");
                         // Keep existing data on error
                     }
                 }

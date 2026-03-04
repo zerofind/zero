@@ -1,9 +1,9 @@
 [package]
 name = "zero-watcher"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 description = "File system and USB mount watching for zero"
-license = "MIT"
+license.workspace = true
 
 [lib]
 name = "zero_watcher"

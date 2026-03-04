@@ -31,7 +31,7 @@ pub(super) enum InlineEdit {
 
 pub struct FileBrowserView {
     pub(super) path: PathBuf,
-    pub(super) table_state: Entity<TableState<FileBrowserDelegate>>,
+    pub table_state: Entity<TableState<FileBrowserDelegate>>,
     #[allow(dead_code)]
     pub(super) search: Entity<SearchService>,
     pub(super) load_time_ms: f64,
@@ -80,6 +80,11 @@ impl FileBrowserView {
         let load_path = path.clone();
         let start = Instant::now();
 
+        // Share the Table's focus handle so the wrapping v_flex and the Table
+        // always agree on who is focused. This prevents clicks on the status-bar
+        // or other non-Table areas from stealing focus to a competing handle.
+        let focus_handle = table_state.focus_handle(cx);
+
         let view = Self {
             path,
             table_state,
@@ -93,7 +98,7 @@ impl FileBrowserView {
             search_active: false,
             search_input: None,
             display_mode: None,
-            focus_handle: cx.focus_handle(),
+            focus_handle,
         };
 
         // Load directory entries in background
@@ -193,7 +198,7 @@ impl FileBrowserView {
         let value = value.trim();
 
         if value.is_empty() {
-            self.cancel_inline_edit(cx);
+            self.cancel_inline_edit(window, cx);
             return;
         }
 
@@ -206,14 +211,14 @@ impl FileBrowserView {
                     if new_path != *old_path
                         && let Err(e) = std::fs::rename(old_path, &new_path)
                     {
-                        eprintln!("[zero-ui] rename error: {}", e);
+                        tracing::error!(error = %e, "rename failed");
                     }
                 }
             }
             Some(InlineEdit::NewFolder) => {
                 let new_path = self.path.join(value);
                 if let Err(e) = std::fs::create_dir(&new_path) {
-                    eprintln!("[zero-ui] create folder error: {}", e);
+                    tracing::error!(error = %e, "create folder failed");
                 }
             }
             None => {}
@@ -222,12 +227,13 @@ impl FileBrowserView {
         self.inline_edit = None;
         self.inline_input = None;
         self.reload(cx);
-        self.focus_handle.focus(window);
+        self.table_state.focus_handle(cx).focus(window);
     }
 
-    fn cancel_inline_edit(&mut self, cx: &mut Context<Self>) {
+    fn cancel_inline_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.inline_edit = None;
         self.inline_input = None;
+        self.table_state.focus_handle(cx).focus(window);
         cx.notify();
     }
 
@@ -253,7 +259,7 @@ impl FileBrowserView {
                     if ev.keystroke.key == "enter" {
                         this.confirm_inline_edit(window, cx);
                     } else if ev.keystroke.key == "escape" {
-                        this.cancel_inline_edit(cx);
+                        this.cancel_inline_edit(window, cx);
                     }
                 }))
                 .child(

@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.4.7
+
+New:
+- command-palette: drill-in mode for type-filtered search (images, videos, code, etc.) with search-as-you-type, back navigation, and app browsing
+- sidebar: custom traffic light buttons with inactive-window tinting, nav controls and path bar when toolbar is hidden
+- theme: dual light/dark theme model with independent selectors and system-follow mode
+- apps: package inventory skeleton for future multi-source discovery (macOS bundles, Homebrew)
+- updater: update Info.plist version when binary lives inside a .app bundle
+- keybindings: Cmd+, opens settings, Cmd+/ toggles toolbar visibility
+
+Fix:
+- command-palette: input subscription was dropped immediately, preventing all search-as-you-type
+- command-palette: mouse clicks on drill-in actions (Search Images, etc.) now work instead of closing the palette
+- command-palette: removed distracting mouse hover highlight from result items and action rows
+- theme: table.hover.background set to transparent across all 6 themes to stop mouse-tracking highlights during keyboard nav
+- file-browser: focus routed to Table's own handle so arrow-key navigation works after clicking status bar
+- search: expose search_with_type for combined query + type filtering
+
+Infra:
+- workspace: unified version/license fields across all crates via workspace.package
+- logging: replaced all eprintln with structured tracing calls, added startup banners with version/platform/arch
+- release: include AppIcon.icns in macOS release artifacts
+- tracing: added #[instrument] spans to hot paths (scan, sync, transfer, search, dedup)
+
 ## v0.4.6
 
 New:

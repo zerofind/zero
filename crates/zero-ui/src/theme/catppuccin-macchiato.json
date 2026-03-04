@@ -59,7 +59,7 @@
         "list.even.background": "#1e2030",
         "list.head.background": "#1e2030",
         "table.background": "#24273a",
-        "table.hover.background": "#ffffff14",
+        "table.hover.background": "#00000000",
         "table.active.background": "#8aadf44d",
         "table.active.border": "#8aadf4",
         "table.even.background": "#1e2030",

@@ -100,6 +100,7 @@
 /// The version of the zero crate, for use by dependent crates like zero-ui.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+pub mod apps;
 pub mod automation;
 pub mod cache;
 pub mod cleanup;

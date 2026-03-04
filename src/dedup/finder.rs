@@ -27,6 +27,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 
 use rayon::prelude::*;
+use tracing::instrument;
 
 use crate::hasher::{HashAlgorithm, hash_file_with_buffer};
 use crate::index::FileTypeCategory;
@@ -316,6 +317,7 @@ pub fn find_duplicates(path: &Path, options: DedupOptions) -> Result<DedupResult
 ///
 /// The progress can be polled from another thread to get real-time updates.
 /// Set progress.cancelled to true to abort the operation early.
+#[instrument(skip(options, progress), fields(path = %path.display()))]
 pub fn find_duplicates_with_progress(
     path: &Path,
     options: DedupOptions,
@@ -357,7 +359,7 @@ pub fn find_duplicates_with_progress(
                 entries.push(entry);
             }
             Err(e) => {
-                tracing::warn!("Dedup scan: skipping inaccessible path: {}", e);
+                tracing::warn!(error = %e, "Dedup scan: skipping inaccessible entry");
             }
         }
     }
@@ -553,7 +555,7 @@ fn hash_file_for_dedup(
                 }
             }
             Err(e) => {
-                tracing::warn!("Failed to hash {}: {}", entry.absolute_path.display(), e);
+                tracing::warn!(path = %entry.absolute_path.display(), "Failed to hash: {}", e);
                 None
             }
         }
@@ -561,6 +563,7 @@ fn hash_file_for_dedup(
 }
 
 /// Delete duplicate files (keeps one copy per group - shortest path)
+#[instrument(skip(result), fields(groups = result.groups.len()))]
 pub fn delete_duplicates(result: &DedupResult) -> DeleteResult {
     let files_to_delete: Vec<(&PathBuf, u64)> = result
         .groups
@@ -580,7 +583,7 @@ pub fn delete_duplicates(result: &DedupResult) -> DeleteResult {
             .map(|(path, size)| match fs::remove_file(path) {
                 Ok(()) => Ok(*size),
                 Err(e) => {
-                    tracing::warn!("Failed to delete {}: {}", path.display(), e);
+                    tracing::warn!(path = %path.display(), error = %e, "Failed to delete duplicate");
                     Err(())
                 }
             })

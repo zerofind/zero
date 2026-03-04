@@ -82,6 +82,7 @@ impl Executor {
     }
 
     /// Handle an automation event
+    #[tracing::instrument(skip(self))]
     pub async fn handle_event(&self, event: AutomationEvent) -> Result<Vec<i64>, ExecutorError> {
         match event {
             AutomationEvent::UsbMounted {
@@ -147,10 +148,10 @@ impl Executor {
             {
                 Ok(run_id) => run_ids.push(run_id),
                 Err(ExecutorError::AlreadyRunning(_)) => {
-                    tracing::debug!("Automation {} already running, skipping", automation.id);
+                    tracing::debug!(automation_id = automation.id, "Automation already running, skipping");
                 }
                 Err(e) => {
-                    tracing::error!("Failed to run automation {}: {}", automation.id, e);
+                    tracing::error!(automation_id = automation.id, error = %e, "Failed to run automation");
                 }
             }
         }
@@ -232,7 +233,7 @@ impl Executor {
             let dest_mount = match self.get_destination_mount(&automation).await {
                 Some(m) => m,
                 None => {
-                    tracing::debug!("Destination not available for automation {}", automation.id);
+                    tracing::debug!(automation_id = automation.id, "Destination not available");
                     continue;
                 }
             };
@@ -243,10 +244,10 @@ impl Executor {
             {
                 Ok(run_id) => run_ids.push(run_id),
                 Err(ExecutorError::AlreadyRunning(_)) => {
-                    tracing::debug!("Automation {} already running, skipping", automation.id);
+                    tracing::debug!(automation_id = automation.id, "Automation already running, skipping");
                 }
                 Err(e) => {
-                    tracing::error!("Failed to run automation {}: {}", automation.id, e);
+                    tracing::error!(automation_id = automation.id, error = %e, "Failed to run automation");
                 }
             }
         }

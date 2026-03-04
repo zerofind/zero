@@ -79,6 +79,14 @@ impl AppService {
         }
     }
 
+    /// Return all discovered apps, up to `limit`.
+    pub fn list(&self, limit: usize) -> Vec<AppEntry> {
+        if !self.loaded {
+            return Vec::new();
+        }
+        self.apps.iter().take(limit).cloned().collect()
+    }
+
     /// Search apps by name. Returns up to `limit` results.
     pub fn search(&self, query: &str, limit: usize) -> Vec<AppEntry> {
         if !self.loaded || query.is_empty() {

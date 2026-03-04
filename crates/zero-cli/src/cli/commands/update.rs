@@ -50,7 +50,7 @@ pub fn cmd_update(out: &Outputter, check_only: bool) -> anyhow::Result<()> {
 
             out.info("Installing...");
 
-            match install_binary(&new_binary) {
+            match install_binary(&new_binary, version) {
                 Ok(()) => {
                     out.success(&format!("Updated zero {} → {}", CURRENT_VERSION, version));
                 }

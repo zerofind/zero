@@ -378,7 +378,7 @@ pub fn phase_transfer(ctx: &TransferContext<'_>, files_to_copy: &[&FileEntry]) -
                 }
 
                 let consec = consecutive_errors.fetch_add(1, Ordering::Relaxed) + 1;
-                tracing::warn!("Failed to copy {}: {}", file.path.display(), e);
+                tracing::warn!(path = %file.path.display(), "Failed to copy: {}", e);
 
                 if consec >= 50 {
                     abort_flag.store(1, Ordering::Relaxed);
@@ -654,7 +654,7 @@ pub fn phase_delete(
                 match fs::remove_file(&full_path) {
                     Ok(()) => Ok(()),
                     Err(e) => {
-                        tracing::warn!("Failed to delete {}: {}", rel_path.display(), e);
+                        tracing::warn!(path = %rel_path.display(), "Failed to delete: {}", e);
                         Err(())
                     }
                 }

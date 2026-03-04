@@ -5,11 +5,14 @@ use serde::{Deserialize, Serialize};
 /// Persisted user settings — survives across app restarts.
 #[derive(Serialize, Deserialize)]
 pub struct Settings {
-    #[serde(default = "default_theme")]
+    #[serde(default = "default_theme_mode")]
     pub theme_mode: String,
 
-    #[serde(default = "default_theme_name")]
-    pub theme: String,
+    #[serde(default = "default_light_theme")]
+    pub light_theme: String,
+
+    #[serde(default = "default_dark_theme")]
+    pub dark_theme: String,
 
     #[serde(default)]
     pub sidebar_open: bool,
@@ -44,14 +47,21 @@ pub struct Settings {
 
     #[serde(default)]
     pub onboarding_complete: bool,
+
+    #[serde(default = "default_true")]
+    pub toolbar_visible: bool,
 }
 
-fn default_theme() -> String {
-    "dark".to_string()
+fn default_theme_mode() -> String {
+    "system".to_string()
 }
 
-fn default_theme_name() -> String {
-    "Zero".to_string()
+fn default_light_theme() -> String {
+    "Catppuccin Latte".to_string()
+}
+
+fn default_dark_theme() -> String {
+    "Catppuccin Mocha".to_string()
 }
 
 fn default_view_mode() -> String {
@@ -65,8 +75,9 @@ fn default_true() -> bool {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            theme_mode: default_theme(),
-            theme: default_theme_name(),
+            theme_mode: default_theme_mode(),
+            light_theme: default_light_theme(),
+            dark_theme: default_dark_theme(),
             sidebar_open: true,
             sidebar_bookmarks: default_bookmarks(),
             sidebar_regular_bookmarks: Vec::new(),
@@ -78,6 +89,7 @@ impl Default for Settings {
             dedup_use_checksums: default_true(),
             auto_update: default_true(),
             onboarding_complete: false,
+            toolbar_visible: default_true(),
         }
     }
 }

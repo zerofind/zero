@@ -52,6 +52,11 @@ package_artifact() {
     cp "target/${target}/release/${BINARY_NAME}" "${DIST_DIR}/${artifact_name}/"
     cp LICENSE README.md "${DIST_DIR}/${artifact_name}/" 2>/dev/null || true
 
+    # Include macOS app icon for bundle creation during install
+    if [[ "$os_arch" == macos-* ]] && [ -f "resources/AppIcon.icns" ]; then
+        cp "resources/AppIcon.icns" "${DIST_DIR}/${artifact_name}/"
+    fi
+
     cd "${DIST_DIR}"
     tar -czf "${artifact_name}.tgz" "${artifact_name}"
     shasum -a 512 "${artifact_name}.tgz" | cut -d' ' -f1 > "${artifact_name}.tgz.sha512"

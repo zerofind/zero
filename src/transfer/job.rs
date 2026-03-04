@@ -18,6 +18,7 @@
 
 use std::fs;
 use std::panic;
+use tracing::instrument;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::Instant;
@@ -143,6 +144,7 @@ impl TransferJob {
     }
 
     /// Run the transfer job - copies ALL files from source to dest
+    #[instrument(skip(self, on_progress), fields(source = %self.source.display(), dest = %self.dest.display()))]
     pub fn run(
         &self,
         on_progress: impl Fn(&TransferProgress),
@@ -208,7 +210,7 @@ impl TransferJob {
                     }
                     Err(e) => {
                         errors.fetch_add(1, Ordering::Relaxed);
-                        tracing::warn!("Failed to copy {}: {}", file.path.display(), e);
+                        tracing::warn!(path = %file.path.display(), "Failed to copy: {}", e);
                     }
                 }
             });
@@ -241,7 +243,7 @@ impl TransferJob {
             match sync_dir_permissions(&self.source, &self.dest) {
                 Ok(result) => result.dirs_synced,
                 Err(e) => {
-                    tracing::warn!("Failed to sync directory permissions: {}", e);
+                    tracing::warn!(error = %e, "Failed to sync directory permissions");
                     0
                 }
             }
