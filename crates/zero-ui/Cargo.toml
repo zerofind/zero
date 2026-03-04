@@ -26,6 +26,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 dirs = "6"
 trash = "5.2"
+csv = "1"
 tokio = { version = "1", features = ["rt"] }
 
 # objc2 dependencies removed until API integration is ready

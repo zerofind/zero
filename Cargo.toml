@@ -7,7 +7,7 @@ zero-watcher = { path = "crates/watcher" }
 
 [package]
 name = "zero"
-version = "0.4.5"
+version = "0.4.6"
 edition = "2024"
 rust-version = "1.92"
 description = "A resilient file synchronization and deduplication tool"

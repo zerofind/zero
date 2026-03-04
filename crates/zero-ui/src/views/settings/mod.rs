@@ -5,14 +5,13 @@ mod search;
 use std::sync::Arc;
 use std::time::Duration;
 
-use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use gpui_component::{
-    IndexPath, Sizable as _,
-    button::{Button, ButtonVariants as _},
-    h_flex,
+    IndexPath, Sizable as _, h_flex,
     input::InputState,
+    scroll::ScrollableElement as _,
     select::{SelectEvent, SelectState},
+    tab::TabBar,
     v_flex,
 };
 
@@ -255,33 +254,25 @@ impl SettingsView {
         cx.notify();
     }
 
-    fn render_tab_buttons(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        h_flex()
-            .gap_1()
-            .child(
-                Button::new("tab-general")
-                    .label("General")
-                    .compact()
-                    .small()
-                    .when(self.active_tab == SettingsTab::General, |el| el.primary())
-                    .when(self.active_tab != SettingsTab::General, |el| el.ghost())
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.active_tab = SettingsTab::General;
-                        cx.notify();
-                    })),
-            )
-            .child(
-                Button::new("tab-search")
-                    .label("Search")
-                    .compact()
-                    .small()
-                    .when(self.active_tab == SettingsTab::Search, |el| el.primary())
-                    .when(self.active_tab != SettingsTab::Search, |el| el.ghost())
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.active_tab = SettingsTab::Search;
-                        cx.notify();
-                    })),
-            )
+    fn render_tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let selected = match self.active_tab {
+            SettingsTab::General => 0,
+            SettingsTab::Search => 1,
+        };
+
+        TabBar::new("settings-tabs")
+            .segmented()
+            .small()
+            .selected_index(selected)
+            .child("General")
+            .child("Search")
+            .on_click(cx.listener(|this, idx: &usize, _, cx| {
+                this.active_tab = match idx {
+                    0 => SettingsTab::General,
+                    _ => SettingsTab::Search,
+                };
+                cx.notify();
+            }))
     }
 }
 
@@ -290,7 +281,7 @@ impl SettingsView {
 impl Render for SettingsView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let active_tab = self.active_tab;
-        let tab_buttons = self.render_tab_buttons(cx).into_any_element();
+        let tabs = self.render_tabs(cx).into_any_element();
         let content = match active_tab {
             SettingsTab::General => self.render_general(window, cx).into_any_element(),
             SettingsTab::Search => self.render_search(cx).into_any_element(),
@@ -312,9 +303,15 @@ impl Render for SettingsView {
                             .font_weight(FontWeight::SEMIBOLD)
                             .child("Settings"),
                     )
-                    .child(tab_buttons),
+                    .child(tabs),
             )
-            // Tab content
-            .child(content)
+            // Scrollable tab content
+            .child(
+                v_flex()
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_y_scrollbar()
+                    .child(content),
+            )
     }
 }

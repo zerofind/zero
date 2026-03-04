@@ -221,10 +221,9 @@ fn main() -> anyhow::Result<()> {
         std::thread::spawn(move || {
             if let Ok(zero::updater::UpdateStatus::Available { version }) =
                 zero::updater::check_latest()
+                && let Ok(mut h) = hint.lock()
             {
-                if let Ok(mut h) = hint.lock() {
-                    *h = Some(version);
-                }
+                *h = Some(version);
             }
             zero::updater::record_check();
         });
@@ -543,10 +542,10 @@ fn main() -> anyhow::Result<()> {
     }
 
     // Print update hint if background check found a new version
-    if let Ok(hint) = update_hint.lock() {
-        if let Some(version) = hint.as_ref() {
-            eprintln!("hint: zero v{version} available — run `zero update` to install");
-        }
+    if let Ok(hint) = update_hint.lock()
+        && let Some(version) = hint.as_ref()
+    {
+        eprintln!("hint: zero v{version} available — run `zero update` to install");
     }
 
     Ok(())

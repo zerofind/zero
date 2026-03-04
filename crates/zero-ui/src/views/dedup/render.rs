@@ -353,7 +353,7 @@ impl Render for DedupView {
                                                         )
                                                     })
                                                     .child({
-                                                        let reveal_path = p.clone();
+                                                        let _reveal_path = p.clone();
                                                         div()
                                                             .id(SharedString::from(format!("path-{i}-{fi}")))
                                                             .flex_1()
@@ -366,7 +366,7 @@ impl Render for DedupView {
                                                             .hover(|s| s.underline())
                                                             .on_click(move |_, _, _| {
                                                                 #[cfg(target_os = "macos")]
-                                                                crate::platform::open::reveal_in_finder(&reveal_path);
+                                                                crate::platform::open::reveal_in_finder(&_reveal_path);
                                                             })
                                                             .child(SharedString::from(
                                                                 p.to_string_lossy().to_string(),

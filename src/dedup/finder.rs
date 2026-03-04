@@ -30,7 +30,7 @@ use rayon::prelude::*;
 
 use crate::hasher::{HashAlgorithm, hash_file_with_buffer};
 use crate::index::FileTypeCategory;
-use crate::scanner::{CrawlProgress, FileEntry, ScanOptions, scan_collect_with_progress};
+use crate::scanner::{CrawlProgress, FileEntry, ScanOptions, scan_with_progress};
 
 /// Options for duplicate finding
 #[derive(Debug, Clone)]
@@ -343,16 +343,27 @@ pub fn find_duplicates_with_progress(
         });
     }
 
-    let entries = scan_collect_with_progress(path, scan_options, scan_progress.clone())?;
+    // Stream entries and update progress in real-time (instead of blocking on collect)
+    let iter = scan_with_progress(path, scan_options, scan_progress.clone())?;
+    let mut entries = Vec::new();
 
-    // Update progress from scan
+    for result in iter {
+        match result {
+            Ok(entry) => {
+                if let Some(ref p) = progress {
+                    p.files_found.fetch_add(1, Ordering::Relaxed);
+                    p.bytes_found.fetch_add(entry.size, Ordering::Relaxed);
+                }
+                entries.push(entry);
+            }
+            Err(e) => {
+                tracing::warn!("Dedup scan: skipping inaccessible path: {}", e);
+            }
+        }
+    }
+
     let files_scanned = entries.len();
     let bytes_scanned: u64 = entries.iter().map(|e| e.size).sum();
-
-    if let Some(ref p) = progress {
-        p.files_found.store(files_scanned, Ordering::Release);
-        p.bytes_found.store(bytes_scanned, Ordering::Release);
-    }
 
     // Check cancellation after scan
     if let Some(ref p) = progress

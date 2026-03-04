@@ -84,6 +84,10 @@ pub fn launch() {
             KeyBinding::new("cmd-left", GoBack, None),
             #[cfg(target_os = "macos")]
             KeyBinding::new("cmd-right", GoForward, None),
+            #[cfg(not(target_os = "macos"))]
+            KeyBinding::new("alt-left", GoBack, None),
+            #[cfg(not(target_os = "macos"))]
+            KeyBinding::new("alt-right", GoForward, None),
             #[cfg(target_os = "macos")]
             KeyBinding::new("cmd-up", GoUp, None),
             #[cfg(not(target_os = "macos"))]

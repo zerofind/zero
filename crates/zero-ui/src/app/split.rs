@@ -59,8 +59,13 @@ impl ZeroApp {
                 cx.notify();
             }
             FileBrowserEvent::OpenFile(path) => {
-                self.editor = None;
-                self.active_view = ActiveView::Editor(path.clone());
+                if crate::views::data_table::is_data_table(path) {
+                    self.data_table = None;
+                    self.active_view = ActiveView::DataTable(path.clone());
+                } else {
+                    self.editor = None;
+                    self.active_view = ActiveView::Editor(path.clone());
+                }
                 cx.notify();
             }
             FileBrowserEvent::SetClipboard(clipboard) => {

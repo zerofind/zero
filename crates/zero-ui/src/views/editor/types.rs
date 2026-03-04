@@ -33,7 +33,6 @@ const EDITABLE_EXTENSIONS: &[&str] = &[
     "yml",
     "json",
     "xml",
-    "csv",
     "ini",
     "cfg",
     "conf",

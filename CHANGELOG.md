@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.4.6
+
+New:
+- data-table: CSV/TSV viewer with sortable columns, numeric alignment, and 100k row limit
+- command-palette: search icon prefix, category badges, keyboard shortcut hints, and action labels on selected items
+- command-palette: navigation and file actions (new folder, toggle sidebar, go back/forward/up) as palette commands
+- settings: segmented TabBar replacing manual toggle buttons, scrollable content area
+- dedup: streaming scan progress updates file/byte counters in real-time instead of after collect
+
+Fix:
+- platform: gate eject_drive, reveal_in_finder, and Command import behind cfg(target_os = macos) for cross-platform compilation
+- settings: version string reads from zero::VERSION constant instead of zero-ui's own CARGO_PKG_VERSION
+- settings: general tab uses w_full instead of size_full to prevent overflow clipping
+- navigation: alt-left/alt-right keybindings for back/forward on non-macOS
+- cli: collapse nested if-let chains to satisfy clippy
+
 ## v0.4.5
 
 New:

@@ -26,7 +26,7 @@ use crate::session::Settings;
 use crate::theme::{self, CONTENT_INSET, FONT_SIZE_BODY, FONT_SIZE_CAPTION, RADIUS_LG};
 use crate::ui::{Alert, AlertStack, BannerData, BannerKind, ProgressBanner};
 use crate::views::{
-    AppSidebar, AutomationsView, CleanupView, DedupView, DrivesPopover, EditorView,
+    AppSidebar, AutomationsView, CleanupView, DataTableView, DedupView, DrivesPopover, EditorView,
     FileBrowserView, FileGridView, OnboardingEvent, OnboardingView, PaletteView, SecureEraseView,
     SettingsView, TodoView,
 };
@@ -50,6 +50,7 @@ pub struct ZeroApp {
     pub cleanup: Option<Entity<CleanupView>>,
     pub dedup: Option<Entity<DedupView>>,
     pub editor: Option<Entity<EditorView>>,
+    pub data_table: Option<Entity<DataTableView>>,
     pub todo: Option<Entity<TodoView>>,
     pub settings: Option<Entity<SettingsView>>,
     pub secure_erase: Option<Entity<SecureEraseView>>,
@@ -140,6 +141,7 @@ impl ZeroApp {
             cleanup: None,
             dedup: None,
             editor: None,
+            data_table: None,
             todo: None,
             settings: None,
             secure_erase: None,
@@ -328,6 +330,11 @@ impl ZeroApp {
                 let view = self.ensure_editor(path, window, cx);
                 view.into_any_element()
             }
+            ActiveView::DataTable(path) => {
+                let path = path.clone();
+                let view = self.ensure_data_table(path, window, cx);
+                view.into_any_element()
+            }
             ActiveView::SecureErase => {
                 let view = self.ensure_secure_erase(window, cx);
                 view.into_any_element()
@@ -347,74 +354,117 @@ impl Render for ZeroApp {
 
         let has_alerts = !self.alerts.is_empty();
 
-        // Banner priority: editor banner > progress banner
-        let editor_banner: Option<AnyElement> = if matches!(self.active_view, ActiveView::Editor(_))
-        {
-            self.editor.as_ref().map(|editor| {
-                let editor = editor.read(cx);
-                let name = editor.file_name();
-                let modified = editor.is_modified();
-                let saving = editor.is_saving();
-                let path_str = editor.path_str();
-                let muted = cx.theme().muted_foreground;
+        // Banner priority: content banner (editor/data table) > progress banner
+        let content_banner: Option<AnyElement> =
+            if matches!(self.active_view, ActiveView::Editor(_)) {
+                self.editor.as_ref().map(|editor| {
+                    let editor = editor.read(cx);
+                    let name = editor.file_name();
+                    let modified = editor.is_modified();
+                    let saving = editor.is_saving();
+                    let path_str = editor.path_str();
+                    let muted = cx.theme().muted_foreground;
 
-                h_flex()
-                    .w_full()
-                    .px_4()
-                    .py_2()
-                    .items_center()
-                    .gap_3()
-                    .border_b_1()
-                    .border_color(cx.theme().border)
-                    .bg(theme::banner_bg(cx))
-                    .child(
-                        h_flex()
-                            .flex_1()
-                            .gap_2()
-                            .items_center()
-                            .child(
-                                div()
-                                    .text_size(FONT_SIZE_BODY)
-                                    .font_weight(FontWeight::MEDIUM)
-                                    .child(SharedString::from(name)),
-                            )
-                            .when(modified, |el| {
-                                el.child(
+                    h_flex()
+                        .w_full()
+                        .px_4()
+                        .py_2()
+                        .items_center()
+                        .gap_3()
+                        .border_b_1()
+                        .border_color(cx.theme().border)
+                        .bg(theme::banner_bg(cx))
+                        .child(
+                            h_flex()
+                                .flex_1()
+                                .gap_2()
+                                .items_center()
+                                .child(
                                     div()
-                                        .w(px(8.0))
-                                        .h(px(8.0))
-                                        .rounded(px(4.0))
-                                        .bg(theme::brand_color(cx)),
+                                        .text_size(FONT_SIZE_BODY)
+                                        .font_weight(FontWeight::MEDIUM)
+                                        .child(SharedString::from(name)),
                                 )
-                            }),
-                    )
-                    .when(modified || saving, |el| {
-                        el.child(
-                            Button::new("save-editor")
-                                .compact()
-                                .small()
-                                .primary()
-                                .label(if saving { "Saving..." } else { "Save" })
-                                .on_click(cx.listener(|this, _, _, cx| {
-                                    if let Some(editor) = &this.editor {
-                                        editor.update(cx, |e, cx| e.save(cx));
-                                    }
-                                })),
+                                .when(modified, |el| {
+                                    el.child(
+                                        div()
+                                            .w(px(8.0))
+                                            .h(px(8.0))
+                                            .rounded(px(4.0))
+                                            .bg(theme::brand_color(cx)),
+                                    )
+                                }),
                         )
-                    })
-                    .child(
-                        div()
-                            .text_size(FONT_SIZE_CAPTION)
-                            .text_color(muted)
-                            .child(SharedString::from(path_str)),
-                    )
-                    .into_any_element()
-            })
-        } else {
-            None
-        };
+                        .when(modified || saving, |el| {
+                            el.child(
+                                Button::new("save-editor")
+                                    .compact()
+                                    .small()
+                                    .primary()
+                                    .label(if saving { "Saving..." } else { "Save" })
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        if let Some(editor) = &this.editor {
+                                            editor.update(cx, |e, cx| e.save(cx));
+                                        }
+                                    })),
+                            )
+                        })
+                        .child(
+                            div()
+                                .text_size(FONT_SIZE_CAPTION)
+                                .text_color(muted)
+                                .child(SharedString::from(path_str)),
+                        )
+                        .into_any_element()
+                })
+            } else if matches!(self.active_view, ActiveView::DataTable(_)) {
+                self.data_table.as_ref().map(|dt| {
+                    let dt = dt.read(cx);
+                    let name = dt.file_name();
+                    let info = dt.info().unwrap_or("").to_string();
+                    let path_str = dt.path_str();
+                    let muted = cx.theme().muted_foreground;
 
-        let banner = if editor_banner.is_none() {
+                    h_flex()
+                        .w_full()
+                        .px_4()
+                        .py_2()
+                        .items_center()
+                        .gap_3()
+                        .border_b_1()
+                        .border_color(cx.theme().border)
+                        .bg(theme::banner_bg(cx))
+                        .child(
+                            div()
+                                .text_size(FONT_SIZE_BODY)
+                                .font_weight(FontWeight::MEDIUM)
+                                .child(SharedString::from(name)),
+                        )
+                        .when(!info.is_empty(), |el| {
+                            el.child(
+                                div()
+                                    .text_size(FONT_SIZE_CAPTION)
+                                    .text_color(muted)
+                                    .child(SharedString::from(info)),
+                            )
+                        })
+                        .child(
+                            div()
+                                .flex_1()
+                                .text_size(FONT_SIZE_CAPTION)
+                                .text_color(muted)
+                                .text_ellipsis()
+                                .whitespace_nowrap()
+                                .min_w_0()
+                                .child(SharedString::from(path_str)),
+                        )
+                        .into_any_element()
+                })
+            } else {
+                None
+            };
+
+        let banner = if content_banner.is_none() {
             self.banner.clone()
         } else {
             None
@@ -506,7 +556,7 @@ impl Render for ZeroApp {
                             .when(sidebar_open, |el| el.pl(px(4.0)))
                             .when(!sidebar_open, |el| el.pl(CONTENT_INSET))
                             .child(titlebar)
-                            .when_some(editor_banner, |el, banner_el| el.child(banner_el))
+                            .when_some(content_banner, |el, banner_el| el.child(banner_el))
                             .when_some(banner, |el, data| el.child(ProgressBanner::new(data)))
                             .child(
                                 h_flex()
@@ -529,6 +579,7 @@ impl Render for ZeroApp {
                         .size_full()
                         .top_0()
                         .left_0()
+                        .occlude()
                         .bg(theme::overlay_backdrop(cx))
                         .on_mouse_down(
                             MouseButton::Left,

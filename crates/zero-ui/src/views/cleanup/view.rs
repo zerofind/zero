@@ -340,11 +340,11 @@ impl CleanupView {
         let Some(cat) = self.categories.get(cat_idx) else {
             return;
         };
-        let Some(file) = cat.files.get(focused) else {
+        let Some(_file) = cat.files.get(focused) else {
             return;
         };
         #[cfg(target_os = "macos")]
-        crate::platform::open::reveal_in_finder(&file.path);
+        crate::platform::open::reveal_in_finder(&_file.path);
     }
 
     /// Reveal a specific item by index in Finder.
@@ -355,11 +355,11 @@ impl CleanupView {
         let Some(cat) = self.categories.get(cat_idx) else {
             return;
         };
-        let Some(file) = cat.files.get(idx) else {
+        let Some(_file) = cat.files.get(idx) else {
             return;
         };
         #[cfg(target_os = "macos")]
-        crate::platform::open::reveal_in_finder(&file.path);
+        crate::platform::open::reveal_in_finder(&_file.path);
     }
 
     fn detail_file_count(&self) -> usize {

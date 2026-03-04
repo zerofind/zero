@@ -1,6 +1,7 @@
 pub mod automations;
 pub mod cleanup;
 pub mod command_palette;
+pub mod data_table;
 pub mod dedup;
 pub mod drives_popover;
 pub mod editor;
@@ -15,6 +16,7 @@ pub mod todo;
 pub use automations::AutomationsView;
 pub use cleanup::CleanupView;
 pub use command_palette::{PaletteEvent, PaletteView};
+pub use data_table::{DataTableEvent, DataTableView};
 pub use dedup::{DedupEvent, DedupView};
 pub use drives_popover::DrivesPopover;
 pub use editor::{EditorEvent, EditorView};

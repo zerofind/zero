@@ -13,6 +13,7 @@ pub enum ActiveView {
     Todo,
     Settings,
     Editor(std::path::PathBuf),
+    DataTable(std::path::PathBuf),
     SecureErase,
     Automations,
 }

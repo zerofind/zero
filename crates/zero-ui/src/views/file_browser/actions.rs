@@ -36,7 +36,9 @@ impl FileBrowserView {
         };
         if entry.is_dir {
             cx.emit(FileBrowserEvent::NavigateToDir(entry.path.clone()));
-        } else if crate::views::editor::is_editable(&entry.path) {
+        } else if crate::views::data_table::is_data_table(&entry.path)
+            || crate::views::editor::is_editable(&entry.path)
+        {
             cx.emit(FileBrowserEvent::OpenFile(entry.path.clone()));
         } else {
             #[cfg(target_os = "macos")]
@@ -46,11 +48,11 @@ impl FileBrowserView {
 
     /// Reveal the selected entry in Finder.
     pub fn reveal_selected(&mut self, cx: &mut Context<Self>) {
-        let Some(entry) = self.selected_entry(cx) else {
+        let Some(_entry) = self.selected_entry(cx) else {
             return;
         };
         #[cfg(target_os = "macos")]
-        crate::platform::open::reveal_in_finder(&entry.path);
+        crate::platform::open::reveal_in_finder(&_entry.path);
     }
 
     /// Show QuickLook for the selected file.

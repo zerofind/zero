@@ -33,6 +33,8 @@ struct PaletteAction {
     name: &'static str,
     icon: fn() -> IconName,
     path: &'static str,
+    category: &'static str,
+    shortcut: Option<&'static str>,
 }
 
 const DEFAULT_ACTIONS: &[PaletteAction] = &[
@@ -40,56 +42,120 @@ const DEFAULT_ACTIONS: &[PaletteAction] = &[
         name: "Settings",
         icon: || IconName::Settings,
         path: "action://settings",
+        category: "View",
+        shortcut: Some("\u{2318},"),
+    },
+    PaletteAction {
+        name: "New Folder",
+        icon: || IconName::Folder,
+        path: "action://new_folder",
+        category: "Files",
+        shortcut: Some("\u{21e7}\u{2318}N"),
+    },
+    PaletteAction {
+        name: "Toggle Sidebar",
+        icon: || IconName::PanelLeft,
+        path: "action://toggle_sidebar",
+        category: "View",
+        shortcut: Some("\u{2318}B"),
+    },
+    PaletteAction {
+        name: "Toggle Split View",
+        icon: || IconName::LayoutDashboard,
+        path: "action://toggle_split_view",
+        category: "View",
+        shortcut: Some("\u{2318}T"),
+    },
+    PaletteAction {
+        name: "Go Back",
+        icon: || IconName::ArrowLeft,
+        path: "action://go_back",
+        category: "Navigation",
+        shortcut: Some("\u{2318}["),
+    },
+    PaletteAction {
+        name: "Go Forward",
+        icon: || IconName::ArrowRight,
+        path: "action://go_forward",
+        category: "Navigation",
+        shortcut: Some("\u{2318}]"),
+    },
+    PaletteAction {
+        name: "Go Up",
+        icon: || IconName::ArrowUp,
+        path: "action://go_up",
+        category: "Navigation",
+        shortcut: Some("\u{2318}\u{2191}"),
     },
     PaletteAction {
         name: "Storage Cleanup",
         icon: || IconName::Delete,
         path: "action://cleanup",
+        category: "View",
+        shortcut: None,
     },
     PaletteAction {
         name: "Find Duplicates",
         icon: || IconName::File,
         path: "action://dedup",
+        category: "View",
+        shortcut: None,
     },
     PaletteAction {
         name: "Tasks",
         icon: || IconName::Check,
         path: "action://todo",
+        category: "View",
+        shortcut: None,
     },
     PaletteAction {
         name: "Secure Erase",
         icon: || IconName::Delete,
         path: "action://secure_erase",
+        category: "View",
+        shortcut: None,
     },
     PaletteAction {
         name: "Automations",
         icon: || IconName::Settings,
         path: "action://automations",
+        category: "View",
+        shortcut: None,
     },
     PaletteAction {
         name: "Search Images",
         icon: || IconName::Eye,
         path: "type://images",
+        category: "Search",
+        shortcut: None,
     },
     PaletteAction {
         name: "Search Videos",
         icon: || IconName::Eye,
         path: "type://videos",
+        category: "Search",
+        shortcut: None,
     },
     PaletteAction {
         name: "Search Audio",
         icon: || IconName::Search,
         path: "type://audio",
+        category: "Search",
+        shortcut: None,
     },
     PaletteAction {
         name: "Search Documents",
         icon: || IconName::File,
         path: "type://documents",
+        category: "Search",
+        shortcut: None,
     },
     PaletteAction {
         name: "Search Code",
         icon: || IconName::Search,
         path: "type://code",
+        category: "Search",
+        shortcut: None,
     },
 ];
 
@@ -103,6 +169,7 @@ pub struct PaletteView {
     selected_idx: usize,
     query: String,
     focus_handle: FocusHandle,
+    scroll_handle: ScrollHandle,
 }
 
 impl PaletteView {
@@ -136,6 +203,7 @@ impl PaletteView {
             selected_idx: 0,
             query: String::new(),
             focus_handle: cx.focus_handle(),
+            scroll_handle: ScrollHandle::new(),
         }
     }
 
@@ -146,7 +214,7 @@ impl PaletteView {
         self.input.update(cx, |state, cx| {
             state.set_value("", window, cx);
         });
-        self.focus_handle.focus(window);
+        self.input.focus_handle(cx).focus(window);
         cx.notify();
     }
 
@@ -157,7 +225,7 @@ impl PaletteView {
             state.set_value(&query, window, cx);
         });
         self.perform_search(&query, cx);
-        self.focus_handle.focus(window);
+        self.input.focus_handle(cx).focus(window);
         cx.notify();
     }
 
@@ -199,9 +267,36 @@ impl PaletteView {
         self.app_results = self.apps.read(cx).search(query, 5);
     }
 
+    /// Compute the scroll child index accounting for section headers.
+    fn scroll_child_index(&self) -> usize {
+        if !self.query.is_empty() {
+            // With results: items are file results, then optionally "Applications" header + apps
+            if self.selected_idx < self.results.len() {
+                self.selected_idx
+            } else {
+                // Past file results: +1 for the "Applications" section header
+                self.selected_idx + 1
+            }
+        } else {
+            // Default view: bookmarks section header + bookmarks, then actions header + actions
+            let bookmark_count = self.bookmarks.len();
+            let headers_before = if bookmark_count > 0 {
+                if self.selected_idx < bookmark_count {
+                    1 // "Bookmarks" header
+                } else {
+                    2 // "Bookmarks" + "Actions" headers
+                }
+            } else {
+                1 // "Actions" header only
+            };
+            self.selected_idx + headers_before
+        }
+    }
+
     fn select_prev(&mut self, cx: &mut Context<Self>) {
         if self.selected_idx > 0 {
             self.selected_idx -= 1;
+            self.scroll_handle.scroll_to_item(self.scroll_child_index());
             cx.notify();
         }
     }
@@ -214,6 +309,7 @@ impl PaletteView {
         };
         if self.selected_idx + 1 < max {
             self.selected_idx += 1;
+            self.scroll_handle.scroll_to_item(self.scroll_child_index());
             cx.notify();
         }
     }
@@ -254,6 +350,21 @@ impl PaletteView {
     fn dismiss(&mut self, cx: &mut Context<Self>) {
         cx.emit(PaletteEvent::Dismiss);
     }
+
+    /// Action label for a result item.
+    fn action_label_for_result(_is_dir: bool) -> &'static str {
+        "Open \u{21b5}"
+    }
+
+    fn action_label_for_action(action: &PaletteAction) -> &'static str {
+        if action.path.starts_with("type://") {
+            "Search >"
+        } else if action.path.starts_with("app://") {
+            "Launch \u{21b5}"
+        } else {
+            "Run \u{21b5}"
+        }
+    }
 }
 
 impl Render for PaletteView {
@@ -292,14 +403,20 @@ impl Render for PaletteView {
             .border_color(cx.theme().border)
             .shadow_lg()
             .overflow_hidden()
-            // Search input
+            // Search input with icon prefix
             .child(
                 div()
                     .px_3()
                     .py_2()
                     .border_b_1()
                     .border_color(cx.theme().border)
-                    .child(Input::new(&self.input)),
+                    .child(
+                        Input::new(&self.input).appearance(false).prefix(
+                            Icon::new(IconName::Search)
+                                .with_size(ICON_XS)
+                                .text_color(cx.theme().muted_foreground),
+                        ),
+                    ),
             )
             // Results list (files + apps)
             .when(has_query, |el| {
@@ -328,6 +445,7 @@ impl Render for PaletteView {
                             .map(|e| e.to_string_lossy().to_string());
                         let is_dir = result.node.node_type == zero::index::NodeType::Directory;
                         let path = result.node.path.clone();
+                        let label = Self::action_label_for_result(is_dir);
 
                         div()
                             .id(SharedString::from(format!("click-result-{i}")))
@@ -343,6 +461,7 @@ impl Render for PaletteView {
                                     ext,
                                     is_dir,
                                 )
+                                .action_label(label)
                                 .selected(i == self.selected_idx),
                             )
                     })
@@ -372,6 +491,8 @@ impl Render for PaletteView {
                                     Some("app".to_string()),
                                     false,
                                 )
+                                .category("Application")
+                                .action_label("Launch \u{21b5}")
                                 .selected(selected),
                             )
                     })
@@ -382,6 +503,7 @@ impl Render for PaletteView {
                         .id("palette-results")
                         .flex_1()
                         .overflow_y_scroll()
+                        .track_scroll(&self.scroll_handle)
                         .py_1()
                         .children(file_results)
                         .when(!app_rows.is_empty(), |el| {
@@ -430,6 +552,8 @@ impl Render for PaletteView {
                                     None,
                                     true,
                                 )
+                                .category("Bookmark")
+                                .action_label("Open \u{21b5}")
                                 .selected(selected),
                             )
                     })
@@ -441,6 +565,8 @@ impl Render for PaletteView {
                     .map(|(ai, action)| {
                         let item_idx = bookmark_count + ai;
                         let selected = self.selected_idx == item_idx;
+                        let is_type_search = action.path.starts_with("type://");
+                        let label = Self::action_label_for_action(action);
 
                         h_flex()
                             .id(SharedString::from(format!("action-{ai}")))
@@ -462,7 +588,44 @@ impl Render for PaletteView {
                                     .with_size(ICON_XS)
                                     .text_color(muted),
                             )
-                            .child(div().text_size(FONT_SIZE_BODY).child(action.name))
+                            .child(div().flex_1().text_size(FONT_SIZE_BODY).child(action.name))
+                            // Right side
+                            .child(
+                                h_flex()
+                                    .flex_shrink_0()
+                                    .gap_2()
+                                    .items_center()
+                                    .child(
+                                        div()
+                                            .text_size(FONT_SIZE_CAPTION)
+                                            .text_color(muted)
+                                            .child(action.category),
+                                    )
+                                    .when_some(action.shortcut, |el, sc| {
+                                        el.child(
+                                            div()
+                                                .text_size(FONT_SIZE_CAPTION)
+                                                .text_color(muted)
+                                                .px_1p5()
+                                                .py_0p5()
+                                                .rounded(RADIUS)
+                                                .bg(cx.theme().muted)
+                                                .child(sc),
+                                        )
+                                    })
+                                    .when(selected, |el| {
+                                        el.child(
+                                            div()
+                                                .text_size(FONT_SIZE_CAPTION)
+                                                .text_color(muted)
+                                                .child(if is_type_search {
+                                                    "Search >"
+                                                } else {
+                                                    label
+                                                }),
+                                        )
+                                    }),
+                            )
                     })
                     .collect();
 
@@ -471,6 +634,7 @@ impl Render for PaletteView {
                         .id("palette-defaults")
                         .flex_1()
                         .overflow_y_scroll()
+                        .track_scroll(&self.scroll_handle)
                         .py_1()
                         // Bookmarks
                         .when(!bookmark_rows.is_empty(), |el| {

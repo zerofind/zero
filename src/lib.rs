@@ -97,6 +97,9 @@
 //! | `cloud` | Remote storage backends (S3, R2, B2, SFTP). | Phase 3 |
 //! | `security` | File integrity monitoring, app inventory, system baseline. | Phase 6 |
 
+/// The version of the zero crate, for use by dependent crates like zero-ui.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 pub mod automation;
 pub mod cache;
 pub mod cleanup;

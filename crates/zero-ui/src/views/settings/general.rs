@@ -219,7 +219,7 @@ impl SettingsView {
                     .text_color(muted)
                     .child(SharedString::from(format!(
                         "zero v{}",
-                        env!("CARGO_PKG_VERSION"),
+                        zero::VERSION,
                     ))),
             );
 
@@ -276,7 +276,7 @@ impl SettingsView {
 
         div()
             .relative()
-            .size_full()
+            .w_full()
             .child(content)
             .when_some(clear_dialog, |el, d| el.child(d))
             .when_some(reset_dialog, |el, d| el.child(d))

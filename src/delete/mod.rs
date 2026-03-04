@@ -31,6 +31,7 @@ use std::fs;
 use std::io;
 use std::panic;
 use std::path::{Path, PathBuf};
+#[cfg(target_os = "macos")]
 use std::process::Command;
 
 use rayon::prelude::*;

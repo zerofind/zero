@@ -5,10 +5,10 @@ use gpui::*;
 use crate::models::ActiveView;
 use crate::ui::BannerKind;
 use crate::views::{
-    AppSidebar, AutomationsView, CleanupView, DedupEvent, DedupView, DrivesPopover, EditorEvent,
-    EditorView, FileBrowserEvent, FileBrowserView, FileGridEvent, FileGridView, PaletteEvent,
-    PaletteView, SecureEraseView, SettingsEvent, SettingsView, TodoView,
-    drives_popover::DrivesPopoverEvent, sidebar::SidebarEvent,
+    AppSidebar, AutomationsView, CleanupView, DataTableEvent, DataTableView, DedupEvent, DedupView,
+    DrivesPopover, EditorEvent, EditorView, FileBrowserEvent, FileBrowserView, FileGridEvent,
+    FileGridView, PaletteEvent, PaletteView, SecureEraseView, SettingsEvent, SettingsView,
+    TodoView, drives_popover::DrivesPopoverEvent, sidebar::SidebarEvent,
 };
 
 use super::ZeroApp;
@@ -199,30 +199,38 @@ impl ZeroApp {
                 }
             }
             SidebarEvent::EjectDrive(path) => {
-                let mount = path.clone();
-                let sidebar = self.sidebar.clone();
-                cx.spawn(async move |_this, cx| {
-                    let result = cx
-                        .background_executor()
-                        .spawn({
-                            let mount = mount.clone();
-                            async move { crate::platform::open::eject_drive(&mount) }
-                        })
-                        .await;
-
-                    if let Err(e) = result {
-                        eprintln!("[zero-ui] eject error: {e}");
-                    }
-                    // Refresh drives list
-                    if let Some(sidebar) = sidebar {
-                        _this
-                            .update(cx, |_app, cx| {
-                                sidebar.update(cx, |s, cx| s.refresh_drives(cx));
+                #[cfg(target_os = "macos")]
+                {
+                    let mount = path.clone();
+                    let sidebar = self.sidebar.clone();
+                    cx.spawn(async move |_this, cx| {
+                        let result = cx
+                            .background_executor()
+                            .spawn({
+                                let mount = mount.clone();
+                                async move { crate::platform::open::eject_drive(&mount) }
                             })
-                            .ok();
-                    }
-                })
-                .detach();
+                            .await;
+
+                        if let Err(e) = result {
+                            eprintln!("[zero-ui] eject error: {e}");
+                        }
+                        // Refresh drives list
+                        if let Some(sidebar) = sidebar {
+                            _this
+                                .update(cx, |_app, cx| {
+                                    sidebar.update(cx, |s, cx| s.refresh_drives(cx));
+                                })
+                                .ok();
+                        }
+                    })
+                    .detach();
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    let _ = path;
+                    eprintln!("[zero-ui] eject not supported on this platform");
+                }
             }
         }
     }
@@ -259,8 +267,13 @@ impl ZeroApp {
         match event {
             FileBrowserEvent::NavigateToDir(path) => self.navigate_to(path.clone(), window, cx),
             FileBrowserEvent::OpenFile(path) => {
-                self.editor = None;
-                self.active_view = ActiveView::Editor(path.clone());
+                if crate::views::data_table::is_data_table(path) {
+                    self.data_table = None;
+                    self.active_view = ActiveView::DataTable(path.clone());
+                } else {
+                    self.editor = None;
+                    self.active_view = ActiveView::Editor(path.clone());
+                }
                 cx.notify();
             }
             FileBrowserEvent::SetClipboard(clipboard) => {
@@ -524,6 +537,44 @@ impl ZeroApp {
         }
     }
 
+    pub fn ensure_data_table(
+        &mut self,
+        path: PathBuf,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Entity<DataTableView> {
+        if let Some(view) = &self.data_table {
+            return view.clone();
+        }
+
+        let view = cx.new(|cx| DataTableView::new(path, window, cx));
+
+        let sub = cx.subscribe_in(&view, window, Self::on_data_table_event);
+        self._subs.push(sub);
+        self.data_table = Some(view.clone());
+
+        view.read(cx).focus_handle.focus(window);
+
+        view
+    }
+
+    fn on_data_table_event(
+        &mut self,
+        _: &Entity<DataTableView>,
+        event: &DataTableEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        match event {
+            DataTableEvent::Close => {
+                self.data_table = None;
+                self.active_view = ActiveView::FileBrowser;
+                self.focus_content(window, cx);
+                cx.notify();
+            }
+        }
+    }
+
     pub fn ensure_command_palette(
         &mut self,
         window: &mut Window,
@@ -572,6 +623,52 @@ impl ZeroApp {
                 self.command_palette_open = false;
 
                 if let Some(path_str) = path.to_str() {
+                    // Navigation / view-toggle actions
+                    match path_str {
+                        "action://toggle_sidebar" => {
+                            self.sidebar_open = !self.sidebar_open;
+                            self.focus_content(window, cx);
+                            cx.notify();
+                            return;
+                        }
+                        "action://toggle_split_view" => {
+                            self.toggle_split_view(window, cx);
+                            self.focus_content(window, cx);
+                            cx.notify();
+                            return;
+                        }
+                        "action://go_back" => {
+                            self.go_back(window, cx);
+                            return;
+                        }
+                        "action://go_forward" => {
+                            self.go_forward(window, cx);
+                            return;
+                        }
+                        "action://go_up" => {
+                            if let Some(parent) =
+                                self.current_path.parent().map(|p| p.to_path_buf())
+                            {
+                                self.navigate_to(parent, window, cx);
+                            }
+                            self.focus_content(window, cx);
+                            cx.notify();
+                            return;
+                        }
+                        "action://new_folder" => {
+                            if let Some(browser) = &self.file_browser {
+                                browser.update(cx, |view, cx| {
+                                    view.start_new_folder(window, cx);
+                                });
+                            }
+                            self.focus_content(window, cx);
+                            cx.notify();
+                            return;
+                        }
+                        _ => {}
+                    }
+
+                    // View-switching actions
                     if let Some(view) = Self::action_view(path_str) {
                         self.active_view = view;
                         self.focus_content(window, cx);
@@ -599,6 +696,11 @@ impl ZeroApp {
 
                 if path.is_dir() {
                     self.navigate_to(path.clone(), window, cx);
+                } else if crate::views::data_table::is_data_table(path) {
+                    self.data_table = None;
+                    self.active_view = ActiveView::DataTable(path.clone());
+                    cx.notify();
+                    return;
                 } else if crate::views::editor::is_editable(path) {
                     self.editor = None;
                     self.active_view = ActiveView::Editor(path.clone());
@@ -707,33 +809,41 @@ impl ZeroApp {
                 eprintln!("[zero-ui] run automation: {}", name);
             }
             DrivesPopoverEvent::EjectDrive(path) => {
-                let mount = path.clone();
-                let drives_popover = self.drives_popover.clone();
-                let sidebar = self.sidebar.clone();
-                cx.spawn(async move |_this, cx| {
-                    let result = cx
-                        .background_executor()
-                        .spawn({
-                            let mount = mount.clone();
-                            async move { crate::platform::open::eject_drive(&mount) }
-                        })
-                        .await;
+                #[cfg(target_os = "macos")]
+                {
+                    let mount = path.clone();
+                    let drives_popover = self.drives_popover.clone();
+                    let sidebar = self.sidebar.clone();
+                    cx.spawn(async move |_this, cx| {
+                        let result = cx
+                            .background_executor()
+                            .spawn({
+                                let mount = mount.clone();
+                                async move { crate::platform::open::eject_drive(&mount) }
+                            })
+                            .await;
 
-                    if let Err(e) = result {
-                        eprintln!("[zero-ui] eject error: {e}");
-                    }
-                    _this
-                        .update(cx, |_app, cx| {
-                            if let Some(dp) = drives_popover {
-                                dp.update(cx, |v, cx| v.refresh(cx));
-                            }
-                            if let Some(sb) = sidebar {
-                                sb.update(cx, |s, cx| s.refresh_drives(cx));
-                            }
-                        })
-                        .ok();
-                })
-                .detach();
+                        if let Err(e) = result {
+                            eprintln!("[zero-ui] eject error: {e}");
+                        }
+                        _this
+                            .update(cx, |_app, cx| {
+                                if let Some(dp) = drives_popover {
+                                    dp.update(cx, |v, cx| v.refresh(cx));
+                                }
+                                if let Some(sb) = sidebar {
+                                    sb.update(cx, |s, cx| s.refresh_drives(cx));
+                                }
+                            })
+                            .ok();
+                    })
+                    .detach();
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    let _ = path;
+                    eprintln!("[zero-ui] eject not supported on this platform");
+                }
             }
         }
     }
