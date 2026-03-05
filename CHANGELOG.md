@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.4.10
+## v0.5.0
 
 New:
 - index: PathArena replaces per-node String allocations — single contiguous Vec<u8> for all paths (~60% less memory for 2.5M files)
