@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.4.10
+
+New:
+- index: PathArena replaces per-node String allocations — single contiguous Vec<u8> for all paths (~60% less memory for 2.5M files)
+- index: CompactNode (24 bytes, Copy) replaces heap-allocated FileNode in the slab
+- index: CompactNameIndex and CompactMtimeIndex use sorted flat arrays instead of BTreeMap
+- index: zstd-compressed .zidx snapshot persistence replaces etch WAL directories
+- index: FileNode.name field removed — name() now derived from path zero-copy
+- editor: tree-sitter syntax highlighting for 28 languages via tree-sitter-languages feature
+- ui: ZeroMenuExt trait for context menu items with auto-resolved keyboard shortcuts
+- context-menu: reorganized with New/Pane/Actions submenus and shortcut display
+
+Fix:
+- sidebar: default start path uses first pinned bookmark (Desktop) instead of home dir, fixing Macintosh HD false highlight
+- app: removed premature "Loading search index" banner that appeared before indexing actually starts
+- app: toolbar forced visible when sidebar is hidden so nav controls and traffic lights remain accessible
+- session: sidebar defaults to open, toolbar defaults to hidden on fresh installs
+- cleanup: folder pattern query falls back to text search when component missing from selective index
+- search-service: watcher rebuild keeps old index searchable during shadow-build instead of removing first
+- theme: emphasis.strong gets foreground color across all 6 themes, title colors adjusted
+- theme: CONTENT_INSET reduced to 0
+- editor: font changed to Menlo 12px
+
 ## v0.4.9
 
 New:

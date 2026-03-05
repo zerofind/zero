@@ -2,12 +2,64 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::arena::PathArena;
+
 /// Type of file system node
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum NodeType {
     File,
     Directory,
     Symlink,
+}
+
+/// Compact internal node — 24 bytes, Copy, no heap allocation.
+///
+/// Path is stored in PathArena and referenced by (offset, len).
+/// This struct is internal; the public API still uses `FileNode`.
+#[derive(Debug, Clone, Copy)]
+#[repr(C)]
+pub struct CompactNode {
+    pub path_offset: u32,
+    pub path_len: u16,
+    pub node_type: NodeType,
+    pub size: u64,
+    pub mtime: u64,
+}
+
+impl CompactNode {
+    /// Materialize into a full FileNode by copying the path from the arena
+    #[inline]
+    pub fn to_file_node(self, arena: &PathArena) -> FileNode {
+        FileNode {
+            path: arena.get(self.path_offset, self.path_len).to_string(),
+            node_type: self.node_type,
+            size: self.size,
+            mtime: self.mtime,
+        }
+    }
+
+    /// Get the filename from the path in the arena (zero-copy)
+    #[inline]
+    pub fn name<'a>(&self, arena: &'a PathArena) -> &'a str {
+        let path = arena.get(self.path_offset, self.path_len);
+        match path.rfind('/') {
+            Some(pos) => &path[pos + 1..],
+            None => path,
+        }
+    }
+
+    /// Get the path from the arena (zero-copy)
+    #[inline]
+    pub fn path<'a>(&self, arena: &'a PathArena) -> &'a str {
+        arena.get(self.path_offset, self.path_len)
+    }
+
+    /// Get the file extension from the name (zero-copy)
+    #[inline]
+    pub fn extension<'a>(&self, arena: &'a PathArena) -> Option<&'a str> {
+        let name = self.name(arena);
+        name.rsplit('.').next().filter(|ext| ext.len() < name.len())
+    }
 }
 
 /// A file node in the search index
@@ -17,10 +69,7 @@ pub enum NodeType {
 /// and result display.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileNode {
-    /// Filename only (e.g., "report.pdf")
-    pub name: String,
-
-    /// Full path from index root (e.g., "Documents/Work/report.pdf")
+    /// Full path (e.g., "Documents/Work/report.pdf")
     pub path: String,
 
     /// Type of node
@@ -35,9 +84,8 @@ pub struct FileNode {
 
 impl FileNode {
     /// Create a new file node
-    pub fn new(name: String, path: String, node_type: NodeType, size: u64, mtime: u64) -> Self {
+    pub fn new(path: String, node_type: NodeType, size: u64, mtime: u64) -> Self {
         Self {
-            name,
             path,
             node_type,
             size,
@@ -46,13 +94,22 @@ impl FileNode {
     }
 
     /// Create a file node
-    pub fn file(name: String, path: String, size: u64, mtime: u64) -> Self {
-        Self::new(name, path, NodeType::File, size, mtime)
+    pub fn file(path: String, size: u64, mtime: u64) -> Self {
+        Self::new(path, NodeType::File, size, mtime)
     }
 
     /// Create a directory node
-    pub fn directory(name: String, path: String, mtime: u64) -> Self {
-        Self::new(name, path, NodeType::Directory, 0, mtime)
+    pub fn directory(path: String, mtime: u64) -> Self {
+        Self::new(path, NodeType::Directory, 0, mtime)
+    }
+
+    /// Get the filename from the path
+    #[inline]
+    pub fn name(&self) -> &str {
+        match self.path.rfind('/') {
+            Some(pos) => &self.path[pos + 1..],
+            None => &self.path,
+        }
     }
 
     /// Check if this is a file
@@ -69,9 +126,10 @@ impl FileNode {
 
     /// Get the file extension (lowercase, without dot)
     pub fn extension(&self) -> Option<&str> {
-        self.name.rsplit('.').next().filter(|ext| {
+        let name = self.name();
+        name.rsplit('.').next().filter(|ext| {
             // Make sure there was actually a dot (not just the filename)
-            ext.len() < self.name.len()
+            ext.len() < name.len()
         })
     }
 
@@ -263,14 +321,9 @@ mod tests {
 
     #[test]
     fn test_file_node_creation() {
-        let node = FileNode::file(
-            "report.pdf".to_string(),
-            "Documents/report.pdf".to_string(),
-            1024,
-            1700000000,
-        );
+        let node = FileNode::file("Documents/report.pdf".to_string(), 1024, 1700000000);
 
-        assert_eq!(node.name, "report.pdf");
+        assert_eq!(node.name(), "report.pdf");
         assert_eq!(node.path, "Documents/report.pdf");
         assert!(node.is_file());
         assert!(!node.is_directory());
@@ -279,8 +332,7 @@ mod tests {
 
     #[test]
     fn test_directory_node() {
-        let node =
-            FileNode::directory("Documents".to_string(), "Documents".to_string(), 1700000000);
+        let node = FileNode::directory("Documents".to_string(), 1700000000);
 
         assert!(node.is_directory());
         assert!(!node.is_file());
@@ -288,17 +340,26 @@ mod tests {
     }
 
     #[test]
+    fn test_name_extraction() {
+        let nested = FileNode::file("a/b/c.txt".into(), 0, 0);
+        assert_eq!(nested.name(), "c.txt");
+
+        let root_level = FileNode::file("README".into(), 0, 0);
+        assert_eq!(root_level.name(), "README");
+    }
+
+    #[test]
     fn test_extension() {
-        let pdf = FileNode::file("report.pdf".into(), "report.pdf".into(), 0, 0);
+        let pdf = FileNode::file("report.pdf".into(), 0, 0);
         assert_eq!(pdf.extension(), Some("pdf"));
 
-        let tar_gz = FileNode::file("archive.tar.gz".into(), "archive.tar.gz".into(), 0, 0);
+        let tar_gz = FileNode::file("archive.tar.gz".into(), 0, 0);
         assert_eq!(tar_gz.extension(), Some("gz"));
 
-        let no_ext = FileNode::file("README".into(), "README".into(), 0, 0);
+        let no_ext = FileNode::file("README".into(), 0, 0);
         assert_eq!(no_ext.extension(), None);
 
-        let hidden = FileNode::file(".gitignore".into(), ".gitignore".into(), 0, 0);
+        let hidden = FileNode::file(".gitignore".into(), 0, 0);
         assert_eq!(hidden.extension(), Some("gitignore"));
     }
 }

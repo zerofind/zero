@@ -10,8 +10,8 @@
 //! ```text
 //! ┌─────────────┐     ┌──────────────────────────────┐
 //! │ Name Index  │────▶│ Slab (file nodes by index)   │
-//! │ BTreeMap    │     │ [0] FileNode { name, path }  │
-//! │ "foo" → [0] │     │ [1] FileNode { name, path }  │
+//! │ BTreeMap    │     │ [0] FileNode { path }        │
+//! │ "foo" → [0] │     │ [1] FileNode { path }        │
 //! │ "bar" → [1] │     │ ...                          │
 //! └─────────────┘     └──────────────────────────────┘
 //! ```
@@ -22,11 +22,11 @@
 //!
 //! ```text
 //! ~/.zero/indexes/
-//!   a1b2c3/                 # etch WAL dir for /Users/foo
-//!   d4e5f6/                 # etch WAL dir for /Volumes/External
+//!   a1b2c3.zidx             # compressed snapshot for /Users/foo
+//!   d4e5f6.zidx             # compressed snapshot for /Volumes/External
 //! ```
 //!
-//! Root registry is stored in ControlDb (etch-backed).
+//! Root registry is stored in ControlDb.
 //!
 //! ## Usage
 //!
@@ -64,19 +64,17 @@
 //! manager.remove_root("/Users/me/Documents");
 //! ```
 
-pub mod chunked_loader;
-pub mod etch;
+pub(crate) mod arena;
 mod manager;
 mod node;
+pub mod persistence;
 mod search;
 pub mod type_index;
 mod watcher;
 
-pub use chunked_loader::{ChunkedIndexLoader, load_index_chunked};
-pub use etch::{open_index_store, save_index_via_etch};
 pub use manager::{
     IndexManager, RootStats, SharedIndexManager, default_indexes_dir, hash_path,
-    load_index_from_etch,
+    load_index_snapshot,
 };
 pub use node::{FileNode, NodeType};
 pub use search::{IndexError, SearchIndex, SearchOptions, SearchQuery, SearchResult, SortBy};
@@ -84,6 +82,8 @@ pub use type_index::{FileTypeCategory, TypeIndex, TypeIndexStats};
 pub use watcher::{IndexWatcher, WatcherConfig, WatcherError, WatcherStats};
 
 #[cfg(test)]
-mod etch_test;
+mod arena_test;
+#[cfg(test)]
+mod persistence_test;
 #[cfg(test)]
 mod tests;

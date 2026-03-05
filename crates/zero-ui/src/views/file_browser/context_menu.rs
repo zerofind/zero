@@ -1,11 +1,15 @@
 use gpui::*;
-use gpui_component::{IconName, menu::PopupMenu, table::TableState};
+use gpui_component::{
+    IconName,
+    menu::{PopupMenu, PopupMenuItem},
+    table::TableState,
+};
 
 use crate::actions::{
-    AddToBookmarks, CopyFiles, CopyPath, CopyToOtherPane, CutFiles, DuplicateFiles,
-    FindDuplicatesHere, MoveToOtherPane, MoveToTrash, NewFolder, NewTodoFile, OpenSelected,
-    PasteFiles, QuickLook, Rename, RevealInFinder,
+    AddToBookmarks, CopyFiles, CopyPath, CopyToOtherPane, CutFiles, FindDuplicatesHere,
+    MoveToOtherPane, MoveToTrash, NewFolder, NewTodoFile, OpenSelected, PasteFiles, Rename,
 };
+use crate::ui::ZeroMenuExt;
 
 use super::delegate::FileBrowserDelegate;
 use super::state::BrowserEntry;
@@ -16,75 +20,77 @@ pub fn build_context_menu(
     row_ix: usize,
     split_active: bool,
     menu: PopupMenu,
-    _window: &mut Window,
-    _cx: &mut Context<TableState<FileBrowserDelegate>>,
+    window: &mut Window,
+    cx: &mut Context<TableState<FileBrowserDelegate>>,
 ) -> PopupMenu {
     let Some(entry) = entries.get(row_ix) else {
         return menu;
     };
 
     let is_dir = entry.is_dir;
-    let _path = entry.path.to_string_lossy().to_string();
-
     let mut m = menu;
 
+    // Primary action
     m = m
-        .menu_with_icon("Open", IconName::FolderOpen, Box::new(OpenSelected))
+        .action_row("Open", IconName::FolderOpen, Box::new(OpenSelected))
         .separator();
 
-    if !is_dir {
-        m = m
-            .menu_with_icon("Quick Look", IconName::Eye, Box::new(QuickLook))
-            .separator();
-    }
-
+    // New → submenu
+    let new_sub = PopupMenu::build(window, cx, |menu, _w, _cx| {
+        menu.action_row("New Folder", IconName::Folder, Box::new(NewFolder))
+            .action_row("New Todo", IconName::File, Box::new(NewTodoFile))
+    });
     m = m
-        .menu_with_icon("Copy", IconName::Copy, Box::new(CopyFiles))
-        .menu_with_icon("Cut", IconName::Minus, Box::new(CutFiles))
-        .menu_with_icon("Paste", IconName::Plus, Box::new(PasteFiles))
-        .menu_with_icon("Duplicate", IconName::Copy, Box::new(DuplicateFiles))
-        .separator()
-        .menu_with_icon("Copy Path", IconName::Copy, Box::new(CopyPath))
-        .menu_with_icon(
-            "Reveal in Finder",
-            IconName::ExternalLink,
-            Box::new(RevealInFinder),
-        );
+        .item(PopupMenuItem::submenu("New", new_sub).icon(IconName::Plus))
+        .separator();
 
-    if is_dir {
-        m = m
-            .menu_with_icon("Add to Bookmarks", IconName::Plus, Box::new(AddToBookmarks))
-            .menu_with_icon(
-                "Find Duplicates",
-                IconName::Search,
-                Box::new(FindDuplicatesHere),
-            );
-    }
-
+    // Clipboard — copy actions, then move actions
     m = m
-        .separator()
-        .menu_with_icon("New Todo", IconName::Plus, Box::new(NewTodoFile));
+        .action_row("Copy", IconName::Copy, Box::new(CopyFiles))
+        .action_row("Copy Path", IconName::Copy, Box::new(CopyPath))
+        .action_row("Cut", IconName::Minus, Box::new(CutFiles))
+        .action_row("Paste", IconName::Plus, Box::new(PasteFiles))
+        .separator();
 
+    // Edit
+    m = m.action_row("Rename", IconName::Replace, Box::new(Rename));
+
+    // Pane submenu (split view only)
     if split_active {
-        m = m
-            .menu_with_icon(
+        m = m.separator();
+        let pane_sub = PopupMenu::build(window, cx, |menu, _w, _cx| {
+            menu.action_row(
                 "Move to Other Pane",
                 IconName::ArrowRight,
                 Box::new(MoveToOtherPane),
             )
-            .menu_with_icon(
+            .action_row(
                 "Copy to Other Pane",
                 IconName::Copy,
                 Box::new(CopyToOtherPane),
-            );
+            )
+        });
+        m = m.item(PopupMenuItem::submenu("Pane", pane_sub).icon(IconName::PanelRight));
     }
 
+    // Actions submenu (dirs only)
+    if is_dir {
+        m = m.separator();
+        let actions_sub = PopupMenu::build(window, cx, |menu, _w, _cx| {
+            menu.action_row("Add to Bookmarks", IconName::Star, Box::new(AddToBookmarks))
+                .action_row(
+                    "Find Duplicates",
+                    IconName::Search,
+                    Box::new(FindDuplicatesHere),
+                )
+        });
+        m = m.item(PopupMenuItem::submenu("Actions", actions_sub).icon(IconName::Settings));
+    }
+
+    // Destructive — always last
     m = m
         .separator()
-        .menu_with_icon("Rename", IconName::Replace, Box::new(Rename))
-        .menu_with_icon("New Folder", IconName::Plus, Box::new(NewFolder))
-        .separator()
-        .menu_with_icon("Move to Trash", IconName::Delete, Box::new(MoveToTrash));
+        .action_row("Trash", IconName::Delete, Box::new(MoveToTrash));
 
     m
 }

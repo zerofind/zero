@@ -74,7 +74,7 @@ impl AppSidebar {
             pinned_bookmarks,
             bookmarks,
             drives,
-            toolbar_visible: true,
+            toolbar_visible: false,
             can_go_back: false,
             can_go_forward: false,
             focus_handle: cx.focus_handle(),

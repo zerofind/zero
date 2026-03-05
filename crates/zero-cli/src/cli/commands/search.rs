@@ -7,8 +7,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use zero::index::{
-    FileTypeCategory, IndexWatcher, SearchIndex, SearchQuery, WatcherConfig, open_index_store,
-    save_index_via_etch,
+    FileTypeCategory, IndexWatcher, SearchIndex, SearchQuery, WatcherConfig, persistence,
 };
 use zero::output::*;
 use zero::scanner::CrawlProgress;
@@ -67,16 +66,16 @@ pub fn cmd_search_index(
     ));
     out.indented(&format!("{} unique filenames", index.unique_names()));
 
-    // Save index via etch
-    let index_dir = if let Some(p) = cache_path {
+    // Save index as compressed snapshot
+    let index_path = if let Some(p) = cache_path {
         p.to_path_buf()
     } else {
         zero::dirs::legacy_index_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not determine cache directory"))?
     };
 
-    out.info(&format!("Saving index to {}", index_dir.display()));
-    save_index_via_etch(&index, &index_dir)?;
+    out.info(&format!("Saving index to {}", index_path.display()));
+    persistence::save_index(&index, &index_path)?;
 
     out.success("Search index built successfully");
 
@@ -112,22 +111,21 @@ pub fn cmd_search(out: &Outputter, opts: &SearchOptions<'_>) -> anyhow::Result<(
     } = *opts;
     let total_start = Instant::now();
 
-    // Load index from etch store
+    // Load index from snapshot
     let load_start = Instant::now();
-    let index_dir = if let Some(p) = cache_path {
+    let index_path = if let Some(p) = cache_path {
         p.to_path_buf()
     } else {
         zero::dirs::legacy_index_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not determine cache directory"))?
     };
 
-    if !index_dir.is_dir() {
+    if !index_path.is_file() {
         out.error("Search index not found. Run 'zero search --index <path>' first.");
         return Ok(());
     }
 
-    let store = open_index_store(&index_dir)?;
-    let index = store.read().clone();
+    let index = persistence::load_index(&index_path)?;
     let load_duration = load_start.elapsed();
 
     let search_start = Instant::now();
@@ -425,20 +423,19 @@ pub fn cmd_search_watch(
     out.header(&format!("Watching {} for changes", path.display()));
 
     // Load or build index
-    let index_dir = if let Some(p) = cache_path {
+    let index_path = if let Some(p) = cache_path {
         p.to_path_buf()
     } else {
         zero::dirs::legacy_index_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not determine cache directory"))?
     };
 
-    let index = if index_dir.is_dir() {
+    let index = if index_path.is_file() {
         out.info(&format!(
             "Loading existing index from {}",
-            index_dir.display()
+            index_path.display()
         ));
-        let store = open_index_store(&index_dir)?;
-        store.read().clone()
+        persistence::load_index(&index_path)?
     } else {
         out.info("Building initial index...");
         let progress = Arc::new(CrawlProgress::new());
@@ -473,9 +470,9 @@ pub fn cmd_search_watch(
             index.total_bytes() as f64 / 1_000_000.0
         ));
 
-        // Save initial index via etch
-        save_index_via_etch(&index, &index_dir)?;
-        out.indented(&format!("Saved to {}", index_dir.display()));
+        // Save initial index snapshot
+        persistence::save_index(&index, &index_path)?;
+        out.indented(&format!("Saved to {}", index_path.display()));
 
         index
     };
@@ -528,7 +525,7 @@ pub fn cmd_search_watch(
 
             // Save index periodically when there are changes (every 10 events)
             if stats.events_processed >= last_save_processed + 10 {
-                if let Err(e) = save_index_via_etch(&idx, &index_dir) {
+                if let Err(e) = persistence::save_index(&idx, &index_path) {
                     out.warn(&format!("Failed to save index: {}", e));
                 } else {
                     out.indented(&format!(

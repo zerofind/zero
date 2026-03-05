@@ -10,6 +10,7 @@ mod section_header;
 mod sidebar_row;
 mod status_bar;
 mod status_pill;
+mod zero_menu;
 
 #[allow(unused_imports)] // AlertLevel is public API for callers
 pub use alert::{Alert, AlertLevel, AlertStack};
@@ -24,3 +25,4 @@ pub use section_header::SectionHeader;
 pub use sidebar_row::SidebarRow;
 pub use status_bar::{StatusBar, StatusBarMode};
 pub use status_pill::StatusPill;
+pub use zero_menu::ZeroMenuExt;

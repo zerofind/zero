@@ -12,9 +12,7 @@ use tokio::sync::RwLock;
 
 use crate::automation::{AutomationEvent, Executor, ExecutorConfig};
 use crate::cache::CacheDb;
-use crate::index::{
-    FileTypeCategory, SearchIndex, SearchQuery, open_index_store, save_index_via_etch,
-};
+use crate::index::{FileTypeCategory, SearchIndex, SearchQuery, persistence};
 
 use super::logging::ServiceLogger;
 use super::protocol::{JsonRpcError, JsonRpcRequest, JsonRpcResponse};
@@ -83,8 +81,7 @@ impl ServiceHandler {
             &format!("Loading search index from {}", index_dir.display()),
         );
 
-        let store = open_index_store(&index_dir).map_err(|e| e.to_string())?;
-        let index = store.read().clone();
+        let index = persistence::load_index(&index_dir).map_err(|e| e.to_string())?;
         let file_count = index.file_count() as u64;
 
         let mut guard = self.index.write().await;
@@ -222,7 +219,7 @@ impl ServiceHandler {
             .map(|r| {
                 serde_json::json!({
                     "path": r.node.path,
-                    "name": r.node.name,
+                    "name": r.node.name(),
                     "size": r.node.size,
                     "is_dir": r.node.is_directory(),
                     "score": r.score,
@@ -262,11 +259,11 @@ impl ServiceHandler {
         let file_count = index.file_count();
         let total_bytes = index.total_bytes();
 
-        // Save index via etch
-        let index_dir = crate::dirs::legacy_index_dir()
+        // Save index snapshot
+        let index_path = crate::dirs::legacy_index_dir()
             .ok_or_else(|| JsonRpcError::internal_error("Could not determine index directory"))?;
 
-        save_index_via_etch(&index, &index_dir)
+        persistence::save_index(&index, &index_path)
             .map_err(|e| JsonRpcError::filesystem_error(e.to_string()))?;
 
         // Update in-memory index
@@ -282,7 +279,7 @@ impl ServiceHandler {
             "success": true,
             "file_count": file_count,
             "total_bytes": total_bytes,
-            "index_path": index_dir.to_string_lossy(),
+            "index_path": index_path.to_string_lossy(),
         }))
     }
 

@@ -331,7 +331,7 @@ impl<'a> ProfileCleanupQuery<'a> {
         let results = manager.search(filename, self.limit);
 
         for result in results {
-            if result.node.name == filename
+            if result.node.name() == filename
                 && self.matches_filters(&result.node, cutoff_time, min_size)
                 && !self.is_excluded(&result.node.path)
             {
@@ -407,7 +407,7 @@ impl<'a> ProfileCleanupQuery<'a> {
     /// Query by folder pattern (e.g., node_modules, target)
     ///
     /// Uses O(1) bitmap lookup via TypeIndex path component bitmaps.
-    /// This is ~1000x faster than text search for folder queries.
+    /// Falls back to text search if the component isn't in the selective index.
     fn query_folder_pattern(
         &self,
         manager: &IndexManager,
@@ -416,12 +416,17 @@ impl<'a> ProfileCleanupQuery<'a> {
         cutoff_time: Option<u64>,
         min_size: Option<u64>,
     ) {
-        // Use O(1) path component bitmap lookup instead of text search
-        // This is the key optimization: bitmap lookup vs O(n) text scan
+        // Try O(1) path component bitmap lookup first
         let results = manager.search_by_path_component(folder_name, self.limit.saturating_mul(10));
 
+        if results.is_empty() {
+            // Fallback: component may not be in the selective index.
+            // Use text search instead.
+            self.query_search_term(manager, items, folder_name, cutoff_time, min_size);
+            return;
+        }
+
         for result in results {
-            // No need to verify path contains folder - bitmap already guarantees it
             if self.matches_filters(&result.node, cutoff_time, min_size)
                 && !self.is_excluded(&result.node.path)
             {
@@ -699,7 +704,6 @@ mod tests {
 
         let small_node = FileNode {
             path: "/test/small.txt".into(),
-            name: "small.txt".into(),
             size: 100,
             mtime: 0,
             node_type: crate::index::NodeType::File,
@@ -707,7 +711,6 @@ mod tests {
 
         let large_node = FileNode {
             path: "/test/large.txt".into(),
-            name: "large.txt".into(),
             size: 1_000_000,
             mtime: 0,
             node_type: crate::index::NodeType::File,
@@ -810,7 +813,6 @@ mod tests {
         // Create test nodes
         let small_node = FileNode {
             path: "/test/small.txt".into(),
-            name: "small.txt".into(),
             size: 100,
             mtime: 0,
             node_type: crate::index::NodeType::File,
@@ -818,7 +820,6 @@ mod tests {
 
         let large_node = FileNode {
             path: "/test/large.txt".into(),
-            name: "large.txt".into(),
             size: 1_000_000,
             mtime: 0,
             node_type: crate::index::NodeType::File,
@@ -903,7 +904,6 @@ mod tests {
 
         let old_node = FileNode {
             path: "/test/old.txt".into(),
-            name: "old.txt".into(),
             size: 100,
             mtime: now - (60 * 24 * 60 * 60), // 60 days ago
             node_type: crate::index::NodeType::File,
@@ -911,7 +911,6 @@ mod tests {
 
         let new_node = FileNode {
             path: "/test/new.txt".into(),
-            name: "new.txt".into(),
             size: 100,
             mtime: now - (5 * 24 * 60 * 60), // 5 days ago
             node_type: crate::index::NodeType::File,

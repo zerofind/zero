@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use zero::dedup::{DedupOptions, DedupResult, delete_duplicates, find_duplicates};
-use zero::index::{FileTypeCategory, SearchIndex, SearchQuery, open_index_store};
+use zero::index::{FileTypeCategory, SearchIndex, SearchQuery, persistence};
 use zero::output::*;
 use zero::{cmd_error, cmd_success};
 
@@ -123,9 +123,9 @@ fn cmd_dupes_filtered(
     print_mode_info(out, args);
     out.newline();
 
-    // Load search index from etch store
+    // Load search index from snapshot
     out.info("Loading search index...");
-    let index_dir = match zero::dirs::legacy_index_dir() {
+    let index_path = match zero::dirs::legacy_index_dir() {
         Some(p) => p,
         None => {
             cmd_error!(
@@ -139,7 +139,7 @@ fn cmd_dupes_filtered(
         }
     };
 
-    if !index_dir.is_dir() {
+    if !index_path.is_file() {
         cmd_error!(
             out,
             "dupes",
@@ -154,8 +154,7 @@ fn cmd_dupes_filtered(
         return Ok(());
     }
 
-    let store = open_index_store(&index_dir)?;
-    let index = store.read().clone();
+    let index = persistence::load_index(&index_path)?;
 
     // Search for files matching criteria
     out.info("Searching for matching files...");

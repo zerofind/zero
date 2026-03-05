@@ -176,7 +176,7 @@ impl PaletteView {
             .take(20)
             .map(|(i, result)| {
                 let item_idx = i + 1; // shifted by 1 for "Show All"
-                let ext = std::path::Path::new(&result.node.name)
+                let ext = std::path::Path::new(result.node.name())
                     .extension()
                     .map(|e| e.to_string_lossy().to_string());
                 let is_dir = result.node.node_type == zero::index::NodeType::Directory;
@@ -191,7 +191,7 @@ impl PaletteView {
                     .child(
                         PaletteItem::new(
                             SharedString::from(format!("result-{i}")),
-                            SharedString::from(result.node.name.clone()),
+                            SharedString::from(result.node.name().to_string()),
                             SharedString::from(path),
                             ext,
                             is_dir,
@@ -468,7 +468,7 @@ impl PaletteView {
             .map(|(fi, result)| {
                 let item_idx = idx_offset + fi;
                 let selected = self.selected_idx == item_idx;
-                let ext = std::path::Path::new(&result.node.name)
+                let ext = std::path::Path::new(result.node.name())
                     .extension()
                     .map(|e| e.to_string_lossy().to_string());
                 let is_dir = result.node.node_type == zero::index::NodeType::Directory;
@@ -483,7 +483,7 @@ impl PaletteView {
                     .child(
                         PaletteItem::new(
                             SharedString::from(format!("fres-{fi}")),
-                            SharedString::from(result.node.name.clone()),
+                            SharedString::from(result.node.name().to_string()),
                             SharedString::from(path),
                             ext,
                             is_dir,

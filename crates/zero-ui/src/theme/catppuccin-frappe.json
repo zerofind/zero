@@ -164,9 +164,9 @@
           "constructor": {
             "color": "#e5c890"
           },
-          "title": { "color": "#c6d0f5", "font_weight": 700 },
+          "title": { "color": "#c7d1f6", "font_weight": 700 },
           "emphasis": { "font_style": "italic" },
-          "emphasis.strong": { "font_weight": 700 },
+          "emphasis.strong": { "color": "#c7d1f6", "font_weight": 700 },
           "punctuation.special": { "color": "#626880" },
           "punctuation.list_marker": { "color": "#626880" },
           "text.literal": { "color": "#737994" },

@@ -19,7 +19,7 @@ path = "src/bin/design_system.rs"
 zero = { path = "../.." }
 zero-watcher = { path = "../watcher" }
 gpui = "0.2.2"
-gpui-component = "0.5.1"
+gpui-component = { version = "0.5.1", features = ["tree-sitter-languages"] }
 gpui-component-assets = "0.5.1"
 anyhow = "1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

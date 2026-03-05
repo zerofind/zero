@@ -9,11 +9,11 @@
 //!
 //! ```text
 //! ~/.zero/indexes/
-//!   a1b2c3/                 # etch WAL dir for /Users/foo
-//!   d4e5f6/                 # etch WAL dir for /Volumes/External
+//!   a1b2c3.zidx             # compressed snapshot for /Users/foo
+//!   d4e5f6.zidx             # compressed snapshot for /Volumes/External
 //! ```
 //!
-//! Root registry is stored in ControlDb (etch-backed) rather than a manifest file.
+//! Root registry is stored in ControlDb.
 //!
 //! ## Usage
 //!
@@ -43,8 +43,8 @@ use sha2::{Digest, Sha256};
 use crate::cache::{ControlDb, IndexedRoot};
 use crate::scanner::CrawlProgress;
 
-use super::etch::{open_index_store, save_index_via_etch};
 use super::node::FileNode;
+use super::persistence;
 use super::search::{IndexError, SearchIndex, SearchOptions, SearchQuery, SearchResult, SortBy};
 use super::type_index::TypeIndexStats;
 
@@ -106,6 +106,11 @@ impl IndexManager {
         &self.indexes_dir
     }
 
+    /// Get the snapshot file path for a given hash
+    fn index_path(&self, hash: &str) -> PathBuf {
+        self.indexes_dir.join(format!("{hash}.zidx"))
+    }
+
     /// Insert a pre-built index into the manager
     /// Used by async indexing to avoid holding write lock during crawl
     pub fn insert_loaded_index(&mut self, root: &str, index: SearchIndex, file_count: usize) {
@@ -113,9 +118,8 @@ impl IndexManager {
         let total_bytes = index.total_bytes();
         let hash = hash_path(root);
 
-        // Save to disk via etch (ignore errors - index is still usable)
-        let etch_dir = self.indexes_dir.join(&hash);
-        let _ = save_index_via_etch(&index, &etch_dir);
+        // Save to disk (ignore errors - index is still usable)
+        let _ = persistence::save_index(&index, &self.index_path(&hash));
 
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -273,23 +277,22 @@ impl IndexManager {
         Ok(())
     }
 
-    /// Load a single index from disk (etch directory)
+    /// Load a single index from disk (snapshot file)
     fn load_index(&mut self, root: &str) -> Result<(), IndexError> {
         let entry = self
             .roots_cache
             .get(root)
             .ok_or_else(|| IndexError::Serialize(format!("Root not in registry: {}", root)))?;
 
-        let etch_dir = self.indexes_dir.join(&entry.hash);
-        if !etch_dir.is_dir() {
+        let path = self.index_path(&entry.hash);
+        if !path.is_file() {
             return Err(IndexError::Io(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                format!("Index not found: {:?}", etch_dir),
+                format!("Index not found: {:?}", path),
             )));
         }
 
-        let store = open_index_store(&etch_dir)?;
-        let index = store.read().clone();
+        let index = persistence::load_index(&path)?;
         self.indexes.insert(root.to_string(), index);
 
         Ok(())
@@ -329,7 +332,7 @@ impl IndexManager {
         self.indexes.get(root).map(f)
     }
 
-    /// Save a single root's index to disk via etch store
+    /// Save a single root's index to disk as a compressed snapshot
     #[allow(dead_code)]
     fn save_root_index(&self, root: &str) -> Result<(), IndexError> {
         let index = self
@@ -338,9 +341,7 @@ impl IndexManager {
             .ok_or_else(|| IndexError::Serialize(format!("Root not loaded: {}", root)))?;
 
         let hash = hash_path(root);
-        let etch_dir = self.indexes_dir.join(&hash);
-
-        save_index_via_etch(index, &etch_dir)?;
+        persistence::save_index(index, &self.index_path(&hash))?;
 
         Ok(())
     }
@@ -381,9 +382,8 @@ impl IndexManager {
         // Generate hash for filename
         let hash = hash_path(root);
 
-        // Save to disk via etch store
-        let etch_dir = self.indexes_dir.join(&hash);
-        save_index_via_etch(&index, &etch_dir)?;
+        // Save to disk as compressed snapshot
+        persistence::save_index(&index, &self.index_path(&hash))?;
 
         // Update ControlDb
         let now = std::time::SystemTime::now()
@@ -424,10 +424,9 @@ impl IndexManager {
         // Remove from memory (instant)
         self.indexes.remove(root);
 
-        // Get hash, remove from cache + ControlDb, delete index dir
+        // Get hash, remove from cache + ControlDb, delete index file
         if let Some(entry) = self.roots_cache.remove(root) {
-            let etch_dir = self.indexes_dir.join(&entry.hash);
-            let _ = fs::remove_dir_all(&etch_dir);
+            let _ = fs::remove_file(self.index_path(&entry.hash));
         }
         let _ = self.control_db.remove_indexed_root(root);
 
@@ -511,23 +510,16 @@ impl IndexManager {
             .sum()
     }
 
-    /// Iterate over all files in all indexes
-    /// Returns an iterator of FileNode references
-    pub fn iter_all(&self) -> impl Iterator<Item = &FileNode> {
+    /// Iterate over all files in all indexes (materializes FileNode per item)
+    pub fn iter_all(&self) -> impl Iterator<Item = FileNode> + '_ {
         self.indexes.values().flat_map(|idx| idx.iter())
     }
 
     /// Get all files from all indexes as SearchResults
-    /// This is useful for cleanup queries that need to scan all files
     pub fn all_files(&self) -> Vec<SearchResult> {
         self.indexes
             .values()
-            .flat_map(|idx| {
-                idx.iter().map(|node| SearchResult {
-                    node: node.clone(),
-                    score: 0,
-                })
-            })
+            .flat_map(|idx| idx.iter().map(|node| SearchResult { node, score: 0 }))
             .collect()
     }
 
@@ -874,10 +866,9 @@ impl IndexManager {
                 indices_iter
                     .take(limit)
                     .filter_map(|idx| {
-                        index.get(idx as usize).map(|node| SearchResult {
-                            node: node.clone(),
-                            score: 100, // Extension match score
-                        })
+                        index
+                            .get(idx as usize)
+                            .map(|node| SearchResult { node, score: 100 })
                     })
                     .collect::<Vec<_>>()
             })
@@ -905,18 +896,11 @@ impl IndexManager {
     }
 
     /// Search by path component (directory name) using O(1) bitmap lookup
-    ///
-    /// This is much faster than text search for folder-based queries like `**/node_modules`.
-    /// Component should be the directory name (e.g., "node_modules", "target", ".Trash").
-    ///
-    /// Returns files whose path contains the specified directory component.
     pub fn search_by_path_component(&self, component: &str, limit: usize) -> Vec<SearchResult> {
         self.search_by_path_component_filtered(component, limit, false)
     }
 
     /// Search by path component with trash filtering option
-    ///
-    /// This uses O(1) bitmap lookup for the path component, then resolves to FileNodes.
     pub fn search_by_path_component_filtered(
         &self,
         component: &str,
@@ -929,20 +913,17 @@ impl IndexManager {
 
         let component_lower = component.to_lowercase();
 
-        // Collect results from all indexes in parallel
         let all_results: Vec<SearchResult> = self
             .indexes
             .par_iter()
             .flat_map(|(_, index)| {
                 let type_index = index.type_index();
 
-                // Get the path component bitmap
                 let Some(component_bitmap) = type_index.get_by_path_component(&component_lower)
                 else {
                     return Vec::new();
                 };
 
-                // Filter out trash if requested
                 let indices_iter: Box<dyn Iterator<Item = u32> + Send> = if include_trash {
                     Box::new(component_bitmap.iter())
                 } else {
@@ -950,20 +931,17 @@ impl IndexManager {
                     Box::new(filtered.into_iter())
                 };
 
-                // Convert indices to SearchResults
                 indices_iter
                     .take(limit)
                     .filter_map(|idx| {
-                        index.get(idx as usize).map(|node| SearchResult {
-                            node: node.clone(),
-                            score: 100, // Path component match score
-                        })
+                        index
+                            .get(idx as usize)
+                            .map(|node| SearchResult { node, score: 100 })
                     })
                     .collect::<Vec<_>>()
             })
             .collect();
 
-        // Sort by path for consistency
         let mut results = all_results;
         results.sort_by(|a, b| a.node.path.cmp(&b.node.path));
 
@@ -1015,10 +993,9 @@ impl IndexManager {
 
     /// Clear all indexes
     pub fn clear(&mut self) {
-        // Remove all index files/directories
+        // Remove all index files
         for entry in self.roots_cache.values() {
-            let etch_dir = self.indexes_dir.join(&entry.hash);
-            let _ = fs::remove_dir_all(&etch_dir);
+            let _ = fs::remove_file(self.index_path(&entry.hash));
         }
 
         // Remove all roots from ControlDb
@@ -1034,12 +1011,9 @@ impl IndexManager {
 
     /// Rebuild index for a specific root
     ///
-    /// This removes the old index and builds a fresh one.
+    /// Shadow-builds a fresh index then swaps it in atomically.
+    /// The old index stays searchable during the rebuild.
     pub fn rebuild_root(&mut self, root: &str) -> Result<usize, IndexError> {
-        // Remove old index
-        self.remove_root(root);
-
-        // Build fresh
         self.add_root(root)
     }
 
@@ -1060,9 +1034,6 @@ impl IndexManager {
         let mut total_files = 0;
 
         for root in roots {
-            // Remove old index first
-            self.remove_root(&root);
-
             match self.add_root_with_progress(&root, progress.clone()) {
                 Ok(count) => total_files += count,
                 Err(e) => eprintln!("Warning: Failed to rebuild index for {}: {}", root, e),
@@ -1204,20 +1175,19 @@ pub fn default_indexes_dir() -> Option<PathBuf> {
     crate::dirs::indexes_dir()
 }
 
-/// Load a single root's index from its etch directory.
+/// Load a single root's index from its snapshot file.
 ///
 /// Pure function — safe to call on a background thread. Returns the
 /// deserialized `SearchIndex` without mutating any shared state.
-pub fn load_index_from_etch(indexes_dir: &Path, hash: &str) -> Result<SearchIndex, IndexError> {
-    let etch_dir = indexes_dir.join(hash);
-    if !etch_dir.is_dir() {
+pub fn load_index_snapshot(indexes_dir: &Path, hash: &str) -> Result<SearchIndex, IndexError> {
+    let path = indexes_dir.join(format!("{hash}.zidx"));
+    if !path.is_file() {
         return Err(IndexError::Io(std::io::Error::new(
             std::io::ErrorKind::NotFound,
-            format!("Index dir not found: {:?}", etch_dir),
+            format!("Index file not found: {:?}", path),
         )));
     }
-    let store = open_index_store(&etch_dir)?;
-    Ok(store.read().clone())
+    persistence::load_index(&path)
 }
 
 pub fn hash_path(path: &str) -> String {
@@ -1413,12 +1383,12 @@ mod tests {
             assert!(
                 result.node.is_directory(),
                 "Expected directory, got file: {}",
-                result.node.name
+                result.node.name()
             );
             assert!(
-                result.node.name.contains("zero"),
+                result.node.name().contains("zero"),
                 "Expected name to contain 'zero': {}",
-                result.node.name
+                result.node.name()
             );
         }
 
@@ -1429,7 +1399,7 @@ mod tests {
             assert!(
                 result.node.is_file(),
                 "Expected file, got directory: {}",
-                result.node.name
+                result.node.name()
             );
         }
 

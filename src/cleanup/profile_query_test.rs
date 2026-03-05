@@ -6,33 +6,31 @@
 use std::time::{Duration, Instant};
 
 use crate::cleanup::{ProfileCleanupQuery, execute_full_cleanup_scan, execute_group_cleanup};
-use crate::index::{IndexManager, SearchIndex, open_index_store};
+use crate::index::{IndexManager, SearchIndex, persistence};
 use crate::profiles::{CleanupGroup, load_cleanup};
 
 /// Load the search index for benchmarks
 ///
-/// This loads from the etch-backed index directory used by `zero search --index`.
+/// This loads from the snapshot file used by `zero search --index`.
 /// Returns an IndexManager with the index injected.
 fn load_index_manager() -> Option<IndexManager> {
-    let index_dir = crate::dirs::legacy_index_dir()?;
+    let index_path = crate::dirs::legacy_index_dir()?;
 
-    if !index_dir.is_dir() {
+    if !index_path.is_file() {
         eprintln!(
             "⚠️  No index found at {:?}. Run `zero search --index ~` first.",
-            index_dir
+            index_path
         );
         return None;
     }
 
-    let store = match open_index_store(&index_dir) {
-        Ok(s) => s,
+    let index = match persistence::load_index(&index_path) {
+        Ok(idx) => idx,
         Err(e) => {
-            eprintln!("❌ Failed to open index store: {}", e);
+            eprintln!("❌ Failed to load index: {}", e);
             return None;
         }
     };
-
-    let index = store.read().clone();
     let file_count = index.file_count();
     let dir_count = index.dir_count();
     let unique_names = index.unique_names();
@@ -63,19 +61,18 @@ fn load_index_manager() -> Option<IndexManager> {
 
 /// Load the SearchIndex directly for benchmarks (for search comparison tests)
 fn load_search_index() -> Option<SearchIndex> {
-    let index_dir = crate::dirs::legacy_index_dir()?;
+    let index_path = crate::dirs::legacy_index_dir()?;
 
-    if !index_dir.is_dir() {
+    if !index_path.is_file() {
         eprintln!(
             "⚠️  No index found at {:?}. Run `zero search --index ~` first.",
-            index_dir
+            index_path
         );
         return None;
     }
 
-    match open_index_store(&index_dir) {
-        Ok(store) => {
-            let index = store.read().clone();
+    match persistence::load_index(&index_path) {
+        Ok(index) => {
             eprintln!(
                 "📁 Loaded index: {} files, {} dirs, {} unique names",
                 index.file_count(),
@@ -85,7 +82,7 @@ fn load_search_index() -> Option<SearchIndex> {
             Some(index)
         }
         Err(e) => {
-            eprintln!("❌ Failed to open index store: {}", e);
+            eprintln!("❌ Failed to load index: {}", e);
             None
         }
     }

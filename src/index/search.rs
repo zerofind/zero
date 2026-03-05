@@ -1,20 +1,24 @@
 //! Search index - Cardinal-style fast file search
 //!
-//! This is the main search engine that stores file nodes in a slab
-//! and maintains a BTreeMap name index for fast lookups.
+//! This is the main search engine that stores compact file nodes in a slab
+//! with a contiguous PathArena, sorted name/mtime indexes, and roaring bitmaps.
+//!
+//! ## Memory Layout (compact)
+//!
+//! - PathArena: single `Vec<u8>` for all paths (~150MB for 2.5M files)
+//! - CompactNode slab: 24 bytes per node (~60MB for 2.5M files)
+//! - CompactNameIndex: sorted flat arrays (~72MB for 2M unique names)
+//! - CompactMtimeIndex: sorted flat arrays (~10MB)
+//! - TypeIndex bitmaps: ~8MB
 //!
 //! ## Fast Type Filtering
 //!
 //! Type queries (e.g., `--type images`) use roaring bitmaps for O(result_count)
-//! performance instead of O(total_files). For 1.3M files:
-//! - Before: ~1.7 seconds
-//! - After: <1ms
+//! performance instead of O(total_files).
 //!
 //! ## Fast Recent Files
 //!
-//! The mtime_index (BTreeMap<mtime, Vec<slab_index>>) enables O(K) queries for
-//! "most recent K files" instead of O(n) full scan. Built on index load from
-//! existing mtime data in file nodes.
+//! The mtime index enables O(K) queries for "most recent K files".
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -22,20 +26,12 @@ use std::sync::Arc;
 use std::time::SystemTime;
 use tracing::instrument;
 
-use jwalk::WalkDir;
-use serde::{Deserialize, Serialize};
-
 use crate::scanner::CrawlProgress;
+use jwalk::WalkDir;
 
-use super::node::{FileNode, NodeType};
+use super::arena::PathArena;
+use super::node::{CompactNode, FileNode, NodeType};
 use super::type_index::{FileTypeCategory, TypeIndex, TypeIndexStats};
-
-/// Index of filename -> slab indices for fast lookup
-type NameIndex = BTreeMap<String, Vec<usize>>;
-
-/// Index of mtime -> slab indices for fast "recent files" queries
-/// BTreeMap is sorted, so iterating from end gives most recent first
-type MtimeIndex = BTreeMap<u64, Vec<usize>>;
 
 /// A search result with relevance score
 #[derive(Debug, Clone)]
@@ -255,29 +251,246 @@ impl SearchQuery {
     }
 }
 
-/// Fast file search index using slab storage and name index
-///
-/// This is a Cardinal-style implementation optimized for:
-/// - Fast substring matching on filenames
-/// - Low memory overhead via slab storage
-/// - O(n) search where n = unique filenames (not total files)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SearchIndex {
-    /// Slab storage for file nodes (index -> FileNode)
-    slab: Vec<FileNode>,
+// ============================================================================
+// Compact Name Index — sorted flat arrays instead of BTreeMap<String, Vec<usize>>
+// ============================================================================
 
-    /// Name index: lowercase filename -> list of slab indices
-    /// Multiple files can have the same name in different directories
-    name_index: NameIndex,
+/// Entry in the compact name index — 16 bytes per unique filename
+#[derive(Clone, Copy)]
+#[repr(C)]
+struct NameEntry {
+    name_offset: u32,
+    name_len: u16,
+    _pad: u16,
+    indices_start: u32,
+    indices_count: u32,
+}
+
+/// Compact name index using contiguous sorted arrays
+#[derive(Clone)]
+struct CompactNameIndex {
+    name_data: Vec<u8>,
+    entries: Vec<NameEntry>,
+    indices: Vec<u32>,
+    /// Small overflow buffer for watcher inserts between rebuilds
+    overflow: BTreeMap<String, Vec<u32>>,
+}
+
+impl std::fmt::Debug for CompactNameIndex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CompactNameIndex")
+            .field("entries", &self.entries.len())
+            .field("overflow", &self.overflow.len())
+            .finish()
+    }
+}
+
+impl CompactNameIndex {
+    fn new() -> Self {
+        Self {
+            name_data: Vec::new(),
+            entries: Vec::new(),
+            indices: Vec::new(),
+            overflow: BTreeMap::new(),
+        }
+    }
+
+    /// Build from a BTreeMap (used after bulk inserts)
+    fn build_from(map: &BTreeMap<String, Vec<u32>>) -> Self {
+        let total_names_bytes: usize = map.keys().map(|k| k.len()).sum();
+        let total_indices: usize = map.values().map(|v| v.len()).sum();
+
+        let mut name_data = Vec::with_capacity(total_names_bytes);
+        let mut entries = Vec::with_capacity(map.len());
+        let mut indices = Vec::with_capacity(total_indices);
+
+        for (name, idx_list) in map {
+            let name_offset = name_data.len() as u32;
+            let name_len = name.len() as u16;
+            name_data.extend_from_slice(name.as_bytes());
+
+            let indices_start = indices.len() as u32;
+            let indices_count = idx_list.len() as u32;
+            indices.extend_from_slice(idx_list);
+
+            entries.push(NameEntry {
+                name_offset,
+                name_len,
+                _pad: 0,
+                indices_start,
+                indices_count,
+            });
+        }
+
+        Self {
+            name_data,
+            entries,
+            indices,
+            overflow: BTreeMap::new(),
+        }
+    }
+
+    /// Get name string for an entry
+    #[inline]
+    fn entry_name(&self, entry: &NameEntry) -> &str {
+        let start = entry.name_offset as usize;
+        let end = start + entry.name_len as usize;
+        // SAFETY: all names come from to_lowercase() which produces valid UTF-8
+        unsafe { std::str::from_utf8_unchecked(&self.name_data[start..end]) }
+    }
+
+    /// Get slab indices for an entry
+    #[inline]
+    fn entry_indices(&self, entry: &NameEntry) -> &[u32] {
+        let start = entry.indices_start as usize;
+        let end = start + entry.indices_count as usize;
+        &self.indices[start..end]
+    }
+
+    /// Insert into overflow (for watcher updates)
+    fn insert_overflow(&mut self, name: String, idx: u32) {
+        self.overflow.entry(name).or_default().push(idx);
+    }
+
+    /// Total unique names (main + overflow)
+    fn len(&self) -> usize {
+        self.entries.len() + self.overflow.len()
+    }
+
+    /// Remove an index from overflow by name
+    fn remove_from_overflow(&mut self, name: &str, idx: u32) {
+        if let Some(indices) = self.overflow.get_mut(name) {
+            indices.retain(|&i| i != idx);
+            if indices.is_empty() {
+                self.overflow.remove(name);
+            }
+        }
+    }
+
+    fn clear(&mut self) {
+        self.name_data.clear();
+        self.entries.clear();
+        self.indices.clear();
+        self.overflow.clear();
+    }
+
+    fn shrink_to_fit(&mut self) {
+        self.name_data.shrink_to_fit();
+        self.entries.shrink_to_fit();
+        self.indices.shrink_to_fit();
+    }
+}
+
+// ============================================================================
+// Compact Mtime Index — sorted flat arrays instead of BTreeMap<u64, Vec<usize>>
+// ============================================================================
+
+/// Compact mtime index using contiguous sorted arrays
+#[derive(Clone)]
+struct CompactMtimeIndex {
+    /// (mtime, start_in_indices, count) sorted by mtime ascending
+    groups: Vec<(u64, u32, u32)>,
+    /// Flat slab indices grouped by mtime
+    indices: Vec<u32>,
+    /// Overflow for watcher inserts
+    overflow: Vec<(u64, u32)>,
+}
+
+impl std::fmt::Debug for CompactMtimeIndex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CompactMtimeIndex")
+            .field("groups", &self.groups.len())
+            .field("overflow", &self.overflow.len())
+            .finish()
+    }
+}
+
+impl CompactMtimeIndex {
+    fn new() -> Self {
+        Self {
+            groups: Vec::new(),
+            indices: Vec::new(),
+            overflow: Vec::new(),
+        }
+    }
+
+    /// Build from a BTreeMap (used after bulk inserts)
+    fn build_from(map: &BTreeMap<u64, Vec<u32>>) -> Self {
+        let total_indices: usize = map.values().map(|v| v.len()).sum();
+
+        let mut groups = Vec::with_capacity(map.len());
+        let mut indices = Vec::with_capacity(total_indices);
+
+        for (&mtime, idx_list) in map {
+            let start = indices.len() as u32;
+            let count = idx_list.len() as u32;
+            indices.extend_from_slice(idx_list);
+            groups.push((mtime, start, count));
+        }
+
+        Self {
+            groups,
+            indices,
+            overflow: Vec::new(),
+        }
+    }
+
+    /// Get slab indices for a group
+    #[inline]
+    fn group_indices(&self, start: u32, count: u32) -> &[u32] {
+        let s = start as usize;
+        let e = s + count as usize;
+        &self.indices[s..e]
+    }
+
+    /// Insert into overflow
+    fn insert_overflow(&mut self, mtime: u64, idx: u32) {
+        self.overflow.push((mtime, idx));
+    }
+
+    fn clear(&mut self) {
+        self.groups.clear();
+        self.indices.clear();
+        self.overflow.clear();
+    }
+
+    fn shrink_to_fit(&mut self) {
+        self.groups.shrink_to_fit();
+        self.indices.shrink_to_fit();
+    }
+}
+
+// ============================================================================
+// SearchIndex
+// ============================================================================
+
+/// Fast file search index using compact slab storage, arena paths, and sorted indexes
+///
+/// Optimized for minimal memory usage while preserving sub-millisecond search:
+/// - CompactNode slab (24 bytes/node) + PathArena (contiguous paths)
+/// - Sorted flat name/mtime indexes instead of BTreeMaps
+/// - Roaring bitmaps for type filtering
+#[derive(Debug, Clone)]
+pub struct SearchIndex {
+    /// Compact slab storage (24 bytes per node, no heap)
+    slab: Vec<CompactNode>,
+
+    /// Contiguous path storage
+    path_arena: PathArena,
+
+    /// Compact name index: sorted flat arrays
+    name_index: CompactNameIndex,
 
     /// Type index: roaring bitmaps for ultra-fast type filtering
     type_index: TypeIndex,
 
-    /// Mtime index: mtime -> list of slab indices for fast "recent files" queries
-    /// Built on load, not persisted (derived from mtime already in FileNode)
-    mtime_index: MtimeIndex,
+    /// Compact mtime index: sorted flat arrays
+    mtime_index: CompactMtimeIndex,
 
-    /// Root paths this index was built from (supports multiple roots)
+    /// Whether we've been finalized (compact indexes built from overflow)
+    finalized: bool,
+
+    /// Root paths this index was built from
     roots: Vec<String>,
 
     /// Total number of files indexed
@@ -295,9 +508,11 @@ impl SearchIndex {
     pub fn new() -> Self {
         Self {
             slab: Vec::new(),
-            name_index: BTreeMap::new(),
+            path_arena: PathArena::new(),
+            name_index: CompactNameIndex::new(),
             type_index: TypeIndex::new(),
-            mtime_index: BTreeMap::new(),
+            mtime_index: CompactMtimeIndex::new(),
+            finalized: false,
             roots: Vec::new(),
             file_count: 0,
             dir_count: 0,
@@ -309,9 +524,11 @@ impl SearchIndex {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             slab: Vec::with_capacity(capacity),
-            name_index: BTreeMap::new(),
+            path_arena: PathArena::with_capacity(capacity * 60),
+            name_index: CompactNameIndex::new(),
             type_index: TypeIndex::new(),
-            mtime_index: BTreeMap::new(),
+            mtime_index: CompactMtimeIndex::new(),
+            finalized: false,
             roots: Vec::new(),
             file_count: 0,
             dir_count: 0,
@@ -386,6 +603,44 @@ impl SearchIndex {
         self.name_index.len()
     }
 
+    // ========================================================================
+    // Internal helpers for CompactNode access
+    // ========================================================================
+
+    /// Get path for a slab index (zero-copy)
+    #[inline]
+    fn node_path(&self, idx: usize) -> &str {
+        let node = &self.slab[idx];
+        self.path_arena.get(node.path_offset, node.path_len)
+    }
+
+    /// Finalize compact indexes after bulk inserts.
+    ///
+    /// Moves overflow BTreeMaps into flat sorted compact arrays for better
+    /// cache locality and lower memory usage. Called automatically at the end
+    /// of `build_from_path_with_progress()` and after `load_index()`.
+    pub fn finalize(&mut self) {
+        if self.finalized {
+            return;
+        }
+        // Build compact name index from overflow
+        self.name_index = CompactNameIndex::build_from(&self.name_index.overflow);
+        // Build compact mtime index from overflow
+        let mtime_overflow: BTreeMap<u64, Vec<u32>> = {
+            let mut map: BTreeMap<u64, Vec<u32>> = BTreeMap::new();
+            for &(mtime, idx) in &self.mtime_index.overflow {
+                map.entry(mtime).or_default().push(idx);
+            }
+            map
+        };
+        self.mtime_index = CompactMtimeIndex::build_from(&mtime_overflow);
+        self.path_arena.shrink_to_fit();
+        self.name_index.shrink_to_fit();
+        self.mtime_index.shrink_to_fit();
+        self.slab.shrink_to_fit();
+        self.finalized = true;
+    }
+
     /// Build index from a directory path (clears existing index)
     ///
     /// This crawls the directory tree and indexes all files and directories.
@@ -447,19 +702,13 @@ impl SearchIndex {
                     let file_type = entry.file_type();
                     let entry_path = entry.path();
 
-                    // Get name
-                    let name = entry_path
-                        .file_name()
-                        .map(|n| n.to_string_lossy().to_string())
-                        .unwrap_or_default();
-
-                    // Skip empty names (root directory)
-                    if name.is_empty() {
-                        continue;
-                    }
-
                     // Store ABSOLUTE path for multi-root support
                     let abs_path = entry_path.to_string_lossy().to_string();
+
+                    // Skip entries with no filename (root directory)
+                    if entry_path.file_name().is_none() {
+                        continue;
+                    }
 
                     if file_type.is_dir() {
                         // Index directory
@@ -471,7 +720,7 @@ impl SearchIndex {
                             .map(|d| d.as_secs())
                             .unwrap_or(0);
 
-                        let node = FileNode::directory(name, abs_path, mtime);
+                        let node = FileNode::directory(abs_path, mtime);
                         self.insert(node);
 
                         if let Some(ref p) = progress {
@@ -493,7 +742,7 @@ impl SearchIndex {
                             .map(|d| d.as_secs())
                             .unwrap_or(0);
 
-                        let node = FileNode::file(name, abs_path, size, mtime);
+                        let node = FileNode::file(abs_path, size, mtime);
                         self.insert(node);
 
                         if let Some(ref p) = progress {
@@ -507,6 +756,9 @@ impl SearchIndex {
                 }
             }
         }
+
+        // Finalize compact indexes
+        self.finalize();
 
         Ok(())
     }
@@ -526,16 +778,21 @@ impl SearchIndex {
         // Remove from roots list
         self.roots.retain(|r| r != &root_str);
 
-        // Collect paths to remove
-        let paths_to_remove: Vec<String> = self
+        // Collect indices to remove
+        let indices_to_remove: Vec<usize> = self
             .slab
             .iter()
-            .filter(|node| node.path.starts_with(&root_prefix) || node.path == root_str)
-            .map(|node| node.path.clone())
+            .enumerate()
+            .filter(|(_, node)| {
+                let path = node.path(&self.path_arena);
+                path.starts_with(&root_prefix) || path == root_str
+            })
+            .map(|(idx, _)| idx)
             .collect();
 
-        let count = paths_to_remove.len();
-        for path in paths_to_remove {
+        let count = indices_to_remove.len();
+        for idx in indices_to_remove {
+            let path = self.node_path(idx).to_string();
             self.remove(&path);
         }
 
@@ -544,13 +801,11 @@ impl SearchIndex {
 
     /// Insert a file node into the index
     pub fn insert(&mut self, node: FileNode) {
-        // Add to slab first to get index
         let index = self.slab.len();
-        let name_lower = node.name.to_lowercase();
+        let name_lower = node.name().to_lowercase();
         let is_directory = node.is_directory();
         let extension = node.extension().map(|s| s.to_string());
         let mtime = node.mtime;
-        let path = node.path.clone();
 
         // Update stats
         match node.node_type {
@@ -564,37 +819,51 @@ impl SearchIndex {
             NodeType::Symlink => {}
         }
 
-        self.slab.push(node);
+        // Push path into arena, create compact node
+        let (path_offset, path_len) = self.path_arena.push(&node.path);
+        let compact = CompactNode {
+            path_offset,
+            path_len,
+            node_type: node.node_type,
+            size: node.size,
+            mtime: node.mtime,
+        };
+        self.slab.push(compact);
 
-        // Add to name index
-        self.name_index.entry(name_lower).or_default().push(index);
+        // Always insert into overflow; finalize() compacts them
+        let idx32 = index as u32;
+        self.name_index.insert_overflow(name_lower, idx32);
+        self.mtime_index.insert_overflow(mtime, idx32);
 
         // Add to type index for fast type filtering (also tracks trash)
-        self.type_index
-            .add_file(index as u32, &path, extension.as_deref(), is_directory);
-
-        // Add to mtime index for fast "recent files" queries
-        self.mtime_index.entry(mtime).or_default().push(index);
+        self.type_index.add_file(
+            idx32,
+            self.path_arena.get(path_offset, path_len),
+            extension.as_deref(),
+            is_directory,
+        );
     }
 
     /// Clear the index
     pub fn clear(&mut self) {
         self.slab.clear();
+        self.path_arena = PathArena::new();
         self.name_index.clear();
         self.type_index.clear();
         self.mtime_index.clear();
+        self.finalized = false;
         self.roots.clear();
         self.file_count = 0;
         self.dir_count = 0;
         self.total_bytes = 0;
     }
 
-    /// Consume this index and return the raw node slab.
-    ///
-    /// Useful for chunked replay: deserialize the full index from disk,
-    /// extract the nodes, then insert them in batches into a fresh index.
+    /// Consume this index and return materialized FileNodes.
     pub fn into_nodes(self) -> Vec<FileNode> {
         self.slab
+            .iter()
+            .map(|node| node.to_file_node(&self.path_arena))
+            .collect()
     }
 
     /// Insert a batch of nodes. Equivalent to calling `insert()` per node
@@ -615,9 +884,9 @@ impl SearchIndex {
         let mut found_name: Option<String> = None;
 
         for (idx, node) in self.slab.iter().enumerate() {
-            if node.path == path {
+            if node.path(&self.path_arena) == path {
                 found_idx = Some(idx);
-                found_name = Some(node.name.to_lowercase());
+                found_name = Some(node.name(&self.path_arena).to_lowercase());
                 break;
             }
         }
@@ -640,20 +909,16 @@ impl SearchIndex {
             NodeType::Symlink => {}
         }
 
-        // Remove from name index
-        if let Some(indices) = self.name_index.get_mut(&name_lower) {
-            indices.retain(|&i| i != idx);
-            if indices.is_empty() {
-                self.name_index.remove(&name_lower);
-            }
-        }
+        // Remove from overflow name index (main entries are immutable)
+        self.name_index
+            .remove_from_overflow(&name_lower, idx as u32);
+
+        // Free the arena slot
+        let node = &self.slab[idx];
+        self.path_arena.remove(node.path_offset, node.path_len);
 
         // Remove from type index
         self.type_index.remove_file(idx as u32);
-
-        // Note: We don't actually remove from the slab to avoid invalidating indices
-        // In a production system, you'd want a more sophisticated approach
-        // (e.g., mark as deleted, or use a proper slab crate with removal)
 
         true
     }
@@ -668,16 +933,21 @@ impl SearchIndex {
             format!("{}/", dir_path)
         };
 
-        // Collect paths to remove (can't modify while iterating)
-        let paths_to_remove: Vec<String> = self
+        // Collect indices to remove
+        let indices_to_remove: Vec<usize> = self
             .slab
             .iter()
-            .filter(|node| node.path.starts_with(&prefix) || node.path == dir_path)
-            .map(|node| node.path.clone())
+            .enumerate()
+            .filter(|(_, node)| {
+                let path = node.path(&self.path_arena);
+                path.starts_with(&prefix) || path == dir_path
+            })
+            .map(|(idx, _)| idx)
             .collect();
 
-        let count = paths_to_remove.len();
-        for path in paths_to_remove {
+        let count = indices_to_remove.len();
+        for idx in indices_to_remove {
+            let path = self.node_path(idx).to_string();
             self.remove(&path);
         }
 
@@ -692,13 +962,9 @@ impl SearchIndex {
     }
 
     /// Unified search — dispatches to optimized internal paths based on query shape.
-    ///
-    /// This is the preferred entry point. All other search methods are kept for
-    /// backward compatibility.
     #[instrument(skip(self), fields(query = %q.text, limit = q.limit))]
     pub fn query(&self, q: SearchQuery) -> Vec<SearchResult> {
         match (q.text.is_empty(), &q.type_filter, &q.sort) {
-            // Recent files (with optional text + type)
             (_, _, SortBy::RecentFirst) => {
                 if q.text.is_empty() {
                     self.search_recent(q.limit, q.type_filter)
@@ -706,13 +972,9 @@ impl SearchIndex {
                     self.search_recent_with_query(&q.text, q.limit, q.type_filter)
                 }
             }
-            // Type-only search (bitmap fast path)
             (true, Some(cat), _) => self.bitmap_search(*cat, q.limit, q.include_trash),
-            // Text + type search (bitmap intersection)
             (false, Some(cat), _) => self.text_with_bitmap(&q.text, *cat, q.limit, q.include_trash),
-            // List all (no text, no type, no extension)
             (true, None, _) if q.extension.is_none() => self.list_all(q.limit),
-            // Extension or text search with options
             _ => {
                 let opts = self.query_to_options(&q);
                 self.search_with_options(&q.text, opts)
@@ -720,7 +982,7 @@ impl SearchIndex {
         }
     }
 
-    /// Type-only search via bitmap (internal, used by query())
+    /// Type-only search via bitmap
     fn bitmap_search(
         &self,
         category: FileTypeCategory,
@@ -742,14 +1004,14 @@ impl SearchIndex {
             .take(limit)
             .filter_map(|idx| {
                 self.slab.get(idx as usize).map(|node| SearchResult {
-                    node: node.clone(),
+                    node: node.to_file_node(&self.path_arena),
                     score: 100,
                 })
             })
             .collect()
     }
 
-    /// Text + type bitmap intersection search (internal, used by query())
+    /// Text + type bitmap intersection search
     fn text_with_bitmap(
         &self,
         text: &str,
@@ -764,33 +1026,60 @@ impl SearchIndex {
         let query_lower = text.to_lowercase();
         let mut results = Vec::new();
 
-        for (name, indices) in &self.name_index {
+        // Search main compact name index
+        for entry in &self.name_index.entries {
+            let name = self.name_index.entry_name(entry);
             if !name.contains(&query_lower) {
                 continue;
             }
 
-            let score = self.calculate_score(name, &query_lower);
+            let score = Self::calculate_score_static(name, &query_lower);
 
-            for &idx in indices {
-                if !type_bitmap.contains(idx as u32) {
+            for &idx in self.name_index.entry_indices(entry) {
+                if !type_bitmap.contains(idx) {
                     continue;
                 }
-                if !include_trash && self.type_index.is_in_trash(idx as u32) {
+                if !include_trash && self.type_index.is_in_trash(idx) {
                     continue;
                 }
-
-                if let Some(node) = self.slab.get(idx) {
+                if let Some(node) = self.slab.get(idx as usize) {
                     results.push(SearchResult {
-                        node: node.clone(),
+                        node: node.to_file_node(&self.path_arena),
                         score,
                     });
-
                     if results.len() >= limit * 2 {
                         break;
                     }
                 }
             }
+            if results.len() >= limit * 2 {
+                break;
+            }
+        }
 
+        // Search overflow
+        for (name, indices) in &self.name_index.overflow {
+            if !name.contains(&query_lower) {
+                continue;
+            }
+            let score = Self::calculate_score_static(name, &query_lower);
+            for &idx in indices {
+                if !type_bitmap.contains(idx) {
+                    continue;
+                }
+                if !include_trash && self.type_index.is_in_trash(idx) {
+                    continue;
+                }
+                if let Some(node) = self.slab.get(idx as usize) {
+                    results.push(SearchResult {
+                        node: node.to_file_node(&self.path_arena),
+                        score,
+                    });
+                    if results.len() >= limit * 2 {
+                        break;
+                    }
+                }
+            }
             if results.len() >= limit * 2 {
                 break;
             }
@@ -801,7 +1090,6 @@ impl SearchIndex {
         results
     }
 
-    /// Convert SearchQuery to legacy SearchOptions
     fn query_to_options(&self, q: &SearchQuery) -> SearchOptions {
         let mut opts = SearchOptions::with_limit(q.limit);
         opts.include_dirs = q.include_dirs;
@@ -812,29 +1100,11 @@ impl SearchIndex {
     }
 
     /// Ultra-fast type-only search using roaring bitmaps
-    ///
-    /// This is O(result_count) instead of O(total_files).
-    /// For 1.3M files: <1ms instead of ~1.7 seconds.
-    ///
-    /// # Arguments
-    /// * `type_name` - Type category name (e.g., "images", "videos", "audio")
-    /// * `limit` - Maximum results to return
-    ///
-    /// # Returns
-    /// Vec of SearchResults sorted by path (for consistency)
     pub fn search_by_type(&self, type_name: &str, limit: usize) -> Vec<SearchResult> {
         self.search_by_type_filtered(type_name, limit, true)
     }
 
     /// Ultra-fast type-only search with trash filtering
-    ///
-    /// # Arguments
-    /// * `type_name` - Type category name (e.g., "images", "videos", "audio")
-    /// * `limit` - Maximum results to return
-    /// * `include_trash` - Whether to include files in Trash
-    ///
-    /// # Returns
-    /// Vec of SearchResults sorted by path (for consistency)
     pub fn search_by_type_filtered(
         &self,
         type_name: &str,
@@ -849,37 +1119,30 @@ impl SearchIndex {
             return Vec::new();
         };
 
-        // If excluding trash, use bitmap difference for O(1) filtering
         let indices_iter: Box<dyn Iterator<Item = u32>> = if include_trash {
             Box::new(type_bitmap.iter())
         } else {
-            // Exclude trash using bitmap difference
             let filtered = type_bitmap - self.type_index.trash_bitmap();
             Box::new(filtered.into_iter())
         };
 
-        // Convert to SearchResults with limit
         indices_iter
             .take(limit)
             .filter_map(|idx| {
                 self.slab.get(idx as usize).map(|node| SearchResult {
-                    node: node.clone(),
-                    score: 100, // All type matches have equal relevance
+                    node: node.to_file_node(&self.path_arena),
+                    score: 100,
                 })
             })
             .collect()
     }
 
     /// Search by multiple types (union)
-    ///
-    /// Returns files matching ANY of the given types.
     pub fn search_by_types(&self, type_names: &[&str], limit: usize) -> Vec<SearchResult> {
         self.search_by_types_filtered(type_names, limit, true)
     }
 
     /// Search by multiple types with trash filtering
-    ///
-    /// Returns files matching ANY of the given types.
     pub fn search_by_types_filtered(
         &self,
         type_names: &[&str],
@@ -895,21 +1158,18 @@ impl SearchIndex {
             return Vec::new();
         }
 
-        // Union all type bitmaps
         let mut union = self.type_index.union_categories(&categories);
 
-        // Exclude trash if requested
         if !include_trash {
             union -= self.type_index.trash_bitmap();
         }
 
-        // Get indices from union bitmap
         union
             .iter()
             .take(limit)
             .filter_map(|idx| {
                 self.slab.get(idx as usize).map(|node| SearchResult {
-                    node: node.clone(),
+                    node: node.to_file_node(&self.path_arena),
                     score: 100,
                 })
             })
@@ -917,8 +1177,6 @@ impl SearchIndex {
     }
 
     /// Combined search: text query + type filter
-    ///
-    /// Uses bitmap intersection for fast filtering.
     pub fn search_with_type(
         &self,
         query: &str,
@@ -929,14 +1187,6 @@ impl SearchIndex {
     }
 
     /// Combined search: text query + type filter with trash filtering
-    ///
-    /// Uses bitmap intersection for fast filtering.
-    ///
-    /// # Arguments
-    /// * `query` - Text query to search for
-    /// * `type_name` - Type category name (e.g., "images", "videos")
-    /// * `limit` - Maximum results to return
-    /// * `include_trash` - Whether to include files in Trash
     pub fn search_with_type_filtered(
         &self,
         query: &str,
@@ -945,7 +1195,6 @@ impl SearchIndex {
         include_trash: bool,
     ) -> Vec<SearchResult> {
         let Some(category) = FileTypeCategory::parse_str(type_name) else {
-            // Fall back to regular search if type is invalid
             let mut opts = SearchOptions::with_limit(limit);
             opts.include_trash = include_trash;
             return self.search_with_options(query, opts);
@@ -958,43 +1207,63 @@ impl SearchIndex {
         let query_lower = query.to_lowercase();
         let mut results = Vec::new();
 
-        // Search through name index, but only consider files in the type bitmap
-        for (name, indices) in &self.name_index {
+        // Search through compact name index
+        for entry in &self.name_index.entries {
+            let name = self.name_index.entry_name(entry);
             if !name.contains(&query_lower) {
                 continue;
             }
-
-            let score = self.calculate_score(name, &query_lower);
-
-            for &idx in indices {
-                // Fast bitmap check - O(1)
-                if !type_bitmap.contains(idx as u32) {
+            let score = Self::calculate_score_static(name, &query_lower);
+            for &idx in self.name_index.entry_indices(entry) {
+                if !type_bitmap.contains(idx) {
                     continue;
                 }
-
-                // Trash filter - O(1) bitmap check
-                if !include_trash && self.type_index.is_in_trash(idx as u32) {
+                if !include_trash && self.type_index.is_in_trash(idx) {
                     continue;
                 }
-
-                if let Some(node) = self.slab.get(idx) {
+                if let Some(node) = self.slab.get(idx as usize) {
                     results.push(SearchResult {
-                        node: node.clone(),
+                        node: node.to_file_node(&self.path_arena),
                         score,
                     });
-
                     if results.len() >= limit * 2 {
                         break;
                     }
                 }
             }
-
             if results.len() >= limit * 2 {
                 break;
             }
         }
 
-        // Sort by score and truncate
+        // Search overflow
+        for (name, indices) in &self.name_index.overflow {
+            if !name.contains(&query_lower) {
+                continue;
+            }
+            let score = Self::calculate_score_static(name, &query_lower);
+            for &idx in indices {
+                if !type_bitmap.contains(idx) {
+                    continue;
+                }
+                if !include_trash && self.type_index.is_in_trash(idx) {
+                    continue;
+                }
+                if let Some(node) = self.slab.get(idx as usize) {
+                    results.push(SearchResult {
+                        node: node.to_file_node(&self.path_arena),
+                        score,
+                    });
+                    if results.len() >= limit * 2 {
+                        break;
+                    }
+                }
+            }
+            if results.len() >= limit * 2 {
+                break;
+            }
+        }
+
         results.sort_by_key(|a| std::cmp::Reverse(a.score));
         results.truncate(limit);
         results
@@ -1003,48 +1272,57 @@ impl SearchIndex {
     /// Search for most recent files
     ///
     /// Returns the N most recently modified files, optionally filtered by type.
-    /// Uses mtime_index for O(K) performance instead of O(n) full scan.
-    ///
-    /// # Arguments
-    /// * `limit` - Maximum number of results
-    /// * `type_filter` - Optional type category to filter by
-    ///
-    /// # Returns
-    /// Vec of SearchResults sorted by mtime descending (most recent first)
     pub fn search_recent(
         &self,
         limit: usize,
         type_filter: Option<FileTypeCategory>,
     ) -> Vec<SearchResult> {
         let mut results = Vec::with_capacity(limit);
-
-        // Get optional type bitmap for filtering
         let type_bitmap = type_filter.and_then(|cat| self.type_index.get_indices(cat));
 
-        // Iterate mtime_index from end (most recent first)
-        for (_mtime, indices) in self.mtime_index.iter().rev() {
+        // Iterate compact mtime groups from end (most recent first)
+        for &(_, start, count) in self.mtime_index.groups.iter().rev() {
+            let indices = self.mtime_index.group_indices(start, count);
             for &idx in indices.iter().rev() {
-                // If type filter specified, check bitmap
                 if let Some(bitmap) = type_bitmap
-                    && !bitmap.contains(idx as u32)
+                    && !bitmap.contains(idx)
                 {
                     continue;
                 }
-
-                if let Some(node) = self.slab.get(idx) {
-                    // Skip directories unless explicitly requested
-                    if node.is_directory() {
+                if let Some(node) = self.slab.get(idx as usize) {
+                    if node.node_type == NodeType::Directory {
                         continue;
                     }
-
                     results.push(SearchResult {
-                        node: node.clone(),
-                        score: 100, // All recent results have equal relevance
+                        node: node.to_file_node(&self.path_arena),
+                        score: 100,
                     });
-
                     if results.len() >= limit {
                         return results;
                     }
+                }
+            }
+        }
+
+        // Also check overflow
+        let mut overflow_sorted: Vec<_> = self.mtime_index.overflow.clone();
+        overflow_sorted.sort_by_key(|b| std::cmp::Reverse(b.0));
+        for (_, idx) in overflow_sorted {
+            if let Some(bitmap) = type_bitmap
+                && !bitmap.contains(idx)
+            {
+                continue;
+            }
+            if let Some(node) = self.slab.get(idx as usize) {
+                if node.node_type == NodeType::Directory {
+                    continue;
+                }
+                results.push(SearchResult {
+                    node: node.to_file_node(&self.path_arena),
+                    score: 100,
+                });
+                if results.len() >= limit {
+                    return results;
                 }
             }
         }
@@ -1053,50 +1331,41 @@ impl SearchIndex {
     }
 
     /// Search for most recent files matching a query
-    ///
-    /// Combines text search with recency sorting.
     pub fn search_recent_with_query(
         &self,
         query: &str,
         limit: usize,
         type_filter: Option<FileTypeCategory>,
     ) -> Vec<SearchResult> {
-        // If no query, just return recent files
         if query.is_empty() {
             return self.search_recent(limit, type_filter);
         }
 
         let query_lower = query.to_lowercase();
         let type_bitmap = type_filter.and_then(|cat| self.type_index.get_indices(cat));
-
         let mut results = Vec::new();
 
-        // Iterate mtime_index from end (most recent first)
-        for (_mtime, indices) in self.mtime_index.iter().rev() {
+        for &(_, start, count) in self.mtime_index.groups.iter().rev() {
+            let indices = self.mtime_index.group_indices(start, count);
             for &idx in indices.iter().rev() {
-                // Type filter check
                 if let Some(bitmap) = type_bitmap
-                    && !bitmap.contains(idx as u32)
+                    && !bitmap.contains(idx)
                 {
                     continue;
                 }
-
-                if let Some(node) = self.slab.get(idx) {
-                    // Skip directories
-                    if node.is_directory() {
+                if let Some(node) = self.slab.get(idx as usize) {
+                    if node.node_type == NodeType::Directory {
                         continue;
                     }
-
-                    // Query match check
-                    if !node.name.to_lowercase().contains(&query_lower) {
+                    let name = node.name(&self.path_arena);
+                    if !name.to_lowercase().contains(&query_lower) {
                         continue;
                     }
-
+                    let score = Self::calculate_score_static(&name.to_lowercase(), &query_lower);
                     results.push(SearchResult {
-                        node: node.clone(),
-                        score: self.calculate_score(&node.name.to_lowercase(), &query_lower),
+                        node: node.to_file_node(&self.path_arena),
+                        score,
                     });
-
                     if results.len() >= limit {
                         return results;
                     }
@@ -1107,28 +1376,21 @@ impl SearchIndex {
         results
     }
 
-    /// List all files in the index (for path-only filtering)
-    ///
-    /// Returns all files up to the limit, useful when filtering by path without a query.
+    /// List all files in the index
     pub fn list_all(&self, limit: usize) -> Vec<SearchResult> {
         self.slab
             .iter()
             .take(limit)
             .map(|node| SearchResult {
-                node: node.clone(),
+                node: node.to_file_node(&self.path_arena),
                 score: 50,
             })
             .collect()
     }
 
     /// Search with full options
-    ///
-    /// If query is empty but filters are set (extension, type), returns all matching files.
     pub fn search_with_options(&self, query: &str, options: SearchOptions) -> Vec<SearchResult> {
         let query_lower = query.to_lowercase();
-
-        // If query is empty and no extension filter, return nothing
-        // But if extension filter is set, we list all files with that extension
         let has_filter = options.extension_filter.is_some();
         if query.is_empty() && !has_filter {
             return Vec::new();
@@ -1140,99 +1402,124 @@ impl SearchIndex {
         };
 
         let mut results = Vec::new();
+        let limit2 = options.limit * 2;
 
-        // Search through name index
-        for (name, indices) in &self.name_index {
-            // Check if name contains query (skip check if query is empty - listing mode)
-            if !query.is_empty() {
-                let name_cmp = if options.case_sensitive {
-                    // Need to get original name from slab
-                    if let Some(idx) = indices.first() {
-                        if let Some(node) = self.slab.get(*idx) {
-                            node.name.clone()
-                        } else {
-                            continue;
-                        }
-                    } else {
-                        continue;
-                    }
-                } else {
-                    name.clone()
-                };
-
-                if !name_cmp.contains(&query_cmp) {
-                    continue;
-                }
-            }
-
-            // Calculate score for this name
-            let score = if query.is_empty() {
-                // Listing mode - score by name length (shorter = more relevant)
-                100u32.saturating_sub(name.len() as u32)
-            } else {
-                let name_cmp = if options.case_sensitive {
-                    if let Some(idx) = indices.first() {
-                        if let Some(node) = self.slab.get(*idx) {
-                            node.name.clone()
-                        } else {
-                            name.clone()
-                        }
-                    } else {
-                        name.clone()
-                    }
-                } else {
-                    name.clone()
-                };
-                self.calculate_score(&name_cmp, &query_cmp)
-            };
-
-            // Add all files with this name
-            for &idx in indices {
-                if let Some(node) = self.slab.get(idx) {
-                    // Apply filters (pass slab index for bitmap lookups)
-                    if !self.matches_filters(node, idx, &options) {
-                        continue;
-                    }
-
-                    results.push(SearchResult {
-                        node: node.clone(),
-                        score,
-                    });
-
-                    // Early exit if we have enough results
-                    if results.len() >= options.limit * 2 {
-                        break;
-                    }
-                }
-            }
-
-            if results.len() >= options.limit * 2 {
+        // Search main compact name index
+        for entry in &self.name_index.entries {
+            let name = self.name_index.entry_name(entry);
+            let indices = self.name_index.entry_indices(entry);
+            self.search_name_entry(
+                name,
+                indices,
+                query,
+                &query_cmp,
+                &options,
+                &mut results,
+                limit2,
+            );
+            if results.len() >= limit2 {
                 break;
             }
         }
 
-        // Sort by score (descending)
+        // Search overflow
+        if results.len() < limit2 {
+            for (name, indices) in &self.name_index.overflow {
+                self.search_name_entry(
+                    name,
+                    indices,
+                    query,
+                    &query_cmp,
+                    &options,
+                    &mut results,
+                    limit2,
+                );
+                if results.len() >= limit2 {
+                    break;
+                }
+            }
+        }
+
         results.sort_by_key(|a| std::cmp::Reverse(a.score));
-
-        // Truncate to limit
         results.truncate(options.limit);
-
         results
     }
 
-    /// Check if a node matches the search filters
-    ///
-    /// # Arguments
-    /// * `node` - The file node to check
-    /// * `slab_index` - The index of the node in the slab (for bitmap lookups)
-    /// * `options` - Search options including filters
-    fn matches_filters(&self, node: &FileNode, slab_index: usize, options: &SearchOptions) -> bool {
-        // Trash filter - use bitmap for O(1) check
+    #[allow(clippy::too_many_arguments)]
+    fn search_name_entry(
+        &self,
+        name: &str,
+        indices: &[u32],
+        query: &str,
+        query_cmp: &str,
+        options: &SearchOptions,
+        results: &mut Vec<SearchResult>,
+        limit2: usize,
+    ) {
+        if !query.is_empty() {
+            let name_cmp = if options.case_sensitive {
+                if let Some(&idx) = indices.first() {
+                    if let Some(node) = self.slab.get(idx as usize) {
+                        node.name(&self.path_arena).to_string()
+                    } else {
+                        return;
+                    }
+                } else {
+                    return;
+                }
+            } else {
+                name.to_string()
+            };
+            if !name_cmp.contains(query_cmp) {
+                return;
+            }
+        }
+
+        let score = if query.is_empty() {
+            100u32.saturating_sub(name.len() as u32)
+        } else {
+            let name_cmp = if options.case_sensitive {
+                if let Some(&idx) = indices.first() {
+                    if let Some(node) = self.slab.get(idx as usize) {
+                        node.name(&self.path_arena).to_string()
+                    } else {
+                        name.to_string()
+                    }
+                } else {
+                    name.to_string()
+                }
+            } else {
+                name.to_string()
+            };
+            Self::calculate_score_static(&name_cmp, query_cmp)
+        };
+
+        for &idx in indices {
+            if let Some(node) = self.slab.get(idx as usize) {
+                if !self.matches_compact_filters(node, idx as usize, options) {
+                    continue;
+                }
+                results.push(SearchResult {
+                    node: node.to_file_node(&self.path_arena),
+                    score,
+                });
+                if results.len() >= limit2 {
+                    return;
+                }
+            }
+        }
+    }
+
+    /// Check if a compact node matches filters
+    fn matches_compact_filters(
+        &self,
+        node: &CompactNode,
+        slab_index: usize,
+        options: &SearchOptions,
+    ) -> bool {
         if !options.include_trash && self.type_index.is_in_trash(slab_index as u32) {
             return false;
         }
-
-        // Type filter
         match node.node_type {
             NodeType::File => {
                 if !options.include_files {
@@ -1245,16 +1532,13 @@ impl SearchIndex {
                 }
             }
             NodeType::Symlink => {
-                // Include symlinks with files for now
                 if !options.include_files {
                     return false;
                 }
             }
         }
-
-        // Extension filter
         if let Some(ref ext_filter) = options.extension_filter {
-            if let Some(ext) = node.extension() {
+            if let Some(ext) = node.extension(&self.path_arena) {
                 if ext.to_lowercase() != *ext_filter {
                     return false;
                 }
@@ -1262,48 +1546,35 @@ impl SearchIndex {
                 return false;
             }
         }
-
         true
     }
 
-    /// Calculate relevance score for a match
-    ///
-    /// Higher score = better match:
-    /// - Exact match: 1000
-    /// - Starts with query: 500
-    /// - Contains query: 100
-    /// - Bonus for shorter names (more specific)
-    fn calculate_score(&self, name: &str, query: &str) -> u32 {
+    /// Calculate relevance score (static, no &self needed)
+    fn calculate_score_static(name: &str, query: &str) -> u32 {
         let mut score = 0u32;
-
-        // Exact match
         if name == query {
             score += 1000;
-        }
-        // Starts with query
-        else if name.starts_with(query) {
+        } else if name.starts_with(query) {
             score += 500;
-        }
-        // Contains query
-        else {
+        } else {
             score += 100;
         }
-
-        // Bonus for shorter names (max 100 bonus for very short names)
-        let length_bonus = 100u32.saturating_sub(name.len() as u32);
-        score += length_bonus;
-
+        score += 100u32.saturating_sub(name.len() as u32);
         score
     }
 
-    /// Get a node by its slab index
-    pub fn get(&self, index: usize) -> Option<&FileNode> {
-        self.slab.get(index)
+    /// Get a node by its slab index (materializes to FileNode)
+    pub fn get(&self, index: usize) -> Option<FileNode> {
+        self.slab
+            .get(index)
+            .map(|node| node.to_file_node(&self.path_arena))
     }
 
-    /// Iterate over all nodes
-    pub fn iter(&self) -> impl Iterator<Item = &FileNode> {
-        self.slab.iter()
+    /// Iterate over all nodes (materializes each to FileNode)
+    pub fn iter(&self) -> impl Iterator<Item = FileNode> + '_ {
+        self.slab
+            .iter()
+            .map(|node| node.to_file_node(&self.path_arena))
     }
 }
 
@@ -1342,24 +1613,9 @@ mod tests {
     fn test_insert_and_search() {
         let mut index = SearchIndex::new();
 
-        index.insert(FileNode::file(
-            "report.pdf".into(),
-            "Documents/report.pdf".into(),
-            1024,
-            0,
-        ));
-        index.insert(FileNode::file(
-            "report_final.pdf".into(),
-            "Documents/report_final.pdf".into(),
-            2048,
-            0,
-        ));
-        index.insert(FileNode::file(
-            "notes.txt".into(),
-            "Documents/notes.txt".into(),
-            512,
-            0,
-        ));
+        index.insert(FileNode::file("Documents/report.pdf".into(), 1024, 0));
+        index.insert(FileNode::file("Documents/report_final.pdf".into(), 2048, 0));
+        index.insert(FileNode::file("Documents/notes.txt".into(), 512, 0));
 
         assert_eq!(index.file_count(), 3);
 
@@ -1368,19 +1624,14 @@ mod tests {
         assert_eq!(results.len(), 2);
 
         // "report.pdf" should score higher (shorter name)
-        assert!(results[0].node.name == "report.pdf");
+        assert!(results[0].node.name() == "report.pdf");
     }
 
     #[test]
     fn test_case_insensitive_search() {
         let mut index = SearchIndex::new();
 
-        index.insert(FileNode::file(
-            "README.md".into(),
-            "README.md".into(),
-            100,
-            0,
-        ));
+        index.insert(FileNode::file("README.md".into(), 100, 0));
 
         let results = index.search("readme", 10);
         assert_eq!(results.len(), 1);
@@ -1393,23 +1644,23 @@ mod tests {
     fn test_extension_filter() {
         let mut index = SearchIndex::new();
 
-        index.insert(FileNode::file("doc.pdf".into(), "doc.pdf".into(), 100, 0));
-        index.insert(FileNode::file("doc.txt".into(), "doc.txt".into(), 100, 0));
-        index.insert(FileNode::file("doc.md".into(), "doc.md".into(), 100, 0));
+        index.insert(FileNode::file("doc.pdf".into(), 100, 0));
+        index.insert(FileNode::file("doc.txt".into(), 100, 0));
+        index.insert(FileNode::file("doc.md".into(), 100, 0));
 
         let options = SearchOptions::default().with_extension("pdf");
         let results = index.search_with_options("doc", options);
 
         assert_eq!(results.len(), 1);
-        assert_eq!(results[0].node.name, "doc.pdf");
+        assert_eq!(results[0].node.name(), "doc.pdf");
     }
 
     #[test]
     fn test_files_only_filter() {
         let mut index = SearchIndex::new();
 
-        index.insert(FileNode::file("docs.txt".into(), "docs.txt".into(), 100, 0));
-        index.insert(FileNode::directory("docs".into(), "docs".into(), 0));
+        index.insert(FileNode::file("docs.txt".into(), 100, 0));
+        index.insert(FileNode::directory("docs".into(), 0));
 
         let options = SearchOptions::default().files_only();
         let results = index.search_with_options("docs", options);
@@ -1422,8 +1673,8 @@ mod tests {
     fn test_dirs_only_filter() {
         let mut index = SearchIndex::new();
 
-        index.insert(FileNode::file("docs.txt".into(), "docs.txt".into(), 100, 0));
-        index.insert(FileNode::directory("docs".into(), "docs".into(), 0));
+        index.insert(FileNode::file("docs.txt".into(), 100, 0));
+        index.insert(FileNode::directory("docs".into(), 0));
 
         let options = SearchOptions::default().dirs_only();
         let results = index.search_with_options("docs", options);
@@ -1435,7 +1686,7 @@ mod tests {
     #[test]
     fn test_empty_query() {
         let mut index = SearchIndex::new();
-        index.insert(FileNode::file("test.txt".into(), "test.txt".into(), 100, 0));
+        index.insert(FileNode::file("test.txt".into(), 100, 0));
 
         let results = index.search("", 10);
         assert!(results.is_empty());
@@ -1444,7 +1695,7 @@ mod tests {
     #[test]
     fn test_no_results() {
         let mut index = SearchIndex::new();
-        index.insert(FileNode::file("test.txt".into(), "test.txt".into(), 100, 0));
+        index.insert(FileNode::file("test.txt".into(), 100, 0));
 
         let results = index.search("nonexistent", 10);
         assert!(results.is_empty());
@@ -1455,18 +1706,18 @@ mod tests {
         let mut index = SearchIndex::new();
 
         // Exact match should rank highest
-        index.insert(FileNode::file("test".into(), "test".into(), 100, 0));
+        index.insert(FileNode::file("test".into(), 100, 0));
         // Starts with should rank second
-        index.insert(FileNode::file("testing".into(), "testing".into(), 100, 0));
+        index.insert(FileNode::file("testing".into(), 100, 0));
         // Contains should rank lowest
-        index.insert(FileNode::file("mytest".into(), "mytest".into(), 100, 0));
+        index.insert(FileNode::file("mytest".into(), 100, 0));
 
         let results = index.search("test", 10);
 
         assert_eq!(results.len(), 3);
-        assert_eq!(results[0].node.name, "test"); // Exact match
-        assert_eq!(results[1].node.name, "testing"); // Starts with
-        assert_eq!(results[2].node.name, "mytest"); // Contains
+        assert_eq!(results[0].node.name(), "test"); // Exact match
+        assert_eq!(results[1].node.name(), "testing"); // Starts with
+        assert_eq!(results[2].node.name(), "mytest"); // Contains
     }
 
     #[test]
@@ -1474,12 +1725,7 @@ mod tests {
         let mut index = SearchIndex::new();
 
         for i in 0..100 {
-            index.insert(FileNode::file(
-                format!("file{}.txt", i),
-                format!("file{}.txt", i),
-                100,
-                0,
-            ));
+            index.insert(FileNode::file(format!("file{}.txt", i), 100, 0));
         }
 
         let results = index.search("file", 10);
@@ -1489,7 +1735,7 @@ mod tests {
     #[test]
     fn test_clear() {
         let mut index = SearchIndex::new();
-        index.insert(FileNode::file("test.txt".into(), "test.txt".into(), 100, 0));
+        index.insert(FileNode::file("test.txt".into(), 100, 0));
 
         assert_eq!(index.file_count(), 1);
 
@@ -1505,18 +1751,8 @@ mod tests {
         let mut index = SearchIndex::new();
 
         // Same filename in different directories
-        index.insert(FileNode::file(
-            "config.json".into(),
-            "project1/config.json".into(),
-            100,
-            0,
-        ));
-        index.insert(FileNode::file(
-            "config.json".into(),
-            "project2/config.json".into(),
-            200,
-            0,
-        ));
+        index.insert(FileNode::file("project1/config.json".into(), 100, 0));
+        index.insert(FileNode::file("project2/config.json".into(), 200, 0));
 
         let results = index.search("config", 10);
         assert_eq!(results.len(), 2);

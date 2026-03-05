@@ -4,8 +4,8 @@ use std::time::Duration;
 
 use gpui::*;
 
-use zero::index::load_index_chunked;
-use zero::prelude::{IndexManager, SearchIndex, SearchResult, hash_path, save_index_via_etch};
+use zero::index::{load_index_snapshot, persistence};
+use zero::prelude::{IndexManager, SearchIndex, SearchResult, hash_path};
 use zero::scanner::CrawlProgress;
 
 // -- Events ------------------------------------------------------------------
@@ -219,8 +219,8 @@ impl SearchService {
                         index.build_from_path_with_progress(root_path, Some(progress_clone))?;
                         let count = index.file_count();
                         let hash = hash_path(&root_clone);
-                        let etch_dir = indexes_dir.join(&hash);
-                        save_index_via_etch(&index, &etch_dir)?;
+                        let snapshot = indexes_dir.join(format!("{hash}.zidx"));
+                        persistence::save_index(&index, &snapshot)?;
                         Ok::<_, zero::index::IndexError>((root_clone, index, count))
                     })
                     .await;
@@ -278,8 +278,8 @@ impl SearchService {
                     index.build_from_path_with_progress(root_path, Some(p))?;
                     let count = index.file_count();
                     let hash = hash_path(&path_owned);
-                    let etch_dir = indexes_dir.join(&hash);
-                    save_index_via_etch(&index, &etch_dir)?;
+                    let snapshot = indexes_dir.join(format!("{hash}.zidx"));
+                    persistence::save_index(&index, &snapshot)?;
                     Ok::<_, zero::index::IndexError>((path_owned, index, count))
                 })
                 .await;
@@ -350,87 +350,42 @@ impl SearchService {
                 .unwrap_or_default();
 
             if !root_info.is_empty() {
-                tracing::info!(roots = root_info.len(), "progressive load: loading indexes");
+                tracing::info!(roots = root_info.len(), "loading indexes");
 
-                // 2. Load each root independently with chunked replay
-                const CHUNK_SIZE: usize = 50_000;
-
+                // 2. Load each root: deserialize + build indices on background thread
                 for (root, hash) in &root_info {
                     let dir = indexes_dir.clone();
                     let h = hash.clone();
 
-                    // Deserialize + extract nodes on background thread
-                    let loader_result = cx
+                    // Full load on background thread (deserialize + build all indices)
+                    let load_result = cx
                         .background_executor()
-                        .spawn(async move { load_index_chunked(&dir.join(&h), CHUNK_SIZE) })
+                        .spawn(async move { load_index_snapshot(&dir, &h) })
                         .await;
 
-                    let mut loader = match loader_result {
-                        Ok(l) => l,
+                    match load_result {
+                        Ok(index) => {
+                            let file_count = index.file_count();
+                            let r = root.clone();
+                            this.update(cx, |svc, cx| {
+                                svc.manager.insert_index_memory_only(&r, index, file_count);
+                                svc.roots =
+                                    svc.manager.roots().into_iter().map(PathBuf::from).collect();
+                                cx.emit(SearchEvent::RootLoaded {
+                                    root: r,
+                                    file_count,
+                                });
+                                cx.notify();
+                            })
+                            .ok();
+                            tracing::info!(root = %root, files = file_count, "root loaded");
+                        }
                         Err(e) => {
                             tracing::warn!(root = %root, error = %e, "failed to load root index");
                             this.update(cx, |svc, _| svc.manager.remove_stale_root(root))
                                 .ok();
-                            continue;
-                        }
-                    };
-
-                    let total = loader.total();
-
-                    // Insert empty index placeholder on main thread
-                    let r = root.clone();
-                    this.update(cx, |svc, _| {
-                        svc.manager.insert_index_memory_only(
-                            &r,
-                            SearchIndex::with_capacity(total),
-                            0,
-                        );
-                    })
-                    .ok();
-
-                    // Process chunks: extract on background, insert on main.
-                    // Yield between chunks so the UI event loop can render frames.
-                    loop {
-                        let chunk = loader.next_chunk();
-                        match chunk {
-                            Some(nodes) => {
-                                let r = root.clone();
-                                this.update(cx, |svc, cx| {
-                                    svc.manager.with_index_mut(&r, |idx| {
-                                        idx.insert_batch(nodes);
-                                    });
-                                    cx.notify();
-                                })
-                                .ok();
-                                // Yield to let the UI process events/render
-                                cx.background_executor()
-                                    .timer(Duration::from_millis(1))
-                                    .await;
-                            }
-                            None => break,
                         }
                     }
-
-                    // Finalize root: update metadata + emit event
-                    let r = root.clone();
-                    let file_count = this
-                        .update(cx, |svc, cx| {
-                            let count = svc
-                                .manager
-                                .with_index(root, |idx| idx.file_count())
-                                .unwrap_or(0);
-                            svc.roots =
-                                svc.manager.roots().into_iter().map(PathBuf::from).collect();
-                            cx.emit(SearchEvent::RootLoaded {
-                                root: r,
-                                file_count: count,
-                            });
-                            cx.notify();
-                            count
-                        })
-                        .unwrap_or(0);
-
-                    tracing::info!(root = %root, files = file_count, "root loaded");
                 }
             }
 
@@ -497,8 +452,8 @@ impl SearchService {
                     index.build_from_path_with_progress(root_path, Some(p))?;
                     let count = index.file_count();
                     let hash = hash_path(&home_clone);
-                    let etch_dir = indexes_dir.join(&hash);
-                    save_index_via_etch(&index, &etch_dir)?;
+                    let snapshot = indexes_dir.join(format!("{hash}.zidx"));
+                    persistence::save_index(&index, &snapshot)?;
                     Ok::<_, zero::index::IndexError>((home_clone, index, count))
                 })
                 .await;
@@ -609,16 +564,14 @@ impl SearchService {
                         tracing::info!(roots = roots_to_rebuild.len(), "watcher: rebuilding");
 
                         for root in &roots_to_rebuild {
-                            // Remove old index on main thread (fast)
-                            let indexes_dir = this.update(cx, |svc, _| {
-                                svc.manager.remove_root(root);
-                                svc.manager.indexes_dir().to_path_buf()
-                            });
+                            // Get indexes_dir (old index stays searchable during rebuild)
+                            let indexes_dir = this
+                                .update(cx, |svc, _| svc.manager.indexes_dir().to_path_buf());
                             let Ok(indexes_dir) = indexes_dir else {
                                 continue;
                             };
 
-                            // Build on background thread
+                            // Shadow-build on background thread
                             let root_clone = root.clone();
                             let build_result = cx
                                 .background_executor()
@@ -628,8 +581,8 @@ impl SearchService {
                                     index.build_from_path_with_progress(root_path, None)?;
                                     let count = index.file_count();
                                     let hash = hash_path(&root_clone);
-                                    let etch_dir = indexes_dir.join(&hash);
-                                    save_index_via_etch(&index, &etch_dir)?;
+                                    let snapshot = indexes_dir.join(format!("{hash}.zidx"));
+                                    persistence::save_index(&index, &snapshot)?;
                                     Ok::<_, zero::index::IndexError>((root_clone, index, count))
                                 })
                                 .await;

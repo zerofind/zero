@@ -146,7 +146,7 @@ pub mod prelude {
     // Search Index
     pub use crate::index::{
         FileNode, IndexManager, RootStats, SearchIndex, SearchOptions, SearchResult,
-        SharedIndexManager, hash_path, save_index_via_etch,
+        SharedIndexManager, hash_path,
     };
 
     // Hasher

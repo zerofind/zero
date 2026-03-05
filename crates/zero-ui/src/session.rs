@@ -14,7 +14,7 @@ pub struct Settings {
     #[serde(default = "default_dark_theme")]
     pub dark_theme: String,
 
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub sidebar_open: bool,
 
     #[serde(default)]
@@ -48,7 +48,7 @@ pub struct Settings {
     #[serde(default)]
     pub onboarding_complete: bool,
 
-    #[serde(default = "default_true")]
+    #[serde(default)]
     pub toolbar_visible: bool,
 }
 
@@ -89,7 +89,7 @@ impl Default for Settings {
             dedup_use_checksums: default_true(),
             auto_update: default_true(),
             onboarding_complete: false,
-            toolbar_visible: default_true(),
+            toolbar_visible: false,
         }
     }
 }

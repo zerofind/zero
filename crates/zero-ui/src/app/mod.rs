@@ -22,6 +22,7 @@ use crate::actions::{
 };
 use crate::models::{ActiveView, FileClipboard, PaneId, SplitPane, ViewMode};
 use crate::permissions;
+use crate::platform::traffic_lights::TrafficLights;
 use crate::services::{SearchEvent, SearchService, ServiceHub};
 use crate::session::Settings;
 use crate::theme::{self, CONTENT_INSET, FONT_SIZE_BODY, FONT_SIZE_CAPTION, RADIUS_LG};
@@ -97,6 +98,7 @@ impl ZeroApp {
         let start_path = settings
             .last_path
             .clone()
+            .or_else(|| settings.sidebar_bookmarks.first().cloned())
             .or_else(dirs::home_dir)
             .unwrap_or_else(|| PathBuf::from("/"));
 
@@ -110,25 +112,14 @@ impl ZeroApp {
 
         // Only initialize services if we have Full Disk Access — avoids triggering
         // TCC permission prompts before the user has granted FDA.
-        let (services, banner, subs) = if has_fda {
+        let (services, subs) = if has_fda {
             let services = ServiceHub::new(cx);
             let search_sub = cx.subscribe(&services.search, Self::on_search_event);
-            let banner = Some(BannerData {
-                kind: BannerKind::Index,
-                message: "Loading search index...".to_string(),
-                bytes_done: 0,
-                bytes_total: 0,
-                files_done: 0,
-                files_total: 0,
-                phase: Some("This only takes a moment...".to_string()),
-                indeterminate: true,
-                on_cancel: None,
-            });
-            (services, banner, vec![search_sub])
+            (services, vec![search_sub])
         } else {
             // Create services without triggering any file access
             let services = ServiceHub::new_deferred(cx);
-            (services, None, Vec::new())
+            (services, Vec::new())
         };
 
         let mut app = Self {
@@ -158,7 +149,7 @@ impl ZeroApp {
             settings: None,
             secure_erase: None,
             automations: None,
-            banner,
+            banner: None,
             active_progress: None,
             alerts: Vec::new(),
             fda_onboarding: None,
@@ -201,18 +192,6 @@ impl ZeroApp {
                 self.services.init(cx);
                 let search_sub = cx.subscribe(&self.services.search, Self::on_search_event);
                 self._subs.push(search_sub);
-
-                self.banner = Some(BannerData {
-                    kind: BannerKind::Index,
-                    message: "Loading search index...".to_string(),
-                    bytes_done: 0,
-                    bytes_total: 0,
-                    files_done: 0,
-                    files_total: 0,
-                    phase: Some("This only takes a moment...".to_string()),
-                    indeterminate: true,
-                    on_cancel: None,
-                });
 
                 // Show folder onboarding if first launch
                 let settings = Settings::load();
@@ -428,7 +407,9 @@ impl Render for ZeroApp {
         }
 
         let sidebar_open = self.sidebar_open;
-        let toolbar_visible = self.toolbar_visible;
+        // Toolbar must be visible when sidebar is hidden — otherwise there's
+        // no navigation UI and traffic lights overlap the content.
+        let toolbar_visible = self.toolbar_visible || !sidebar_open;
         let palette_open = self.command_palette_open;
 
         let has_alerts = !self.alerts.is_empty();
@@ -590,6 +571,10 @@ impl Render for ZeroApp {
             .text_size(FONT_SIZE_BODY)
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(|this, _: &ToggleToolbar, _, cx| {
+                // Can't hide toolbar when sidebar is already hidden
+                if !this.sidebar_open && this.toolbar_visible {
+                    return;
+                }
                 tracing::debug!(visible = !this.toolbar_visible, "action: toggle toolbar");
                 this.toolbar_visible = !this.toolbar_visible;
                 let mut settings = Settings::load();
@@ -683,6 +668,16 @@ impl Render for ZeroApp {
                             ),
                     ),
             )
+            // Traffic lights when sidebar is hidden (native ones are offscreen)
+            .when(!sidebar_open, |el| {
+                el.child(
+                    div()
+                        .absolute()
+                        .top(px(11.0))
+                        .left(px(11.0))
+                        .child(TrafficLights::new()),
+                )
+            })
             // Command palette overlay
             .when_some(palette_view, |el, palette| {
                 el.child(

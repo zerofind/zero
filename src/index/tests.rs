@@ -151,7 +151,7 @@ fn test_search_case_insensitive() {
 fn test_save_load_roundtrip() {
     let test_dir = create_test_directory();
     let cache_dir = TempDir::new().unwrap();
-    let index_dir = cache_dir.path().join("index_etch");
+    let snapshot = cache_dir.path().join("index.zidx");
 
     // Build index
     let mut index = SearchIndex::new();
@@ -160,12 +160,11 @@ fn test_save_load_roundtrip() {
     let original_count = index.file_count();
     let original_bytes = index.total_bytes();
 
-    // Save via etch
-    save_index_via_etch(&index, &index_dir).unwrap();
+    // Save snapshot
+    persistence::save_index(&index, &snapshot).unwrap();
 
-    // Load via etch
-    let store = open_index_store(&index_dir).unwrap();
-    let loaded = store.read().clone();
+    // Load snapshot
+    let loaded = persistence::load_index(&snapshot).unwrap();
 
     // Verify counts match
     assert_eq!(loaded.file_count(), original_count);
@@ -180,23 +179,22 @@ fn test_save_load_roundtrip() {
 fn test_persistence_search_results_match() {
     let test_dir = create_test_directory();
     let cache_dir = TempDir::new().unwrap();
-    let index_dir = cache_dir.path().join("index_etch");
+    let snapshot = cache_dir.path().join("index.zidx");
 
     // Build and search
     let mut index = SearchIndex::new();
     index.build_from_path(test_dir.path()).unwrap();
     let original_results = index.search("main", 10);
 
-    // Save and load via etch
-    save_index_via_etch(&index, &index_dir).unwrap();
-    let store = open_index_store(&index_dir).unwrap();
-    let loaded = store.read().clone();
+    // Save and load snapshot
+    persistence::save_index(&index, &snapshot).unwrap();
+    let loaded = persistence::load_index(&snapshot).unwrap();
     let loaded_results = loaded.search("main", 10);
 
     // Results should be identical
     assert_eq!(original_results.len(), loaded_results.len());
     for (orig, load) in original_results.iter().zip(loaded_results.iter()) {
-        assert_eq!(orig.node.name, load.node.name);
+        assert_eq!(orig.node.name(), load.node.name());
         assert_eq!(orig.node.path, load.node.path);
         assert_eq!(orig.score, load.score);
     }
@@ -354,8 +352,8 @@ fn test_insert_index_memory_only() {
     assert_eq!(count, 2);
 
     let hash = manager::hash_path(root_str);
-    let etch_dir = indexes_dir.join(&hash);
-    save_index_via_etch(&index, &etch_dir).unwrap();
+    let snapshot = indexes_dir.join(format!("{hash}.zidx"));
+    persistence::save_index(&index, &snapshot).unwrap();
 
     // Create manager and insert via memory-only path (simulating main thread)
     let mut manager = IndexManager::with_dir(indexes_dir).unwrap();
@@ -370,7 +368,7 @@ fn test_insert_index_memory_only() {
     // Verify search works
     let results = manager.search("alpha", 10);
     assert_eq!(results.len(), 1);
-    assert!(results[0].node.name.contains("alpha"));
+    assert!(results[0].node.name().contains("alpha"));
 
     let results = manager.search("beta", 10);
     assert_eq!(results.len(), 1);

@@ -50,7 +50,7 @@
 use clap::ValueEnum;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// File type categories for filtering
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
@@ -300,8 +300,14 @@ pub struct TypeIndex {
     /// Per-path-component bitmaps for O(1) folder pattern lookups
     /// Key is lowercase directory name (e.g., "node_modules", "target", ".trash")
     /// Value is bitmap of all file indices whose path contains that component
+    /// Only components in `indexed_components` are tracked (selective indexing).
     #[serde(default)]
     path_component_bitmaps: HashMap<String, RoaringBitmap>,
+
+    /// Allowlist of path components to index. Only these components get bitmaps.
+    /// Loaded from cleanup profiles at construction time.
+    #[serde(skip)]
+    indexed_components: HashSet<String>,
 }
 
 impl TypeIndex {
@@ -310,6 +316,7 @@ impl TypeIndex {
     /// Attempts to load extension mappings from profile configuration.
     /// Falls back to hardcoded defaults if profile loading fails.
     pub fn new() -> Self {
+        let indexed_components = Self::load_indexed_components();
         let mut index = Self {
             bitmaps: HashMap::new(),
             extension_map: HashMap::new(),
@@ -317,6 +324,7 @@ impl TypeIndex {
             trash_bitmap: RoaringBitmap::new(),
             extension_bitmaps: HashMap::new(),
             path_component_bitmaps: HashMap::new(),
+            indexed_components,
         };
 
         // Try to load from profile, fall back to hardcoded
@@ -332,6 +340,7 @@ impl TypeIndex {
     /// This is the preferred way to create a TypeIndex when you have
     /// already loaded the profile.
     pub fn from_profile(profile: &crate::profiles::FileTypesProfile) -> Self {
+        let indexed_components = Self::load_indexed_components();
         let mut index = Self {
             bitmaps: HashMap::new(),
             extension_map: HashMap::new(),
@@ -339,9 +348,42 @@ impl TypeIndex {
             trash_bitmap: RoaringBitmap::new(),
             extension_bitmaps: HashMap::new(),
             path_component_bitmaps: HashMap::new(),
+            indexed_components,
         };
         index.build_extension_map_from_profile(profile);
         index
+    }
+
+    /// Load the set of path components to index from cleanup profiles.
+    ///
+    /// Extracts folder patterns (e.g., `**/node_modules` → `node_modules`)
+    /// from the cleanup profile. Only these components get path_component_bitmaps.
+    fn load_indexed_components() -> HashSet<String> {
+        let mut components = HashSet::new();
+
+        // Always include these common components
+        components.insert(".trash".to_string());
+
+        if let Ok(profile) = crate::profiles::load_cleanup() {
+            for cat in profile.all_categories() {
+                for pattern in &cat.patterns {
+                    if let Some(search_term) = pattern.strip_prefix("**/")
+                        && !search_term.starts_with('.')
+                        && !search_term.starts_with("*.")
+                        && !search_term.ends_with("/*")
+                    {
+                        components.insert(search_term.to_lowercase());
+                    }
+                }
+            }
+        }
+
+        components
+    }
+
+    /// Set custom indexed components (for testing)
+    pub fn set_indexed_components(&mut self, components: HashSet<String>) {
+        self.indexed_components = components;
     }
 
     /// Try to load extension mappings from the profile system
@@ -419,6 +461,9 @@ impl TypeIndex {
         if self.extension_map.is_empty() && !self.try_load_from_profile() {
             self.build_extension_map_from_constants();
         }
+        if self.indexed_components.is_empty() {
+            self.indexed_components = Self::load_indexed_components();
+        }
     }
 
     /// Get the number of extensions mapped
@@ -457,19 +502,22 @@ impl TypeIndex {
             self.trash_bitmap.insert(index);
         }
 
-        // Add to path component bitmaps for O(1) folder pattern lookups
-        // Only track meaningful path components (not empty, not root-like)
-        for component in path.split('/') {
-            if component.is_empty() || component == "." || component == ".." {
-                continue;
+        // Add to path component bitmaps — SELECTIVE indexing.
+        // Only index components in the allowlist (from cleanup profiles).
+        // This reduces 15K unique components (~73MB) to ~40 (~3MB).
+        if !self.indexed_components.is_empty() {
+            for component in path.split('/') {
+                if component.is_empty() || component == "." || component == ".." {
+                    continue;
+                }
+                let component_lower = component.to_lowercase();
+                if self.indexed_components.contains(&component_lower) {
+                    self.path_component_bitmaps
+                        .entry(component_lower)
+                        .or_default()
+                        .insert(index);
+                }
             }
-            // Skip very short components and the filename itself (last component for files)
-            // We want directory names, not filenames
-            let component_lower = component.to_lowercase();
-            self.path_component_bitmaps
-                .entry(component_lower)
-                .or_default()
-                .insert(index);
         }
 
         if is_directory {
@@ -1113,10 +1161,11 @@ mod tests {
         let xyz_bitmap = index.get_by_path_component("xyz_nonexistent");
         assert!(xyz_bitmap.is_none());
 
-        // Test count_by_path_component
+        // Test count_by_path_component (only allowlisted components are indexed)
         assert_eq!(index.count_by_path_component("node_modules"), 3);
         assert_eq!(index.count_by_path_component("target"), 1);
-        assert_eq!(index.count_by_path_component("project"), 4); // 0, 1, 3, 4
+        // "project" is NOT in the allowlist, so it's not indexed
+        assert_eq!(index.count_by_path_component("project"), 0);
         assert_eq!(index.count_by_path_component("xyz"), 0);
     }
 

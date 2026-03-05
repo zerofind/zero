@@ -58,18 +58,11 @@ impl EditorView {
             .unwrap_or("")
             .to_string();
 
-        // Markdown files use plain text mode to avoid noisy code-style coloring.
-        // The "text" language has no highlight queries, giving clean uniform text.
-        let lang = match ext.as_str() {
-            "md" | "markdown" | "mdx" => "text".to_string(),
-            _ => ext,
-        };
-
         let original_content = content.clone();
 
         let input = cx.new(|cx| {
             InputState::new(window, cx)
-                .code_editor(SharedString::from(lang))
+                .code_editor(SharedString::from(ext))
                 .default_value(&content)
         });
 
@@ -232,7 +225,8 @@ impl Render for EditorView {
                 .flex_1()
                 .size_full()
                 .overflow_hidden()
-                .font_family("Berkeley Mono, Menlo, Monaco, monospace")
+                .font_family("Menlo")
+                .text_size(px(12.0))
                 .child(
                     Input::new(&self.input)
                         .size_full()

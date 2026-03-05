@@ -84,7 +84,7 @@ pub const TOOLBAR_BUTTON_SIZE: Pixels = px(26.0);
 
 // -- Content ------------------------------------------------------------------
 
-pub const CONTENT_INSET: Pixels = px(10.0);
+pub const CONTENT_INSET: Pixels = px(0.0);
 
 // -- Modals -------------------------------------------------------------------
 

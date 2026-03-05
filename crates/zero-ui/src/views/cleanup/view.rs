@@ -92,7 +92,7 @@ impl CleanupView {
                                     .iter()
                                     .map(|item| CategoryFileItem {
                                         path: PathBuf::from(&item.node.path),
-                                        name: item.node.name.clone(),
+                                        name: item.node.name().to_string(),
                                         size: item.node.size,
                                     })
                                     .collect();

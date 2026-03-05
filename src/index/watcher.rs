@@ -336,9 +336,9 @@ impl IndexWatcher {
             .unwrap_or(0);
 
         if metadata.is_dir() {
-            Some(FileNode::directory(name, path_str, mtime))
+            Some(FileNode::directory(path_str, mtime))
         } else if metadata.is_file() {
-            Some(FileNode::file(name, path_str, metadata.len(), mtime))
+            Some(FileNode::file(path_str, metadata.len(), mtime))
         } else {
             // Skip symlinks and special files
             None
@@ -400,7 +400,7 @@ mod tests {
         drop(file);
 
         let node = IndexWatcher::create_node_from_path(&file_path).unwrap();
-        assert_eq!(node.name, "test.txt");
+        assert_eq!(node.name(), "test.txt");
         assert!(node.is_file());
         assert_eq!(node.size, 11);
     }
@@ -412,7 +412,7 @@ mod tests {
         fs::create_dir(&dir_path).unwrap();
 
         let node = IndexWatcher::create_node_from_path(&dir_path).unwrap();
-        assert_eq!(node.name, "subdir");
+        assert_eq!(node.name(), "subdir");
         assert!(node.is_directory());
     }
 
