@@ -52,6 +52,7 @@ impl CleanupView {
     }
 
     pub(super) fn start_scan(&mut self, cx: &mut Context<Self>) {
+        tracing::debug!("cleanup: start scan");
         self.scanning = true;
         self.scan_complete = false;
         self.scan_status = Some("Analyzing categories...".to_string());
@@ -180,6 +181,7 @@ impl CleanupView {
     }
 
     pub(super) fn drill_into(&mut self, idx: usize, cx: &mut Context<Self>) {
+        tracing::debug!(idx, "cleanup: drill into");
         self.detail_category = Some(idx);
         self.detail_selected.clear();
         self.confirm_detail_clean = false;
@@ -188,6 +190,7 @@ impl CleanupView {
     }
 
     pub(super) fn back_from_detail(&mut self, cx: &mut Context<Self>) {
+        tracing::debug!("cleanup: back from detail");
         self.detail_category = None;
         self.detail_selected.clear();
         self.confirm_detail_clean = false;
@@ -195,6 +198,7 @@ impl CleanupView {
     }
 
     pub(super) fn toggle_detail_file(&mut self, idx: usize, cx: &mut Context<Self>) {
+        tracing::debug!(idx, "cleanup: toggle detail file");
         if self.detail_selected.contains(&idx) {
             self.detail_selected.remove(&idx);
         } else {
@@ -204,6 +208,7 @@ impl CleanupView {
     }
 
     pub(super) fn toggle_detail_select_all(&mut self, cx: &mut Context<Self>) {
+        tracing::debug!("cleanup: toggle select all");
         let Some(cat_idx) = self.detail_category else {
             return;
         };
@@ -219,6 +224,10 @@ impl CleanupView {
     }
 
     pub(super) fn clean_detail_selected(&mut self, cx: &mut Context<Self>) {
+        tracing::debug!(
+            count = self.detail_selected.len(),
+            "cleanup: clean selected"
+        );
         let Some(cat_idx) = self.detail_category else {
             return;
         };
@@ -296,6 +305,7 @@ impl CleanupView {
 
     /// Open the focused item (context-aware).
     pub(super) fn detail_open_focused(&mut self, _cx: &mut Context<Self>) {
+        tracing::debug!("cleanup: open focused");
         let Some(focused) = self.detail_focused else {
             return;
         };

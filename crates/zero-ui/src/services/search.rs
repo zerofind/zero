@@ -58,13 +58,38 @@ impl SearchService {
         svc
     }
 
+    /// Create without loading indexes or touching the filesystem.
+    /// Call `activate()` once FDA is confirmed.
+    pub fn new_deferred(_cx: &mut Context<Self>) -> Self {
+        let manager = IndexManager::new().unwrap_or_else(|_| {
+            let tmp = std::env::temp_dir().join("zero-index");
+            IndexManager::with_dir(tmp).expect("Failed to create index manager")
+        });
+
+        Self {
+            manager,
+            roots: Vec::new(),
+            loading: false,
+            indexing: false,
+            watcher_active: false,
+        }
+    }
+
+    /// Start loading indexes after FDA is confirmed.
+    pub fn activate(&mut self, cx: &mut Context<Self>) {
+        self.loading = true;
+        self.async_load(cx);
+    }
+
     // -- Queries (synchronous, fast) ------------------------------------------
 
     pub fn search(&self, query: &str, limit: usize) -> Vec<SearchResult> {
+        tracing::debug!(query, limit, "search_svc: query");
         self.manager.search(query, limit)
     }
 
     pub fn search_by_type(&self, file_type: &str, limit: usize) -> Vec<SearchResult> {
+        tracing::debug!(file_type, limit, "search_svc: query by type");
         self.manager.search_by_type(file_type, limit)
     }
 
@@ -74,6 +99,7 @@ impl SearchService {
         type_filter: &str,
         limit: usize,
     ) -> Vec<SearchResult> {
+        tracing::debug!(query, type_filter, limit, "search_svc: query with type");
         self.manager.search_with_type(query, type_filter, limit)
     }
 
@@ -281,6 +307,7 @@ impl SearchService {
     }
 
     pub fn remove_root(&mut self, path: &str, cx: &mut Context<Self>) {
+        tracing::debug!(path, "search_svc: remove root");
         self.manager.remove_root(path);
         self.roots = self
             .manager
@@ -292,6 +319,7 @@ impl SearchService {
     }
 
     pub fn clear(&mut self, cx: &mut Context<Self>) {
+        tracing::debug!("search_svc: clear");
         self.manager.clear();
         self.roots.clear();
         cx.emit(SearchEvent::IndexCleared);
@@ -360,9 +388,9 @@ impl SearchService {
                     })
                     .ok();
 
-                    // Process chunks: extract on background, insert on main
+                    // Process chunks: extract on background, insert on main.
+                    // Yield between chunks so the UI event loop can render frames.
                     loop {
-                        // next_chunk() is cheap (slice + to_vec), run it inline
                         let chunk = loader.next_chunk();
                         match chunk {
                             Some(nodes) => {
@@ -374,6 +402,10 @@ impl SearchService {
                                     cx.notify();
                                 })
                                 .ok();
+                                // Yield to let the UI process events/render
+                                cx.background_executor()
+                                    .timer(Duration::from_millis(1))
+                                    .await;
                             }
                             None => break,
                         }

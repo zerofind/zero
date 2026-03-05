@@ -25,7 +25,15 @@ impl AppService {
         svc
     }
 
-    fn load(&mut self, cx: &mut Context<Self>) {
+    /// Create without scanning the filesystem.
+    pub fn new_deferred(_cx: &mut Context<Self>) -> Self {
+        Self {
+            apps: Vec::new(),
+            loaded: false,
+        }
+    }
+
+    pub fn load(&mut self, cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| {
             let apps = cx.background_executor().spawn(async { Self::scan() }).await;
 
@@ -108,6 +116,7 @@ impl AppService {
 
     /// Launch an application by path.
     pub fn launch(path: &PathBuf) {
+        tracing::debug!(path = %path.display(), "apps: launch");
         let _ = std::process::Command::new("open")
             .arg("-a")
             .arg(path)

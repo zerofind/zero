@@ -111,6 +111,7 @@ pub mod dirs;
 pub mod disk;
 pub mod hasher;
 pub mod index;
+pub mod logging;
 pub mod output;
 pub mod profiles;
 pub mod progress;

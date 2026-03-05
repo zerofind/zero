@@ -23,4 +23,19 @@ impl ServiceHub {
 
         Self { search, apps }
     }
+
+    /// Create services without triggering any file system access.
+    /// Call `init()` later once Full Disk Access is confirmed.
+    pub fn new_deferred(cx: &mut App) -> Self {
+        let search = cx.new(SearchService::new_deferred);
+        let apps = cx.new(AppService::new_deferred);
+
+        Self { search, apps }
+    }
+
+    /// Initialize services after FDA is confirmed.
+    pub fn init(&self, cx: &mut App) {
+        self.search.update(cx, |svc, cx| svc.activate(cx));
+        self.apps.update(cx, |svc, cx| svc.load(cx));
+    }
 }

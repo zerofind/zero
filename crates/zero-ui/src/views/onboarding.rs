@@ -48,6 +48,7 @@ impl OnboardingView {
     }
 
     fn advance(&mut self, cx: &mut Context<Self>) {
+        tracing::debug!(step = ?self.step, "onboarding: advance");
         self.step = match self.step {
             Step::Welcome => Step::GrantAccess,
             Step::GrantAccess => {
@@ -60,10 +61,12 @@ impl OnboardingView {
     }
 
     fn skip(&mut self, cx: &mut Context<Self>) {
+        tracing::debug!("onboarding: skip");
         cx.emit(OnboardingEvent::Skip);
     }
 
     fn add_folder(&mut self, cx: &mut Context<Self>) {
+        tracing::debug!("onboarding: add folder");
         if let Some(home) = dirs::home_dir()
             && !self.selected_roots.contains(&home)
         {

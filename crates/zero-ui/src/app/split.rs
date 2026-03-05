@@ -7,6 +7,7 @@ use super::ZeroApp;
 
 impl ZeroApp {
     pub fn toggle_split_view(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        tracing::debug!("action: toggle split view");
         if self.split_pane.is_some() {
             self.split_pane = None;
             self.split_browser = None;
@@ -47,7 +48,7 @@ impl ZeroApp {
         &mut self,
         _: &Entity<FileBrowserView>,
         event: &FileBrowserEvent,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         match event {
@@ -61,12 +62,11 @@ impl ZeroApp {
             FileBrowserEvent::OpenFile(path) => {
                 if crate::views::data_table::is_data_table(path) {
                     self.data_table = None;
-                    self.active_view = ActiveView::DataTable(path.clone());
+                    self.push_view(ActiveView::DataTable(path.clone()), window, cx);
                 } else {
                     self.editor = None;
-                    self.active_view = ActiveView::Editor(path.clone());
+                    self.push_view(ActiveView::Editor(path.clone()), window, cx);
                 }
-                cx.notify();
             }
             FileBrowserEvent::SetClipboard(clipboard) => {
                 self.file_clipboard = Some(clipboard.clone());

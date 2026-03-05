@@ -293,6 +293,7 @@ impl SettingsView {
     }
 
     pub(super) fn confirm_root_input(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        tracing::debug!("settings: confirm root input");
         let raw = self.root_input.read(cx).value().to_string();
         let raw = raw.trim();
         if raw.is_empty() {
@@ -326,6 +327,7 @@ impl SettingsView {
     }
 
     pub(super) fn add_root(&mut self, path: PathBuf, cx: &mut Context<Self>) {
+        tracing::debug!(path = %path.display(), "settings: add root");
         if self.settings.search_roots.contains(&path) {
             return;
         }
@@ -341,6 +343,7 @@ impl SettingsView {
     }
 
     pub(super) fn remove_root(&mut self, idx: usize, cx: &mut Context<Self>) {
+        tracing::debug!(idx, "settings: remove root");
         if idx >= self.settings.search_roots.len() {
             return;
         }

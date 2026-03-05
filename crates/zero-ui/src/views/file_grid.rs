@@ -36,6 +36,7 @@ impl FileGridView {
 
     /// Navigate to a new directory in-place (synchronous, matching ensure_file_grid pattern).
     pub fn navigate(&mut self, path: &std::path::Path, cx: &mut Context<Self>) {
+        tracing::debug!(path = %path.display(), "grid: navigate");
         let entries = crate::views::file_browser::state::load_directory(path);
         self.update_entries(entries, cx);
     }
@@ -51,6 +52,7 @@ impl FileGridView {
         let Some(entry) = self.entries.get(idx) else {
             return;
         };
+        tracing::debug!(path = %entry.path.display(), is_dir = entry.is_dir, "grid: open entry");
         if entry.is_dir {
             cx.emit(FileGridEvent::NavigateToDir(entry.path.clone()));
         } else {

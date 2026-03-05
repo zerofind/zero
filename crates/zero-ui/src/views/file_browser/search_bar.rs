@@ -32,6 +32,7 @@ impl FileBrowserView {
         entries: Vec<BrowserEntry>,
         cx: &mut Context<Self>,
     ) {
+        tracing::debug!(query = %query, count = entries.len(), "browser: show search results");
         // Save originals if not already in a display mode
         if self.display_mode.is_none() {
             // We don't need to save originals for SearchResults mode
@@ -53,6 +54,7 @@ impl FileBrowserView {
 
     /// Toggle the in-browser search bar.
     pub fn toggle_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        tracing::debug!("browser: toggle search");
         if self.search_active {
             self.dismiss_search(window, cx);
         } else {
@@ -75,6 +77,7 @@ impl FileBrowserView {
 
     /// Dismiss the search bar and restore original entries.
     pub fn dismiss_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        tracing::debug!("browser: dismiss search");
         self.search_active = false;
         self.search_input = None;
 

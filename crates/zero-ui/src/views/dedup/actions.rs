@@ -12,6 +12,7 @@ use super::{DedupEvent, DedupFilter, DedupSort, DedupView, DuplicateGroup};
 
 impl DedupView {
     pub(super) fn start_scan(&mut self, cx: &mut Context<Self>) {
+        tracing::debug!("dedup: start scan");
         let Some(path) = self.scan_path.clone() else {
             return;
         };
@@ -139,6 +140,7 @@ impl DedupView {
     }
 
     pub(super) fn toggle_file_selection(&mut self, path: PathBuf, cx: &mut Context<Self>) {
+        tracing::debug!(path = %path.display(), "dedup: toggle selection");
         if self.selected_for_deletion.contains(&path) {
             self.selected_for_deletion.remove(&path);
         } else {
@@ -149,6 +151,7 @@ impl DedupView {
 
     /// Auto-select all duplicates for deletion (keep the keeper in each group).
     pub(super) fn select_all_duplicates(&mut self, cx: &mut Context<Self>) {
+        tracing::debug!("dedup: select all duplicates");
         self.selected_for_deletion.clear();
         for group in &self.groups {
             // Skip index 0 (the keeper)
@@ -161,6 +164,7 @@ impl DedupView {
 
     /// Clear all selections.
     pub(super) fn clear_selection(&mut self, cx: &mut Context<Self>) {
+        tracing::debug!("dedup: clear selection");
         self.selected_for_deletion.clear();
         cx.notify();
     }
@@ -185,6 +189,10 @@ impl DedupView {
     }
 
     pub(super) fn delete_selected(&mut self, cx: &mut Context<Self>) {
+        tracing::debug!(
+            count = self.selected_for_deletion.len(),
+            "dedup: delete selected"
+        );
         if self.selected_for_deletion.is_empty() || self.deleting {
             return;
         }
@@ -218,6 +226,7 @@ impl DedupView {
     }
 
     pub(super) fn set_sort(&mut self, sort: DedupSort, cx: &mut Context<Self>) {
+        tracing::debug!(sort = ?sort, "dedup: set sort");
         self.sort_order = sort;
         self.sort_groups();
         cx.notify();

@@ -7,7 +7,7 @@ pub use pane::{PaneId, SplitPane};
 /// Which view is currently displayed in the content area.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ActiveView {
-    FileBrowser,
+    FileBrowser(std::path::PathBuf),
     Cleanup,
     Dedup,
     Todo,

@@ -1,20 +1,13 @@
 use std::path::PathBuf;
 
-use gpui::prelude::FluentBuilder as _;
 use gpui::*;
-use gpui_component::{
-    ActiveTheme, Icon, IconName, Sizable as _, h_flex,
-    input::{Input, InputState},
-    v_flex,
-};
+use gpui_component::input::InputState;
 
 use crate::services::apps::AppEntry;
 use crate::services::{AppService, SearchService};
-use crate::theme::{
-    self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, ICON_XS, MODAL_PALETTE_WIDTH, RADIUS, RADIUS_LG,
-};
+use crate::theme::FONT_SIZE_CAPTION;
 
-use super::items::PaletteItem;
+use super::items::{DEFAULT_ACTIONS, PaletteAction, StorageEntry};
 
 // -- Events emitted to the parent ZeroApp ------------------------------------
 
@@ -22,6 +15,11 @@ pub enum PaletteEvent {
     Dismiss,
     OpenResult(PathBuf),
     ShowInBrowser(String),
+    ShowTypeInBrowser {
+        type_filter: String,
+        query: String,
+        label: String,
+    },
 }
 
 impl EventEmitter<PaletteEvent> for PaletteView {}
@@ -29,155 +27,25 @@ impl EventEmitter<PaletteEvent> for PaletteView {}
 // -- View --------------------------------------------------------------------
 
 #[derive(Clone, PartialEq)]
-enum PaletteMode {
+pub(super) enum PaletteMode {
     Root,
     DrilledIn { type_filter: String, label: String },
 }
 
-/// Action entry for the palette's default section.
-struct PaletteAction {
-    name: &'static str,
-    icon: fn() -> IconName,
-    path: &'static str,
-    category: &'static str,
-    shortcut: Option<&'static str>,
-}
-
-const DEFAULT_ACTIONS: &[PaletteAction] = &[
-    PaletteAction {
-        name: "Settings",
-        icon: || IconName::Settings,
-        path: "action://settings",
-        category: "View",
-        shortcut: Some("\u{2318},"),
-    },
-    PaletteAction {
-        name: "New Folder",
-        icon: || IconName::Folder,
-        path: "action://new_folder",
-        category: "Files",
-        shortcut: Some("\u{21e7}\u{2318}N"),
-    },
-    PaletteAction {
-        name: "Toggle Sidebar",
-        icon: || IconName::PanelLeft,
-        path: "action://toggle_sidebar",
-        category: "View",
-        shortcut: Some("\u{2318}B"),
-    },
-    PaletteAction {
-        name: "Toggle Split View",
-        icon: || IconName::LayoutDashboard,
-        path: "action://toggle_split_view",
-        category: "View",
-        shortcut: Some("\u{2318}T"),
-    },
-    PaletteAction {
-        name: "Go Back",
-        icon: || IconName::ArrowLeft,
-        path: "action://go_back",
-        category: "Navigation",
-        shortcut: Some("\u{2318}\u{2190}"),
-    },
-    PaletteAction {
-        name: "Go Forward",
-        icon: || IconName::ArrowRight,
-        path: "action://go_forward",
-        category: "Navigation",
-        shortcut: Some("\u{2318}\u{2192}"),
-    },
-    PaletteAction {
-        name: "Go Up",
-        icon: || IconName::ArrowUp,
-        path: "action://go_up",
-        category: "Navigation",
-        shortcut: Some("\u{2318}\u{2191}"),
-    },
-    PaletteAction {
-        name: "Storage Cleanup",
-        icon: || IconName::Delete,
-        path: "action://cleanup",
-        category: "View",
-        shortcut: None,
-    },
-    PaletteAction {
-        name: "Find Duplicates",
-        icon: || IconName::File,
-        path: "action://dedup",
-        category: "View",
-        shortcut: None,
-    },
-    PaletteAction {
-        name: "Tasks",
-        icon: || IconName::Check,
-        path: "action://todo",
-        category: "View",
-        shortcut: None,
-    },
-    PaletteAction {
-        name: "Automations",
-        icon: || IconName::Settings,
-        path: "action://automations",
-        category: "View",
-        shortcut: None,
-    },
-    PaletteAction {
-        name: "Browse Applications",
-        icon: || IconName::LayoutDashboard,
-        path: "apps://",
-        category: "Search",
-        shortcut: None,
-    },
-    PaletteAction {
-        name: "Search Images",
-        icon: || IconName::Eye,
-        path: "type://images",
-        category: "Search",
-        shortcut: None,
-    },
-    PaletteAction {
-        name: "Search Videos",
-        icon: || IconName::Eye,
-        path: "type://videos",
-        category: "Search",
-        shortcut: None,
-    },
-    PaletteAction {
-        name: "Search Audio",
-        icon: || IconName::Search,
-        path: "type://audio",
-        category: "Search",
-        shortcut: None,
-    },
-    PaletteAction {
-        name: "Search Documents",
-        icon: || IconName::File,
-        path: "type://documents",
-        category: "Search",
-        shortcut: None,
-    },
-    PaletteAction {
-        name: "Search Code",
-        icon: || IconName::Search,
-        path: "type://code",
-        category: "Search",
-        shortcut: None,
-    },
-];
-
 pub struct PaletteView {
-    search: Entity<SearchService>,
-    apps: Entity<AppService>,
-    input: Entity<InputState>,
-    results: Vec<zero::prelude::SearchResult>,
-    app_results: Vec<AppEntry>,
-    bookmarks: Vec<PathBuf>,
-    selected_idx: usize,
-    query: String,
-    mode: PaletteMode,
-    focus_handle: FocusHandle,
+    pub(super) search: Entity<SearchService>,
+    pub(super) apps: Entity<AppService>,
+    pub(super) input: Entity<InputState>,
+    pub(super) results: Vec<zero::prelude::SearchResult>,
+    pub(super) app_results: Vec<AppEntry>,
+    pub(super) bookmarks: Vec<PathBuf>,
+    pub(super) storages: Vec<StorageEntry>,
+    pub(super) selected_idx: usize,
+    pub(super) query: String,
+    pub(super) mode: PaletteMode,
+    pub(super) focus_handle: FocusHandle,
     _input_sub: Subscription,
-    scroll_handle: ScrollHandle,
+    pub(super) scroll_handle: ScrollHandle,
 }
 
 impl PaletteView {
@@ -198,6 +66,7 @@ impl PaletteView {
             },
         );
         let bookmarks = crate::session::Settings::load().sidebar_bookmarks;
+        let storages = StorageEntry::discover();
 
         Self {
             search,
@@ -206,6 +75,7 @@ impl PaletteView {
             results: Vec::new(),
             app_results: Vec::new(),
             bookmarks,
+            storages,
             selected_idx: 0,
             query: String::new(),
             mode: PaletteMode::Root,
@@ -220,6 +90,7 @@ impl PaletteView {
         self.results.clear();
         self.selected_idx = 0;
         self.mode = PaletteMode::Root;
+        self.storages = StorageEntry::discover();
         self.input.update(cx, |state, cx| {
             state.set_value("", window, cx);
         });
@@ -227,13 +98,14 @@ impl PaletteView {
         cx.notify();
     }
 
-    fn drill_into(
+    pub(super) fn drill_into(
         &mut self,
         type_filter: &str,
         label: &str,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        tracing::debug!(type_filter, label, "palette: drill into");
         self.mode = PaletteMode::DrilledIn {
             type_filter: type_filter.to_string(),
             label: label.to_string(),
@@ -253,7 +125,8 @@ impl PaletteView {
         cx.notify();
     }
 
-    fn exit_drill(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn exit_drill(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        tracing::debug!("palette: exit drill");
         self.mode = PaletteMode::Root;
         self.query.clear();
         self.results.clear();
@@ -265,7 +138,8 @@ impl PaletteView {
         cx.notify();
     }
 
-    fn perform_search(&mut self, query: &str, cx: &mut Context<Self>) {
+    pub(super) fn perform_search(&mut self, query: &str, cx: &mut Context<Self>) {
+        tracing::debug!(query, "palette: search");
         self.query = query.to_string();
         self.selected_idx = 0;
 
@@ -277,6 +151,12 @@ impl PaletteView {
                     return;
                 }
                 self.results = self.search.read(cx).search(query, 50);
+                // Sort folders first
+                self.results.sort_by(|a, b| {
+                    let a_dir = a.node.node_type == zero::index::NodeType::Directory;
+                    let b_dir = b.node.node_type == zero::index::NodeType::Directory;
+                    b_dir.cmp(&a_dir)
+                });
                 self.app_results = self.apps.read(cx).search(query, 5);
             }
             PaletteMode::DrilledIn { type_filter, .. } => {
@@ -300,37 +180,174 @@ impl PaletteView {
         }
     }
 
-    fn is_showing_results(&self) -> bool {
+    pub(super) fn matches_query(text: &str, query: &str) -> bool {
+        text.to_lowercase().contains(&query.to_lowercase())
+    }
+
+    pub(super) fn filtered_bookmarks(&self) -> Vec<(usize, &PathBuf)> {
+        if self.query.is_empty() {
+            return Vec::new();
+        }
+        self.bookmarks
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| {
+                let name = p
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                Self::matches_query(&name, &self.query)
+            })
+            .collect()
+    }
+
+    pub(super) fn filtered_storages(&self) -> Vec<(usize, &StorageEntry)> {
+        if self.query.is_empty() {
+            return Vec::new();
+        }
+        self.storages
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| {
+                Self::matches_query(&s.name, &self.query)
+                    || Self::matches_query(&s.mount_point.to_string_lossy(), &self.query)
+            })
+            .collect()
+    }
+
+    pub(super) fn filtered_actions(&self) -> Vec<(usize, &PaletteAction)> {
+        if self.query.is_empty() {
+            return Vec::new();
+        }
+        DEFAULT_ACTIONS
+            .iter()
+            .enumerate()
+            .filter(|(_, a)| {
+                Self::matches_query(a.name, &self.query)
+                    || Self::matches_query(a.category, &self.query)
+            })
+            .collect()
+    }
+
+    pub(super) fn detect_path(query: &str) -> Option<PathBuf> {
+        let trimmed = query.trim();
+        if trimmed.starts_with('/') {
+            let p = PathBuf::from(trimmed);
+            if p.exists() || p.parent().is_some_and(|pp| pp.exists()) {
+                return Some(p);
+            }
+        } else if let Some(rest) = trimmed.strip_prefix("~/")
+            && let Some(home) = dirs::home_dir()
+        {
+            let p = home.join(rest);
+            if p.exists() || p.parent().is_some_and(|pp| pp.exists()) {
+                return Some(p);
+            }
+        }
+        None
+    }
+
+    /// Compute section lengths for the filtered results view in Root mode.
+    /// Returns (path_detect, apps, bookmarks, storages, search_files_item, actions, files).
+    pub(super) fn root_result_sections(&self) -> (usize, usize, usize, usize, usize, usize, usize) {
+        let path_count = if Self::detect_path(&self.query).is_some() {
+            1
+        } else {
+            0
+        };
+        let apps = self.app_results.len();
+        let bookmarks = self.filtered_bookmarks().len();
+        let storages = self.filtered_storages().len();
+        let actions = self.filtered_actions().len();
+        // "Search Files" dynamic item always shown when query is non-empty
+        let search_files = if self.query.is_empty() { 0 } else { 1 };
+        let files = self.results.len().min(8);
+        (
+            path_count,
+            apps,
+            bookmarks,
+            storages,
+            search_files,
+            actions,
+            files,
+        )
+    }
+
+    pub(super) fn root_result_total(&self) -> usize {
+        let (p, a, b, s, sf, act, f) = self.root_result_sections();
+        p + a + b + s + sf + act + f
+    }
+
+    pub(super) fn is_showing_results(&self) -> bool {
         !self.query.is_empty() || matches!(self.mode, PaletteMode::DrilledIn { .. })
     }
 
     /// Compute the scroll child index accounting for section headers.
-    fn scroll_child_index(&self) -> usize {
+    pub(super) fn scroll_child_index(&self) -> usize {
         if self.is_showing_results() {
-            // With results: items are file results, then optionally "Applications" header + apps
-            if self.selected_idx < self.results.len() {
-                self.selected_idx
-            } else {
-                // Past file results: +1 for the "Applications" section header
-                self.selected_idx + 1
-            }
-        } else {
-            // Default view: bookmarks section header + bookmarks, then actions header + actions
-            let bookmark_count = self.bookmarks.len();
-            let headers_before = if bookmark_count > 0 {
-                if self.selected_idx < bookmark_count {
-                    1 // "Bookmarks" header
+            if matches!(self.mode, PaletteMode::DrilledIn { .. }) {
+                // Drilled-in: "Show All" item + file results, then optionally apps header + apps
+                if self.selected_idx < 1 + self.results.len() {
+                    self.selected_idx
                 } else {
-                    2 // "Bookmarks" + "Actions" headers
+                    self.selected_idx + 1
                 }
             } else {
-                1 // "Actions" header only
-            };
-            self.selected_idx + headers_before
+                // Root with query: count section headers before selected_idx
+                let (p, a, b, s, sf, act, _f) = self.root_result_sections();
+                let idx = self.selected_idx;
+                let mut headers = 0;
+                let mut offset = 0;
+                // Path detection (no header)
+                offset += p;
+                // Applications section
+                if a > 0 && idx >= offset {
+                    headers += 1;
+                }
+                offset += a;
+                // Bookmarks section
+                if b > 0 && idx >= offset {
+                    headers += 1;
+                }
+                offset += b;
+                // Storages section
+                if s > 0 && idx >= offset {
+                    headers += 1;
+                }
+                offset += s;
+                // Actions section (includes search_files item + filtered actions)
+                if (sf + act) > 0 && idx >= offset {
+                    headers += 1;
+                }
+                offset += sf + act;
+                // Files section
+                if idx >= offset {
+                    headers += 1;
+                }
+                idx + headers
+            }
+        } else {
+            // Default view: bookmarks header + bookmarks, storages header + storages, actions header + actions
+            let bookmark_count = self.bookmarks.len();
+            let storage_count = self.storages.len();
+            let mut headers = 0;
+            if bookmark_count > 0 {
+                headers += 1; // "Bookmarks" header
+            }
+            if storage_count > 0 && self.selected_idx >= bookmark_count {
+                headers += 1; // "Storages" header
+            }
+            if self.selected_idx >= bookmark_count + storage_count {
+                headers += 1; // "Actions" header
+            }
+            if headers == 0 {
+                headers = 1; // At least "Actions" header
+            }
+            self.selected_idx + headers
         }
     }
 
-    fn select_prev(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn select_prev(&mut self, cx: &mut Context<Self>) {
         if self.selected_idx > 0 {
             self.selected_idx -= 1;
             self.scroll_handle.scroll_to_item(self.scroll_child_index());
@@ -338,9 +355,14 @@ impl PaletteView {
         }
     }
 
-    fn select_next(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn select_next(&mut self, cx: &mut Context<Self>) {
         let max = if self.is_showing_results() {
-            self.results.len() + self.app_results.len()
+            if matches!(self.mode, PaletteMode::Root) {
+                self.root_result_total()
+            } else {
+                // +1 for the "Show All" item at index 0
+                1 + self.results.len() + self.app_results.len()
+            }
         } else {
             self.default_item_count()
         };
@@ -351,33 +373,138 @@ impl PaletteView {
         }
     }
 
-    fn default_item_count(&self) -> usize {
-        self.bookmarks.len() + DEFAULT_ACTIONS.len()
+    pub(super) fn default_item_count(&self) -> usize {
+        self.bookmarks.len() + self.storages.len() + DEFAULT_ACTIONS.len()
     }
 
-    fn confirm_selection(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn confirm_selection(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        tracing::debug!(
+            selected_idx = self.selected_idx,
+            "palette: confirm selection"
+        );
         if self.is_showing_results() {
-            // File results first, then app results
-            if let Some(result) = self.results.get(self.selected_idx) {
-                let path = PathBuf::from(&result.node.path);
-                cx.emit(PaletteEvent::OpenResult(path));
+            if let PaletteMode::DrilledIn {
+                ref type_filter,
+                ref label,
+            } = self.mode
+            {
+                // Index 0 = "Show All {Label}" action
+                if self.selected_idx == 0 {
+                    cx.emit(PaletteEvent::ShowTypeInBrowser {
+                        type_filter: type_filter.clone(),
+                        query: self.query.clone(),
+                        label: label.clone(),
+                    });
+                    return;
+                }
+                // File results at 1..1+results.len()
+                let file_idx = self.selected_idx - 1;
+                if let Some(result) = self.results.get(file_idx) {
+                    let path = PathBuf::from(&result.node.path);
+                    cx.emit(PaletteEvent::OpenResult(path));
+                    return;
+                }
+                // App results after files
+                let app_idx = file_idx.saturating_sub(self.results.len());
+                if let Some(app) = self.app_results.get(app_idx) {
+                    let path_str = format!("app://{}", app.path.display());
+                    cx.emit(PaletteEvent::OpenResult(PathBuf::from(path_str)));
+                }
                 return;
             }
-            let app_idx = self.selected_idx.saturating_sub(self.results.len());
-            if let Some(app) = self.app_results.get(app_idx) {
-                let path_str = format!("app://{}", app.path.display());
-                cx.emit(PaletteEvent::OpenResult(PathBuf::from(path_str)));
+
+            // Root mode with query: walk sections
+            let (p, a, b, s, sf, act, f) = self.root_result_sections();
+            let idx = self.selected_idx;
+            let mut offset = 0;
+
+            // Path detection
+            if idx < offset + p {
+                if let Some(path) = Self::detect_path(&self.query) {
+                    cx.emit(PaletteEvent::OpenResult(path));
+                }
+                return;
+            }
+            offset += p;
+
+            // Applications
+            if idx < offset + a {
+                if let Some(app) = self.app_results.get(idx - offset) {
+                    let path_str = format!("app://{}", app.path.display());
+                    cx.emit(PaletteEvent::OpenResult(PathBuf::from(path_str)));
+                }
+                return;
+            }
+            offset += a;
+
+            // Bookmarks
+            if idx < offset + b {
+                let filtered = self.filtered_bookmarks();
+                if let Some(&(_, path)) = filtered.get(idx - offset) {
+                    cx.emit(PaletteEvent::OpenResult(path.clone()));
+                }
+                return;
+            }
+            offset += b;
+
+            // Storages
+            if idx < offset + s {
+                let filtered = self.filtered_storages();
+                if let Some(&(_, storage)) = filtered.get(idx - offset) {
+                    cx.emit(PaletteEvent::OpenResult(storage.mount_point.clone()));
+                }
+                return;
+            }
+            offset += s;
+
+            // Search Files dynamic item
+            if idx < offset + sf {
+                cx.emit(PaletteEvent::ShowInBrowser(self.query.clone()));
+                return;
+            }
+            offset += sf;
+
+            // Filtered actions
+            if idx < offset + act {
+                let filtered = self.filtered_actions();
+                if let Some(&(_, action)) = filtered.get(idx - offset) {
+                    if let Some(type_name) = action.path.strip_prefix("type://") {
+                        self.drill_into(type_name, action.name, window, cx);
+                        return;
+                    }
+                    if action.path == "apps://" {
+                        self.drill_into("apps", action.name, window, cx);
+                        return;
+                    }
+                    cx.emit(PaletteEvent::OpenResult(PathBuf::from(action.path)));
+                }
+                return;
+            }
+            offset += act;
+
+            // File results
+            if idx < offset + f {
+                if let Some(result) = self.results.get(idx - offset) {
+                    let path = PathBuf::from(&result.node.path);
+                    cx.emit(PaletteEvent::OpenResult(path));
+                }
             }
             return;
         }
 
         let bookmark_count = self.bookmarks.len();
+        let storage_count = self.storages.len();
         if self.selected_idx < bookmark_count {
             if let Some(path) = self.bookmarks.get(self.selected_idx) {
                 cx.emit(PaletteEvent::OpenResult(path.clone()));
             }
+        } else if self.selected_idx < bookmark_count + storage_count {
+            let si = self.selected_idx - bookmark_count;
+            if let Some(storage) = self.storages.get(si) {
+                cx.emit(PaletteEvent::OpenResult(storage.mount_point.clone()));
+            }
         } else {
-            let action_idx = self.selected_idx - bookmark_count;
+            let action_idx = self.selected_idx - bookmark_count - storage_count;
             if let Some(action) = DEFAULT_ACTIONS.get(action_idx) {
                 // Handle type:// drill-in internally
                 if let Some(type_name) = action.path.strip_prefix("type://") {
@@ -394,16 +521,17 @@ impl PaletteView {
         }
     }
 
-    fn dismiss(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn dismiss(&mut self, cx: &mut Context<Self>) {
+        tracing::debug!("palette: dismiss");
         cx.emit(PaletteEvent::Dismiss);
     }
 
     /// Action label for a result item.
-    fn action_label_for_result(_is_dir: bool) -> &'static str {
+    pub(super) fn action_label_for_result(_is_dir: bool) -> &'static str {
         "Open \u{21b5}"
     }
 
-    fn action_label_for_action(action: &PaletteAction) -> &'static str {
+    pub(super) fn action_label_for_action(action: &PaletteAction) -> &'static str {
         if action.path.starts_with("type://") || action.path == "apps://" {
             "Search >"
         } else if action.path.starts_with("app://") {
@@ -412,339 +540,14 @@ impl PaletteView {
             "Run \u{21b5}"
         }
     }
-}
 
-impl Render for PaletteView {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let has_results = !self.results.is_empty();
-        let show_results = self.is_showing_results();
-        let is_drilled = matches!(self.mode, PaletteMode::DrilledIn { .. });
-        let drill_label = match &self.mode {
-            PaletteMode::DrilledIn { label, .. } => Some(label.clone()),
-            PaletteMode::Root => None,
-        };
-
-        v_flex()
-            .track_focus(&self.focus_handle)
-            .key_context("PaletteView")
-            .on_action(cx.listener(|this, _: &crate::actions::GoBack, _, cx| {
-                this.dismiss(cx);
-            }))
-            .on_key_down(cx.listener(|this, ev: &KeyDownEvent, window, cx| {
-                match &ev.keystroke.key {
-                    key if key == "escape" => {
-                        if matches!(this.mode, PaletteMode::DrilledIn { .. }) {
-                            this.exit_drill(window, cx);
-                        } else {
-                            this.dismiss(cx);
-                        }
-                    }
-                    key if key == "enter" && ev.keystroke.modifiers.platform => {
-                        // Cmd+Enter: show all results in file browser
-                        if !this.query.is_empty() {
-                            cx.emit(PaletteEvent::ShowInBrowser(this.query.clone()));
-                        }
-                    }
-                    key if key == "enter" => this.confirm_selection(window, cx),
-                    key if key == "up" => this.select_prev(cx),
-                    key if key == "down" => this.select_next(cx),
-                    key if key == "backspace" => {
-                        // Backspace on empty query in DrilledIn → return to Root
-                        if this.query.is_empty()
-                            && matches!(this.mode, PaletteMode::DrilledIn { .. })
-                        {
-                            this.exit_drill(window, cx);
-                        }
-                    }
-                    _ => {}
-                }
-            }))
-            .w(MODAL_PALETTE_WIDTH)
-            .max_h(px(460.0))
-            .mx_auto()
-            .mt(px(100.0))
-            .rounded(RADIUS_LG)
-            .bg(theme::content_bg(cx))
-            .border_1()
-            .border_color(cx.theme().border)
-            .shadow_lg()
-            .overflow_hidden()
-            // Search input with icon prefix
-            .child(
-                div()
-                    .px_3()
-                    .py_2()
-                    .border_b_1()
-                    .border_color(cx.theme().border)
-                    .child(
-                        Input::new(&self.input)
-                            .appearance(false)
-                            .prefix(if is_drilled {
-                                h_flex()
-                                    .gap_1()
-                                    .items_center()
-                                    .child(
-                                        Icon::new(IconName::ChevronLeft)
-                                            .with_size(ICON_XS)
-                                            .text_color(cx.theme().muted_foreground),
-                                    )
-                                    .child(
-                                        div()
-                                            .text_size(FONT_SIZE_CAPTION)
-                                            .text_color(cx.theme().muted_foreground)
-                                            .child(drill_label.unwrap_or_default()),
-                                    )
-                                    .into_any_element()
-                            } else {
-                                Icon::new(IconName::Search)
-                                    .with_size(ICON_XS)
-                                    .text_color(cx.theme().muted_foreground)
-                                    .into_any_element()
-                            }),
-                    ),
-            )
-            // Results list (files + apps)
-            .when(show_results, |el| {
-                let has_any = has_results || !self.app_results.is_empty();
-
-                if !has_any {
-                    return el.child(
-                        div()
-                            .px_3()
-                            .py_4()
-                            .text_size(FONT_SIZE_CAPTION)
-                            .text_color(cx.theme().muted_foreground)
-                            .child("No results found"),
-                    );
-                }
-
-                let muted = cx.theme().muted_foreground;
-                let file_results: Vec<_> = self
-                    .results
-                    .iter()
-                    .enumerate()
-                    .take(20)
-                    .map(|(i, result)| {
-                        let ext = std::path::Path::new(&result.node.name)
-                            .extension()
-                            .map(|e| e.to_string_lossy().to_string());
-                        let is_dir = result.node.node_type == zero::index::NodeType::Directory;
-                        let path = result.node.path.clone();
-                        let label = Self::action_label_for_result(is_dir);
-
-                        div()
-                            .id(SharedString::from(format!("click-result-{i}")))
-                            .on_click(cx.listener(move |this, _, window, cx| {
-                                this.selected_idx = i;
-                                this.confirm_selection(window, cx);
-                            }))
-                            .child(
-                                PaletteItem::new(
-                                    SharedString::from(format!("result-{i}")),
-                                    SharedString::from(result.node.name.clone()),
-                                    SharedString::from(path),
-                                    ext,
-                                    is_dir,
-                                )
-                                .action_label(label)
-                                .selected(i == self.selected_idx),
-                            )
-                    })
-                    .collect();
-
-                let results_len = self.results.len();
-                let app_rows: Vec<_> = self
-                    .app_results
-                    .iter()
-                    .enumerate()
-                    .map(|(ai, app)| {
-                        let item_idx = results_len + ai;
-                        let selected = self.selected_idx == item_idx;
-                        let path_str = app.path.to_string_lossy().to_string();
-
-                        div()
-                            .id(SharedString::from(format!("click-app-{ai}")))
-                            .on_click(cx.listener(move |this, _, window, cx| {
-                                this.selected_idx = item_idx;
-                                this.confirm_selection(window, cx);
-                            }))
-                            .child(
-                                PaletteItem::new(
-                                    SharedString::from(format!("app-{ai}")),
-                                    SharedString::from(app.name.clone()),
-                                    SharedString::from(path_str),
-                                    Some("app".to_string()),
-                                    false,
-                                )
-                                .category("Application")
-                                .action_label("Launch \u{21b5}")
-                                .selected(selected),
-                            )
-                    })
-                    .collect();
-
-                el.child(
-                    v_flex()
-                        .id("palette-results")
-                        .flex_1()
-                        .overflow_y_scroll()
-                        .track_scroll(&self.scroll_handle)
-                        .py_1()
-                        .children(file_results)
-                        .when(!app_rows.is_empty(), |el| {
-                            el.child(
-                                div()
-                                    .px_3()
-                                    .py_1()
-                                    .text_size(FONT_SIZE_CAPTION)
-                                    .text_color(muted)
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .child("Applications"),
-                            )
-                            .children(app_rows)
-                        }),
-                )
-            })
-            // Default sections when no query and in root mode
-            .when(!show_results, |el| {
-                let muted = cx.theme().muted_foreground;
-                let bookmark_count = self.bookmarks.len();
-
-                let bookmark_rows: Vec<_> = self
-                    .bookmarks
-                    .iter()
-                    .enumerate()
-                    .map(|(bi, path)| {
-                        let item_idx = bi;
-                        let selected = self.selected_idx == item_idx;
-                        let name = path
-                            .file_name()
-                            .map(|n| n.to_string_lossy().to_string())
-                            .unwrap_or_else(|| path.to_string_lossy().to_string());
-
-                        div()
-                            .id(SharedString::from(format!("click-bm-{bi}")))
-                            .on_click(cx.listener(move |this, _, window, cx| {
-                                this.selected_idx = item_idx;
-                                this.confirm_selection(window, cx);
-                            }))
-                            .child(
-                                PaletteItem::new(
-                                    SharedString::from(format!("bm-{bi}")),
-                                    SharedString::from(name),
-                                    SharedString::from(""),
-                                    None,
-                                    true,
-                                )
-                                .category("Bookmark")
-                                .action_label("Open \u{21b5}")
-                                .selected(selected),
-                            )
-                    })
-                    .collect();
-
-                let action_rows: Vec<_> = DEFAULT_ACTIONS
-                    .iter()
-                    .enumerate()
-                    .map(|(ai, action)| {
-                        let item_idx = bookmark_count + ai;
-                        let selected = self.selected_idx == item_idx;
-                        let is_type_search =
-                            action.path.starts_with("type://") || action.path == "apps://";
-                        let label = Self::action_label_for_action(action);
-
-                        h_flex()
-                            .id(SharedString::from(format!("action-{ai}")))
-                            .w_full()
-                            .px_3()
-                            .py_1p5()
-                            .gap_2p5()
-                            .items_center()
-                            .rounded(RADIUS)
-                            .cursor_pointer()
-                            .when(selected, |el| el.bg(crate::theme::surface_active(cx)))
-                            .on_click(cx.listener(move |this, _, window, cx| {
-                                this.selected_idx = item_idx;
-                                this.confirm_selection(window, cx);
-                            }))
-                            .child(
-                                Icon::new((action.icon)())
-                                    .with_size(ICON_XS)
-                                    .text_color(muted),
-                            )
-                            .child(div().flex_1().text_size(FONT_SIZE_BODY).child(action.name))
-                            // Right side
-                            .child(
-                                h_flex()
-                                    .flex_shrink_0()
-                                    .gap_2()
-                                    .items_center()
-                                    .child(
-                                        div()
-                                            .text_size(FONT_SIZE_CAPTION)
-                                            .text_color(muted)
-                                            .child(action.category),
-                                    )
-                                    .when_some(action.shortcut, |el, sc| {
-                                        el.child(
-                                            div()
-                                                .text_size(FONT_SIZE_CAPTION)
-                                                .text_color(muted)
-                                                .px_1p5()
-                                                .py_0p5()
-                                                .rounded(RADIUS)
-                                                .bg(cx.theme().muted)
-                                                .child(sc),
-                                        )
-                                    })
-                                    .when(selected, |el| {
-                                        el.child(
-                                            div()
-                                                .text_size(FONT_SIZE_CAPTION)
-                                                .text_color(muted)
-                                                .child(if is_type_search {
-                                                    "Search >"
-                                                } else {
-                                                    label
-                                                }),
-                                        )
-                                    }),
-                            )
-                    })
-                    .collect();
-
-                el.child(
-                    v_flex()
-                        .id("palette-defaults")
-                        .flex_1()
-                        .overflow_y_scroll()
-                        .track_scroll(&self.scroll_handle)
-                        .py_1()
-                        // Bookmarks
-                        .when(!bookmark_rows.is_empty(), |el| {
-                            el.child(
-                                div()
-                                    .px_3()
-                                    .py_1()
-                                    .text_size(FONT_SIZE_CAPTION)
-                                    .text_color(muted)
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .child("Bookmarks"),
-                            )
-                            .children(bookmark_rows)
-                        })
-                        // Actions
-                        .child(
-                            div()
-                                .px_3()
-                                .py_1()
-                                .text_size(FONT_SIZE_CAPTION)
-                                .text_color(muted)
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .child("Actions"),
-                        )
-                        .children(action_rows),
-                )
-            })
+    pub(super) fn section_header(title: &'static str, muted: Hsla) -> Div {
+        div()
+            .px_3()
+            .py_1()
+            .text_size(FONT_SIZE_CAPTION)
+            .text_color(muted)
+            .font_weight(FontWeight::SEMIBOLD)
+            .child(title)
     }
 }

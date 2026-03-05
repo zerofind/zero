@@ -155,7 +155,15 @@
           "punctuation": { "color": "#8c8c8c" },
           "boolean": { "color": "#fe704d" },
           "attribute": { "color": "#f3ae24" },
-          "constructor": { "color": "#f3ae24" }
+          "constructor": { "color": "#f3ae24" },
+          "title": { "color": "#ededed", "font_weight": 700 },
+          "emphasis": { "font_style": "italic" },
+          "emphasis.strong": { "font_weight": 700 },
+          "punctuation.special": { "color": "#525252" },
+          "punctuation.list_marker": { "color": "#525252" },
+          "text.literal": { "color": "#8c8c8c" },
+          "link_uri": { "color": "#525252" },
+          "link_text": { "color": "#4798ea" }
         }
       }
     },
@@ -312,7 +320,15 @@
           "punctuation": { "color": "#666666" },
           "boolean": { "color": "#e04520" },
           "attribute": { "color": "#cc8e0a" },
-          "constructor": { "color": "#cc8e0a" }
+          "constructor": { "color": "#cc8e0a" },
+          "title": { "color": "#191919", "font_weight": 700 },
+          "emphasis": { "font_style": "italic" },
+          "emphasis.strong": { "font_weight": 700 },
+          "punctuation.special": { "color": "#a3a3a3" },
+          "punctuation.list_marker": { "color": "#a3a3a3" },
+          "text.literal": { "color": "#666666" },
+          "link_uri": { "color": "#a3a3a3" },
+          "link_text": { "color": "#2070c8" }
         }
       }
     }

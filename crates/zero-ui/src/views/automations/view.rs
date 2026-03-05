@@ -139,6 +139,7 @@ impl AutomationsView {
     }
 
     fn open_new_modal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        tracing::debug!("automations: new");
         let modal = cx.new(|cx| AutomationModal::new(window, cx));
         let sub = cx.subscribe_in(&modal, window, Self::on_modal_event);
         self._subs.push(sub);
@@ -147,6 +148,7 @@ impl AutomationsView {
     }
 
     fn open_edit_modal(&mut self, idx: usize, window: &mut Window, cx: &mut Context<Self>) {
+        tracing::debug!(idx, "automations: edit");
         let Some(card) = self.automations.get(idx) else {
             return;
         };
@@ -168,6 +170,7 @@ impl AutomationsView {
     }
 
     fn delete_automation(&mut self, idx: usize, cx: &mut Context<Self>) {
+        tracing::debug!(idx, "automations: delete");
         let Some(card) = self.automations.get(idx) else {
             return;
         };

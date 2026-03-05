@@ -208,15 +208,17 @@ impl FileBrowserView {
                 if let Some(entry) = entries.get(*idx) {
                     let old_path = &entry.path;
                     let new_path = old_path.with_file_name(value);
-                    if new_path != *old_path
-                        && let Err(e) = std::fs::rename(old_path, &new_path)
-                    {
-                        tracing::error!(error = %e, "rename failed");
+                    if new_path != *old_path {
+                        tracing::debug!(from = %old_path.display(), to = %new_path.display(), "browser: rename");
+                        if let Err(e) = std::fs::rename(old_path, &new_path) {
+                            tracing::error!(error = %e, "rename failed");
+                        }
                     }
                 }
             }
             Some(InlineEdit::NewFolder) => {
                 let new_path = self.path.join(value);
+                tracing::debug!(path = %new_path.display(), "browser: create folder");
                 if let Err(e) = std::fs::create_dir(&new_path) {
                     tracing::error!(error = %e, "create folder failed");
                 }
@@ -369,7 +371,6 @@ impl Render for FileBrowserView {
                     .on_action(cx.listener(|this, _: &FindInBrowser, window, cx| {
                         this.toggle_search(window, cx);
                     }))
-                    .when(!self.loading, |el| el.child(self.render_summary_bar(cx)))
                     // Search bar
                     .when_some(self.render_search_bar(cx), |el, bar| el.child(bar))
                     // Inline edit bar (rename or new folder)
@@ -395,7 +396,9 @@ impl Render for FileBrowserView {
                                 .overflow_hidden()
                                 .child(Table::new(&self.table_state).bordered(false)),
                         )
-                    }),
+                    })
+                    // Status bar pinned to bottom
+                    .when(!self.loading, |el| el.child(self.render_summary_bar(cx))),
             )
             // Confirm dialog overlay
             .when_some(trash_dialog, |el, dialog| el.child(dialog))

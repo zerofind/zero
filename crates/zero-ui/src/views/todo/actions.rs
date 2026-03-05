@@ -10,6 +10,7 @@ use super::render::TodoView;
 impl TodoView {
     /// Open a specific .todo file and reload tasks.
     pub fn open_file(&mut self, path: std::path::PathBuf, cx: &mut Context<Self>) {
+        tracing::debug!(path = %path.display(), "todo: open file");
         match TodoManager::open_file(&path) {
             Ok(manager) => {
                 self.lists = manager.list_names();
@@ -47,6 +48,7 @@ impl TodoView {
     }
 
     pub(super) fn add_task(&mut self, text: &str, window: &mut Window, cx: &mut Context<Self>) {
+        tracing::debug!(text, "todo: add task");
         let text = text.trim();
         if text.is_empty() {
             return;
@@ -69,6 +71,7 @@ impl TodoView {
     }
 
     pub(super) fn delete_task(&mut self, task_id: u64, cx: &mut Context<Self>) {
+        tracing::debug!(task_id, "todo: delete task");
         let Some(manager) = &mut self.manager else {
             return;
         };
@@ -79,6 +82,7 @@ impl TodoView {
     }
 
     pub(super) fn toggle_task(&mut self, task_id: u64, cx: &mut Context<Self>) {
+        tracing::debug!(task_id, "todo: toggle task");
         let Some(manager) = &mut self.manager else {
             return;
         };
@@ -104,6 +108,7 @@ impl TodoView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        tracing::debug!(task_id, "todo: start editing");
         let Some(manager) = &self.manager else {
             return;
         };
@@ -119,6 +124,7 @@ impl TodoView {
     }
 
     pub(super) fn confirm_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        tracing::debug!("todo: confirm edit");
         let Some(task_id) = self.editing_task else {
             return;
         };
@@ -143,17 +149,20 @@ impl TodoView {
     }
 
     pub(super) fn cancel_edit(&mut self, cx: &mut Context<Self>) {
+        tracing::debug!("todo: cancel edit");
         self.editing_task = None;
         self.edit_input = None;
         cx.notify();
     }
 
     pub(super) fn set_current_list(&mut self, list: String, cx: &mut Context<Self>) {
+        tracing::debug!(list = %list, "todo: set list");
         self.current_list = list;
         cx.notify();
     }
 
     pub(super) fn toggle_show_completed(&mut self, cx: &mut Context<Self>) {
+        tracing::debug!("todo: toggle show completed");
         self.show_completed = !self.show_completed;
         cx.notify();
     }
@@ -239,6 +248,7 @@ impl TodoView {
     }
 
     pub(super) fn set_due(&mut self, task_id: u64, window: &mut Window, cx: &mut Context<Self>) {
+        tracing::debug!(task_id, "todo: set due");
         let Some(input) = &self.detail_due_input else {
             return;
         };
@@ -259,6 +269,7 @@ impl TodoView {
     }
 
     pub(super) fn clear_due(&mut self, task_id: u64, cx: &mut Context<Self>) {
+        tracing::debug!(task_id, "todo: clear due");
         let Some(manager) = &mut self.manager else {
             return;
         };
@@ -273,6 +284,7 @@ impl TodoView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        tracing::debug!(task_id, "todo: add tag");
         let Some(input) = &self.detail_tag_input else {
             return;
         };
@@ -297,6 +309,7 @@ impl TodoView {
     }
 
     pub(super) fn remove_tag(&mut self, task_id: u64, tag: &str, cx: &mut Context<Self>) {
+        tracing::debug!(task_id, tag, "todo: remove tag");
         let Some(manager) = &mut self.manager else {
             return;
         };
@@ -338,6 +351,7 @@ impl TodoView {
     }
 
     pub(super) fn move_to_list(&mut self, task_id: u64, list: &str, cx: &mut Context<Self>) {
+        tracing::debug!(task_id, list, "todo: move to list");
         let Some(manager) = &mut self.manager else {
             return;
         };
@@ -347,6 +361,7 @@ impl TodoView {
     }
 
     pub(super) fn move_task_up(&mut self, task_id: u64, cx: &mut Context<Self>) {
+        tracing::debug!(task_id, direction = "up", "todo: move task");
         let Some(manager) = &mut self.manager else {
             return;
         };
@@ -375,6 +390,7 @@ impl TodoView {
     }
 
     pub(super) fn move_task_down(&mut self, task_id: u64, cx: &mut Context<Self>) {
+        tracing::debug!(task_id, direction = "down", "todo: move task");
         let Some(manager) = &mut self.manager else {
             return;
         };

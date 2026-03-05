@@ -219,6 +219,7 @@ impl SecureEraseView {
     }
 
     pub(super) fn select_volume(&mut self, idx: usize, cx: &mut Context<Self>) {
+        tracing::debug!(idx, "erase: select volume");
         if let Some(vol) = self.volumes.get(idx).cloned() {
             // Check for resumable state for this volume
             self.resume_info = zero::cache::ControlDb::open()
@@ -246,6 +247,7 @@ impl SecureEraseView {
     }
 
     pub(super) fn request_confirm(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        tracing::debug!("erase: request confirm");
         let Some(vol) = &self.selected_volume else {
             return;
         };
@@ -263,15 +265,18 @@ impl SecureEraseView {
     }
 
     pub(super) fn cancel_confirm(&mut self, cx: &mut Context<Self>) {
+        tracing::debug!("erase: cancel confirm");
         self.phase = ErasePhase::Idle;
         cx.notify();
     }
 
     pub(super) fn start_erase(&mut self, cx: &mut Context<Self>) {
+        tracing::debug!("erase: start");
         self.start_erase_inner(None, cx);
     }
 
     pub(super) fn resume_erase(&mut self, cx: &mut Context<Self>) {
+        tracing::debug!("erase: resume");
         let resume_state = self.resume_info.as_ref().map(|r| r.state.clone());
         if resume_state.is_none() {
             return;
@@ -377,11 +382,13 @@ impl SecureEraseView {
     }
 
     pub(super) fn cancel_erase(&mut self, cx: &mut Context<Self>) {
+        tracing::debug!("erase: cancel");
         self.cancelled.store(true, Ordering::Relaxed);
         cx.notify();
     }
 
     pub(super) fn reset(&mut self, cx: &mut Context<Self>) {
+        tracing::debug!("erase: reset");
         self.phase = ErasePhase::Idle;
         self.selected_volume = None;
         self.resume_info = None;

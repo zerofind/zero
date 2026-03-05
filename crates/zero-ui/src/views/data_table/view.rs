@@ -47,6 +47,7 @@ impl DataTableView {
     }
 
     fn load_file(&mut self, path: PathBuf, cx: &mut Context<Self>) {
+        tracing::debug!(path = %path.display(), "data_table: load");
         self.loading = true;
         self.error = None;
         cx.notify();
@@ -107,7 +108,12 @@ impl DataTableView {
     }
 
     fn close(&mut self, cx: &mut Context<Self>) {
+        tracing::debug!("data_table: close");
         cx.emit(DataTableEvent::Close);
+    }
+
+    pub fn path(&self) -> &std::path::Path {
+        &self.path
     }
 
     pub fn file_name(&self) -> String {

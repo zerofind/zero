@@ -1,6 +1,7 @@
 mod actions;
 mod app;
 mod models;
+mod permissions;
 mod platform;
 mod services;
 mod session;
@@ -22,9 +23,8 @@ use app::ZeroApp;
 /// Launch the GPUI-based file manager window.
 pub fn launch() {
     // Set up tracing before gpui (which installs its own subscriber if none exists).
-    // Use try_init — the CLI may have already installed a subscriber.
-    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("zero_ui=info,warn"));
+    // Use try_init — when launched via `zero` CLI, its subscriber wins and this is a no-op.
+    let filter = zero::logging::env_filter("zero_ui=info,warn");
     let _ = tracing_subscriber::fmt()
         .with_env_filter(filter)
         .with_target(true)

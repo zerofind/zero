@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.4.9
+
+New:
+- navigation: view-aware nav stack replaces path-only history — back/forward works across all views (editor, data table, dedup, settings)
+- permissions: Full Disk Access onboarding gate defers all filesystem access until FDA is granted
+- command-palette: type-filtered search results forwarded to file browser with ShowTypeInBrowser event
+- command-palette: render logic extracted to render.rs, added Go Home action
+- data-table: CSV delimiter sniffing tests comma, semicolon, tab, and pipe against first 20 lines
+- theme: markdown syntax tokens (title, emphasis, links, list markers) across all 6 themes
+
+Fix:
+- services: yield between index chunks during loading so UI stays responsive
+- file-browser: summary bar pinned to bottom of content instead of above it
+- navigation: closing editor or data table navigates back instead of hardcoding FileBrowser
+
+Infra:
+- logging: env_filter helper with RUST_LOG > --verbose > warn priority chain
+- logging: tracing::debug calls across all views for action-level observability
+
 ## v0.4.8
 
 New:

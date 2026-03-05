@@ -250,7 +250,9 @@ impl AppSidebar {
             .gap(px(6.0))
             .px(PADDING_MD)
             .py(px(4.0))
+            .mb_2()
             .rounded(RADIUS_SM)
+            .bg(cx.theme().background)
             .hover(|s| s.bg(cx.theme().muted.opacity(0.5)))
             .on_click(cx.listener(|_, _, _, cx| {
                 cx.emit(SidebarEvent::OpenSearch);
@@ -263,7 +265,7 @@ impl AppSidebar {
             .child(
                 div()
                     .text_size(px(13.0))
-                    .font_weight(FontWeight::MEDIUM)
+                    .font_weight(FontWeight::BOLD)
                     .text_color(muted)
                     .text_ellipsis()
                     .whitespace_nowrap()

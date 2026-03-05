@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 
 use clap::{CommandFactory, Parser};
 use cli::Cli;
-use tracing_subscriber::{EnvFilter, FmtSubscriber};
+use tracing_subscriber::FmtSubscriber;
 
 use zero::output::{OutputMode, Outputter};
 
@@ -184,13 +184,14 @@ fn main() -> anyhow::Result<()> {
     };
     let out = Outputter::new(output_mode);
 
-    // Set up logging (only in human mode, and only if verbose)
+    // Set up logging (only in human mode).
+    // Priority: RUST_LOG env > --verbose flag > default (warn).
     if !cli.json {
-        let filter = if cli.verbose {
-            EnvFilter::new("zero=debug,info")
+        let filter = zero::logging::env_filter(if cli.verbose {
+            zero::logging::VERBOSE
         } else {
-            EnvFilter::new("warn")
-        };
+            "warn"
+        });
 
         FmtSubscriber::builder()
             .with_env_filter(filter)

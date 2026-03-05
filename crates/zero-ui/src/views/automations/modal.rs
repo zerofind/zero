@@ -86,10 +86,12 @@ impl AutomationModal {
     }
 
     pub(super) fn dismiss(&mut self, cx: &mut Context<Self>) {
+        tracing::debug!("automations: modal dismiss");
         cx.emit(ModalEvent::Dismissed);
     }
 
     pub(super) fn add_source(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        tracing::debug!("automations: add source");
         let val = self.source_input.read(cx).value().to_string();
         let val = val.trim().to_string();
         if val.is_empty() {
@@ -115,6 +117,7 @@ impl AutomationModal {
     }
 
     pub(super) fn remove_source(&mut self, idx: usize, cx: &mut Context<Self>) {
+        tracing::debug!(idx, "automations: remove source");
         if idx < self.sources.len() {
             self.sources.remove(idx);
             cx.notify();
@@ -122,6 +125,7 @@ impl AutomationModal {
     }
 
     pub(super) fn save(&mut self, cx: &mut Context<Self>) {
+        tracing::debug!("automations: modal save");
         let name = self
             .name_input
             .read(cx)

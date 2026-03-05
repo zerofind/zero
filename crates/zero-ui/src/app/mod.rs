@@ -21,22 +21,23 @@ use crate::actions::{
     ToggleSplitView, ToggleToolbar, ToggleViewMode,
 };
 use crate::models::{ActiveView, FileClipboard, PaneId, SplitPane, ViewMode};
+use crate::permissions;
 use crate::services::{SearchEvent, SearchService, ServiceHub};
 use crate::session::Settings;
 use crate::theme::{self, CONTENT_INSET, FONT_SIZE_BODY, FONT_SIZE_CAPTION, RADIUS_LG};
 use crate::ui::{Alert, AlertStack, BannerData, BannerKind, ProgressBanner};
 use crate::views::{
     AppSidebar, AutomationsView, CleanupView, DataTableView, DedupView, DrivesPopover, EditorView,
-    FileBrowserView, FileGridView, OnboardingEvent, OnboardingView, PaletteView, SecureEraseView,
-    SettingsView, TodoView,
+    FdaOnboardingEvent, FdaOnboardingView, FileBrowserView, FileGridView, OnboardingEvent,
+    OnboardingView, PaletteView, SecureEraseView, SettingsView, TodoView,
 };
 
 pub struct ZeroApp {
     // Navigation
     pub current_path: PathBuf,
-    pub history: Vec<PathBuf>,
-    pub history_idx: usize,
     pub active_view: ActiveView,
+    pub nav_stack: Vec<ActiveView>,
+    pub nav_idx: usize,
     pub view_mode: ViewMode,
     pub sidebar_open: bool,
     pub toolbar_visible: bool,
@@ -78,6 +79,7 @@ pub struct ZeroApp {
     pub alerts: Vec<Alert>,
 
     // Onboarding
+    pub fda_onboarding: Option<Entity<FdaOnboardingView>>,
     pub onboarding: Option<Entity<OnboardingView>>,
 
     // Sidebar
@@ -104,29 +106,36 @@ impl ZeroApp {
             ViewMode::List
         };
 
-        let services = ServiceHub::new(cx);
+        let has_fda = permissions::has_full_disk_access();
 
-        // Subscribe to search service events for progress banner
-        let search_sub = cx.subscribe(&services.search, Self::on_search_event);
-
-        // Show loading banner while index loads
-        let banner = Some(BannerData {
-            kind: BannerKind::Index,
-            message: "Loading search index...".to_string(),
-            bytes_done: 0,
-            bytes_total: 0,
-            files_done: 0,
-            files_total: 0,
-            phase: Some("This only takes a moment...".to_string()),
-            indeterminate: true,
-            on_cancel: None,
-        });
+        // Only initialize services if we have Full Disk Access — avoids triggering
+        // TCC permission prompts before the user has granted FDA.
+        let (services, banner, subs) = if has_fda {
+            let services = ServiceHub::new(cx);
+            let search_sub = cx.subscribe(&services.search, Self::on_search_event);
+            let banner = Some(BannerData {
+                kind: BannerKind::Index,
+                message: "Loading search index...".to_string(),
+                bytes_done: 0,
+                bytes_total: 0,
+                files_done: 0,
+                files_total: 0,
+                phase: Some("This only takes a moment...".to_string()),
+                indeterminate: true,
+                on_cancel: None,
+            });
+            (services, banner, vec![search_sub])
+        } else {
+            // Create services without triggering any file access
+            let services = ServiceHub::new_deferred(cx);
+            (services, None, Vec::new())
+        };
 
         let mut app = Self {
             current_path: start_path.clone(),
-            history: vec![start_path],
-            history_idx: 0,
-            active_view: ActiveView::FileBrowser,
+            active_view: ActiveView::FileBrowser(start_path.clone()),
+            nav_stack: vec![ActiveView::FileBrowser(start_path)],
+            nav_idx: 0,
             view_mode,
             sidebar_open: settings.sidebar_open,
             toolbar_visible: settings.toolbar_visible,
@@ -152,15 +161,22 @@ impl ZeroApp {
             banner,
             active_progress: None,
             alerts: Vec::new(),
+            fda_onboarding: None,
             onboarding: None,
             sidebar: None,
             focus_handle: cx.focus_handle(),
             focus_redirect_registered: false,
-            _subs: vec![search_sub],
+            _subs: subs,
         };
 
-        // Show onboarding on first launch
-        if !settings.onboarding_complete && settings.search_roots.is_empty() {
+        if !has_fda {
+            // Show FDA onboarding — blocks everything until permission is granted
+            let fda_view = cx.new(FdaOnboardingView::new);
+            let sub = cx.subscribe(&fda_view, Self::on_fda_onboarding_event);
+            app._subs.push(sub);
+            app.fda_onboarding = Some(fda_view);
+        } else if !settings.onboarding_complete && settings.search_roots.is_empty() {
+            // Show folder selection onboarding
             let onboarding = cx.new(OnboardingView::new);
             let sub = cx.subscribe(&onboarding, Self::on_onboarding_event);
             app._subs.push(sub);
@@ -168,6 +184,48 @@ impl ZeroApp {
         }
 
         app
+    }
+
+    fn on_fda_onboarding_event(
+        &mut self,
+        _: Entity<FdaOnboardingView>,
+        event: &FdaOnboardingEvent,
+        cx: &mut Context<Self>,
+    ) {
+        match event {
+            FdaOnboardingEvent::Granted => {
+                tracing::info!("Full Disk Access granted — initializing services");
+                self.fda_onboarding = None;
+
+                // Now safe to initialize services and start indexing
+                self.services.init(cx);
+                let search_sub = cx.subscribe(&self.services.search, Self::on_search_event);
+                self._subs.push(search_sub);
+
+                self.banner = Some(BannerData {
+                    kind: BannerKind::Index,
+                    message: "Loading search index...".to_string(),
+                    bytes_done: 0,
+                    bytes_total: 0,
+                    files_done: 0,
+                    files_total: 0,
+                    phase: Some("This only takes a moment...".to_string()),
+                    indeterminate: true,
+                    on_cancel: None,
+                });
+
+                // Show folder onboarding if first launch
+                let settings = Settings::load();
+                if !settings.onboarding_complete && settings.search_roots.is_empty() {
+                    let onboarding = cx.new(OnboardingView::new);
+                    let sub = cx.subscribe(&onboarding, Self::on_onboarding_event);
+                    self._subs.push(sub);
+                    self.onboarding = Some(onboarding);
+                }
+
+                cx.notify();
+            }
+        }
     }
 
     fn on_onboarding_event(
@@ -286,6 +344,7 @@ impl ZeroApp {
     }
 
     pub fn open_command_palette(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        tracing::debug!("action: open command palette");
         self.command_palette_open = true;
         let palette = self.ensure_command_palette(window, cx);
         palette.update(cx, |view, cx| view.reset(window, cx));
@@ -313,7 +372,7 @@ impl ZeroApp {
 
     fn render_content(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         match &self.active_view {
-            ActiveView::FileBrowser => match self.view_mode {
+            ActiveView::FileBrowser(_) => match self.view_mode {
                 ViewMode::List => {
                     let view = self.ensure_file_browser(window, cx);
                     view.into_any_element()
@@ -363,6 +422,11 @@ impl ZeroApp {
 
 impl Render for ZeroApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // FDA onboarding takes priority over everything
+        if let Some(fda) = &self.fda_onboarding {
+            return fda.clone().into_any_element();
+        }
+
         let sidebar_open = self.sidebar_open;
         let toolbar_visible = self.toolbar_visible;
         let palette_open = self.command_palette_open;
@@ -526,6 +590,7 @@ impl Render for ZeroApp {
             .text_size(FONT_SIZE_BODY)
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(|this, _: &ToggleToolbar, _, cx| {
+                tracing::debug!(visible = !this.toolbar_visible, "action: toggle toolbar");
                 this.toolbar_visible = !this.toolbar_visible;
                 let mut settings = Settings::load();
                 settings.toolbar_visible = this.toolbar_visible;
@@ -533,6 +598,7 @@ impl Render for ZeroApp {
                 cx.notify();
             }))
             .on_action(cx.listener(|this, _: &ToggleSidebar, _, cx| {
+                tracing::debug!(open = !this.sidebar_open, "action: toggle sidebar");
                 this.sidebar_open = !this.sidebar_open;
                 cx.notify();
             }))
@@ -540,9 +606,8 @@ impl Render for ZeroApp {
                 this.open_command_palette(window, cx);
             }))
             .on_action(cx.listener(|this, _: &OpenSettings, window, cx| {
-                this.active_view = ActiveView::Settings;
-                this.focus_content(window, cx);
-                cx.notify();
+                tracing::debug!("action: open settings");
+                this.push_view(ActiveView::Settings, window, cx);
             }))
             .on_action(cx.listener(|this, _: &GoBack, window, cx| {
                 this.go_back(window, cx);
@@ -556,12 +621,19 @@ impl Render for ZeroApp {
                 }
             }))
             .on_action(cx.listener(|this, _: &PasteFiles, _, cx| {
+                tracing::debug!("action: paste files");
                 this.paste_files(cx);
             }))
             .on_action(cx.listener(|this, _: &ToggleSplitView, window, cx| {
+                tracing::debug!("action: toggle split view");
                 this.toggle_split_view(window, cx);
             }))
             .on_action(cx.listener(|this, _: &ToggleViewMode, _, cx| {
+                let new_mode = match this.view_mode {
+                    ViewMode::List => "grid",
+                    ViewMode::Grid => "list",
+                };
+                tracing::debug!(mode = new_mode, "action: toggle view mode");
                 this.view_mode = match this.view_mode {
                     ViewMode::List => ViewMode::Grid,
                     ViewMode::Grid => ViewMode::List,
@@ -670,5 +742,6 @@ impl Render for ZeroApp {
             .when(has_alerts, |el| {
                 el.child(AlertStack::render(&self.alerts, cx))
             })
+            .into_any_element()
     }
 }

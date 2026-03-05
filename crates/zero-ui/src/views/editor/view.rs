@@ -58,11 +58,18 @@ impl EditorView {
             .unwrap_or("")
             .to_string();
 
+        // Markdown files use plain text mode to avoid noisy code-style coloring.
+        // The "text" language has no highlight queries, giving clean uniform text.
+        let lang = match ext.as_str() {
+            "md" | "markdown" | "mdx" => "text".to_string(),
+            _ => ext,
+        };
+
         let original_content = content.clone();
 
         let input = cx.new(|cx| {
             InputState::new(window, cx)
-                .code_editor(SharedString::from(ext))
+                .code_editor(SharedString::from(lang))
                 .default_value(&content)
         });
 
@@ -148,6 +155,7 @@ impl EditorView {
     }
 
     pub fn save(&mut self, cx: &mut Context<Self>) {
+        tracing::debug!(path = %self.path.display(), "editor: save");
         if self.saving {
             return;
         }
@@ -181,6 +189,10 @@ impl EditorView {
             .ok();
         })
         .detach();
+    }
+
+    pub fn path(&self) -> &std::path::Path {
+        &self.path
     }
 
     pub fn file_name(&self) -> String {

@@ -34,6 +34,7 @@ impl FileBrowserView {
         let Some(entry) = self.selected_entry(cx) else {
             return;
         };
+        tracing::debug!(path = %entry.path.display(), is_dir = entry.is_dir, "browser: open selected");
         if entry.is_dir {
             cx.emit(FileBrowserEvent::NavigateToDir(entry.path.clone()));
         } else if crate::views::data_table::is_data_table(&entry.path)
@@ -51,6 +52,7 @@ impl FileBrowserView {
         let Some(_entry) = self.selected_entry(cx) else {
             return;
         };
+        tracing::debug!(path = %_entry.path.display(), "browser: reveal in finder");
         #[cfg(target_os = "macos")]
         crate::platform::open::reveal_in_finder(&_entry.path);
     }
@@ -60,6 +62,7 @@ impl FileBrowserView {
         let Some(entry) = self.selected_entry(cx) else {
             return;
         };
+        tracing::debug!(path = %entry.path.display(), "browser: quick look");
         if !entry.is_dir {
             #[cfg(target_os = "macos")]
             crate::platform::quicklook::preview_file(&entry.path);
@@ -71,6 +74,7 @@ impl FileBrowserView {
         let Some(entry) = self.selected_entry(cx) else {
             return;
         };
+        tracing::debug!(path = %entry.path.display(), "browser: copy path");
         let text = entry.path.to_string_lossy().to_string();
         cx.write_to_clipboard(ClipboardItem::new_string(text));
     }
@@ -80,6 +84,7 @@ impl FileBrowserView {
         let Some(entry) = self.selected_entry(cx) else {
             return;
         };
+        tracing::debug!(path = %entry.path.display(), "browser: trash selected (confirm)");
         self.pending_trash = Some(entry.path.clone());
         cx.notify();
     }
@@ -89,6 +94,7 @@ impl FileBrowserView {
         if let Some(path) = self.pending_trash.take()
             && trash::delete(&path).is_ok()
         {
+            tracing::debug!(path = %path.display(), "browser: trash confirmed");
             self.reload(cx);
         }
         cx.notify();
@@ -102,6 +108,7 @@ impl FileBrowserView {
 
     /// Navigate to a new directory in-place — no entity teardown.
     pub fn navigate(&mut self, path: PathBuf, cx: &mut Context<Self>) {
+        tracing::debug!(path = %path.display(), "browser: navigate");
         self.path = path.clone();
 
         // Clear modal/search state (meaningless in new folder)
@@ -203,6 +210,7 @@ impl FileBrowserView {
         if entries.is_empty() {
             return;
         }
+        tracing::debug!(count = entries.len(), "browser: copy files");
         let paths: Vec<PathBuf> = entries.into_iter().map(|e| e.path).collect();
         cx.emit(FileBrowserEvent::SetClipboard(FileClipboard::new(
             paths,
@@ -216,6 +224,7 @@ impl FileBrowserView {
         if entries.is_empty() {
             return;
         }
+        tracing::debug!(count = entries.len(), "browser: cut files");
         let paths: Vec<PathBuf> = entries.into_iter().map(|e| e.path).collect();
         cx.emit(FileBrowserEvent::SetClipboard(FileClipboard::new(
             paths,
@@ -225,6 +234,7 @@ impl FileBrowserView {
 
     /// Paste files from the clipboard into the current directory (async).
     pub fn paste_files(&mut self, clipboard: &FileClipboard, cx: &mut Context<Self>) {
+        tracing::debug!(dest = %self.path.display(), op = ?clipboard.operation, count = clipboard.paths.len(), "browser: paste files");
         let dest = self.path.clone();
         let sources = clipboard.paths.clone();
         let operation = clipboard.operation;
@@ -291,6 +301,7 @@ impl FileBrowserView {
             return;
         };
         if entry.is_dir {
+            tracing::debug!(path = %entry.path.display(), "browser: add to bookmarks");
             cx.emit(FileBrowserEvent::AddBookmark(entry.path.clone()));
         }
     }
@@ -350,6 +361,7 @@ impl FileBrowserView {
         if entries.is_empty() {
             return;
         }
+        tracing::debug!(count = entries.len(), "browser: duplicate files");
         for entry in &entries {
             let file_name = match entry.path.file_name() {
                 Some(n) => n,

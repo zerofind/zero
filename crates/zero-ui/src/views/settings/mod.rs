@@ -173,16 +173,19 @@ impl SettingsView {
     // -- Actions -------------------------------------------------------------
 
     pub(super) fn set_mode(&mut self, mode: &str, cx: &mut Context<Self>) {
+        tracing::debug!(mode, "settings: set mode");
         self.settings.theme_mode = mode.to_string();
         self.apply_and_save(cx);
     }
 
     pub(super) fn set_light_theme(&mut self, name: &str, cx: &mut Context<Self>) {
+        tracing::debug!(name, "settings: set light theme");
         self.settings.light_theme = name.to_string();
         self.apply_and_save(cx);
     }
 
     pub(super) fn set_dark_theme(&mut self, name: &str, cx: &mut Context<Self>) {
+        tracing::debug!(name, "settings: set dark theme");
         self.settings.dark_theme = name.to_string();
         self.apply_and_save(cx);
     }
@@ -199,6 +202,7 @@ impl SettingsView {
     }
 
     pub(super) fn rebuild_index(&mut self, cx: &mut Context<Self>) {
+        tracing::debug!("settings: rebuild index");
         if self.rebuilding {
             return;
         }
@@ -248,6 +252,7 @@ impl SettingsView {
     }
 
     pub(super) fn reindex_root(&mut self, idx: usize, cx: &mut Context<Self>) {
+        tracing::debug!(idx, "settings: reindex root");
         if self.reindexing_root.is_some()
             || self.reindexing_all
             || idx >= self.settings.search_roots.len()
@@ -270,6 +275,7 @@ impl SettingsView {
     }
 
     pub(super) fn reindex_all(&mut self, cx: &mut Context<Self>) {
+        tracing::debug!("settings: reindex all");
         if self.reindexing_all || self.settings.search_roots.is_empty() {
             return;
         }
@@ -289,22 +295,26 @@ impl SettingsView {
     }
 
     pub(super) fn request_clear_index(&mut self, cx: &mut Context<Self>) {
+        tracing::debug!("settings: request clear index");
         self.confirm_clear_index = true;
         cx.notify();
     }
 
     pub(super) fn confirm_clear_index(&mut self, cx: &mut Context<Self>) {
+        tracing::debug!("settings: confirm clear index");
         self.confirm_clear_index = false;
         self.search.update(cx, |svc, cx| svc.clear(cx));
         cx.notify();
     }
 
     pub(super) fn request_reset_settings(&mut self, cx: &mut Context<Self>) {
+        tracing::debug!("settings: request reset");
         self.confirm_reset = true;
         cx.notify();
     }
 
     pub(super) fn confirm_reset_settings(&mut self, cx: &mut Context<Self>) {
+        tracing::debug!("settings: confirm reset");
         self.confirm_reset = false;
         self.settings = Settings::default();
         self.settings.save();

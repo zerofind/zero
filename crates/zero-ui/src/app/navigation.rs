@@ -14,13 +14,70 @@ use crate::views::{
 use super::ZeroApp;
 
 impl ZeroApp {
+    // -- Navigation core -------------------------------------------------
+
+    /// Push a new view onto the navigation stack. All navigation flows through here.
+    pub fn push_view(&mut self, view: ActiveView, window: &mut Window, cx: &mut Context<Self>) {
+        // Don't push duplicate consecutive entries
+        if self.nav_stack[self.nav_idx] == view {
+            return;
+        }
+        // Trim forward history
+        if self.nav_idx + 1 < self.nav_stack.len() {
+            self.nav_stack.truncate(self.nav_idx + 1);
+        }
+        self.nav_stack.push(view);
+        self.nav_idx = self.nav_stack.len() - 1;
+        self.apply_current_view(window, cx);
+    }
+
+    /// Sync UI state from the current stack entry.
+    fn apply_current_view(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let view = self.nav_stack[self.nav_idx].clone();
+        self.active_view = view.clone();
+
+        match &view {
+            ActiveView::FileBrowser(path) => {
+                self.current_path = path.clone();
+                if let Some(browser) = &self.file_browser {
+                    let p = path.clone();
+                    browser.update(cx, |v, cx| v.navigate(p, cx));
+                }
+                if let Some(grid) = &self.file_grid {
+                    let p = path.clone();
+                    grid.update(cx, |v, cx| v.navigate(&p, cx));
+                }
+            }
+            ActiveView::Editor(path) => {
+                if self
+                    .editor
+                    .as_ref()
+                    .is_some_and(|e| e.read(cx).path() != path)
+                {
+                    self.editor = None;
+                }
+            }
+            ActiveView::DataTable(path) => {
+                if self
+                    .data_table
+                    .as_ref()
+                    .is_some_and(|dt| dt.read(cx).path() != path)
+                {
+                    self.data_table = None;
+                }
+            }
+            _ => {}
+        }
+
+        self.focus_content(window, cx);
+        cx.notify();
+    }
+
     pub fn focus_content(&self, window: &mut Window, cx: &App) {
-        if self.active_view == ActiveView::FileBrowser {
-            match self.view_mode {
+        match &self.active_view {
+            ActiveView::FileBrowser(_) => match self.view_mode {
                 crate::models::ViewMode::List => {
                     if let Some(view) = &self.file_browser {
-                        // Focus the Table's own handle so arrow-key navigation works.
-                        // Actions on the parent v_flex still fire via bubbling.
                         let table_handle = view.read(cx).table_state.focus_handle(cx);
                         table_handle.focus(window);
                         return;
@@ -32,72 +89,62 @@ impl ZeroApp {
                         return;
                     }
                 }
+            },
+            ActiveView::Editor(_) => {
+                if let Some(view) = &self.editor {
+                    view.read(cx).focus_handle.focus(window);
+                    return;
+                }
             }
+            ActiveView::DataTable(_) => {
+                if let Some(view) = &self.data_table {
+                    view.read(cx).focus_handle.focus(window);
+                    return;
+                }
+            }
+            _ => {}
         }
         self.focus_handle.focus(window);
     }
 
     pub fn navigate_to(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
-        if self.history_idx + 1 < self.history.len() {
-            self.history.truncate(self.history_idx + 1);
-        }
-        self.history.push(path.clone());
-        self.history_idx = self.history.len() - 1;
+        tracing::debug!(path = %path.display(), "navigate_to");
         self.current_path = path.clone();
-
         if let Some(browser) = &self.file_browser {
             browser.update(cx, |v, cx| v.navigate(path.clone(), cx));
         }
         if let Some(grid) = &self.file_grid {
             grid.update(cx, |v, cx| v.navigate(&path, cx));
         }
-        self.active_view = ActiveView::FileBrowser;
-        self.focus_content(window, cx);
-        cx.notify();
+        self.push_view(ActiveView::FileBrowser(path), window, cx);
     }
 
     pub fn go_back(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.history_idx == 0 {
+        if self.nav_idx == 0 {
             return;
         }
-        self.history_idx -= 1;
-        self.current_path = self.history[self.history_idx].clone();
-
-        let path = self.current_path.clone();
-        if let Some(browser) = &self.file_browser {
-            browser.update(cx, |v, cx| v.navigate(path.clone(), cx));
-        }
-        if let Some(grid) = &self.file_grid {
-            grid.update(cx, |v, cx| v.navigate(&path, cx));
-        }
-        self.focus_content(window, cx);
-        cx.notify();
+        self.nav_idx -= 1;
+        tracing::debug!(idx = self.nav_idx, "go_back");
+        self.apply_current_view(window, cx);
     }
 
     pub fn go_forward(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.history_idx + 1 >= self.history.len() {
+        if self.nav_idx + 1 >= self.nav_stack.len() {
             return;
         }
-        self.history_idx += 1;
-        self.current_path = self.history[self.history_idx].clone();
-
-        let path = self.current_path.clone();
-        if let Some(browser) = &self.file_browser {
-            browser.update(cx, |v, cx| v.navigate(path.clone(), cx));
-        }
-        if let Some(grid) = &self.file_grid {
-            grid.update(cx, |v, cx| v.navigate(&path, cx));
-        }
-        self.focus_content(window, cx);
-        cx.notify();
+        self.nav_idx += 1;
+        tracing::debug!(idx = self.nav_idx, "go_forward");
+        self.apply_current_view(window, cx);
     }
 
     pub fn can_go_back(&self) -> bool {
-        self.history_idx > 0
+        self.nav_idx > 0
     }
     pub fn can_go_forward(&self) -> bool {
-        self.history_idx + 1 < self.history.len()
+        self.nav_idx + 1 < self.nav_stack.len()
     }
+
+    // -- Lazy view creation + event handlers -----------------------------
 
     pub fn ensure_sidebar(
         &mut self,
@@ -148,12 +195,15 @@ impl ZeroApp {
     ) {
         match event {
             SidebarEvent::Navigate(view) => {
-                self.active_view = view.clone();
-                self.focus_content(window, cx);
-                cx.notify();
+                tracing::debug!(?view, "sidebar: navigate view");
+                self.push_view(view.clone(), window, cx);
             }
-            SidebarEvent::OpenPath(path) => self.navigate_to(path.clone(), window, cx),
+            SidebarEvent::OpenPath(path) => {
+                tracing::debug!(path = %path.display(), "sidebar: open path");
+                self.navigate_to(path.clone(), window, cx);
+            }
             SidebarEvent::RemoveBookmark(path) => {
+                tracing::debug!(path = %path.display(), "sidebar: remove bookmark");
                 if let Some(sidebar) = &self.sidebar {
                     sidebar.update(cx, |s, cx| s.remove_bookmark(path, cx));
                 }
@@ -163,6 +213,7 @@ impl ZeroApp {
                 settings.save();
             }
             SidebarEvent::UnpinBookmark(path) => {
+                tracing::debug!(path = %path.display(), "sidebar: unpin bookmark");
                 if let Some(sidebar) = &self.sidebar {
                     sidebar.update(cx, |s, cx| s.unpin_bookmark(path, cx));
                 }
@@ -176,6 +227,7 @@ impl ZeroApp {
                 settings.save();
             }
             SidebarEvent::PinBookmark(path) => {
+                tracing::debug!(path = %path.display(), "sidebar: pin bookmark");
                 if let Some(sidebar) = &self.sidebar {
                     sidebar.update(cx, |s, cx| s.pin_bookmark(path, cx));
                 }
@@ -193,20 +245,20 @@ impl ZeroApp {
                 settings.save();
             }
             SidebarEvent::FindDuplicates(path) => {
+                tracing::debug!(path = %path.display(), "sidebar: find duplicates");
                 self.dedup = None;
                 let dedup = self.ensure_dedup(window, cx);
                 dedup.update(cx, |view, cx| {
                     view.set_scan_path(path.clone(), cx);
                 });
-                self.active_view = ActiveView::Dedup;
-                cx.notify();
+                self.push_view(ActiveView::Dedup, window, cx);
             }
             SidebarEvent::IndexLocation(path) => {
+                tracing::debug!(path = %path.display(), "sidebar: index location");
                 let path_str = path.to_string_lossy().to_string();
                 self.services.search.update(cx, |svc, cx| {
                     svc.add_root(&path_str, cx);
                 });
-                // Persist the search root
                 let mut settings = crate::session::Settings::load();
                 if !settings.search_roots.contains(path) {
                     settings.search_roots.push(path.clone());
@@ -214,16 +266,20 @@ impl ZeroApp {
                 }
             }
             SidebarEvent::GoBack => {
+                tracing::debug!("sidebar: go back");
                 self.go_back(window, cx);
             }
             SidebarEvent::GoForward => {
+                tracing::debug!("sidebar: go forward");
                 self.go_forward(window, cx);
             }
             SidebarEvent::ToggleSidebar => {
+                tracing::debug!("sidebar: toggle");
                 self.sidebar_open = !self.sidebar_open;
                 cx.notify();
             }
             SidebarEvent::OpenSearch => {
+                tracing::debug!("sidebar: open search");
                 self.open_command_palette(window, cx);
             }
             SidebarEvent::EjectDrive(path) => {
@@ -243,7 +299,6 @@ impl ZeroApp {
                         if let Err(e) = result {
                             tracing::error!(error = %e, "eject failed");
                         }
-                        // Refresh drives list
                         if let Some(sidebar) = sidebar {
                             _this
                                 .update(cx, |_app, cx| {
@@ -293,21 +348,26 @@ impl ZeroApp {
         cx: &mut Context<Self>,
     ) {
         match event {
-            FileBrowserEvent::NavigateToDir(path) => self.navigate_to(path.clone(), window, cx),
+            FileBrowserEvent::NavigateToDir(path) => {
+                tracing::debug!(path = %path.display(), "browser: navigate to dir");
+                self.navigate_to(path.clone(), window, cx);
+            }
             FileBrowserEvent::OpenFile(path) => {
+                tracing::debug!(path = %path.display(), "browser: open file");
                 if crate::views::data_table::is_data_table(path) {
                     self.data_table = None;
-                    self.active_view = ActiveView::DataTable(path.clone());
+                    self.push_view(ActiveView::DataTable(path.clone()), window, cx);
                 } else {
                     self.editor = None;
-                    self.active_view = ActiveView::Editor(path.clone());
+                    self.push_view(ActiveView::Editor(path.clone()), window, cx);
                 }
-                cx.notify();
             }
             FileBrowserEvent::SetClipboard(clipboard) => {
+                tracing::debug!(op = ?clipboard.operation, count = clipboard.paths.len(), "browser: set clipboard");
                 self.file_clipboard = Some(clipboard.clone());
             }
             FileBrowserEvent::AddBookmark(path) => {
+                tracing::debug!(path = %path.display(), "browser: add bookmark");
                 if let Some(sidebar) = &self.sidebar {
                     sidebar.update(cx, |s, cx| s.add_bookmark(path.clone(), cx));
                 }
@@ -320,6 +380,7 @@ impl ZeroApp {
                 }
             }
             FileBrowserEvent::PasteStarted(progress) => {
+                tracing::debug!("browser: paste started");
                 self.start_progress_polling(
                     BannerKind::Copy,
                     "Copying files...".to_string(),
@@ -328,29 +389,29 @@ impl ZeroApp {
                 );
             }
             FileBrowserEvent::PasteFinished => {
+                tracing::debug!("browser: paste finished");
                 self.clear_banner(cx);
             }
             FileBrowserEvent::NewTodoFile(path) => {
-                // Open the new .todo file in the Todo view
-                self.todo = None; // Reset so it recreates fresh
+                tracing::debug!(path = %path.display(), "browser: new todo file");
+                self.todo = None;
                 let todo = self.ensure_todo(window, cx);
                 todo.update(cx, |view, cx| {
                     view.open_file(path.clone(), cx);
                 });
-                self.active_view = ActiveView::Todo;
-                cx.notify();
+                self.push_view(ActiveView::Todo, window, cx);
             }
             FileBrowserEvent::FindDuplicatesHere(path) => {
-                // Reset dedup view so it recreates with the new path
+                tracing::debug!(path = %path.display(), "browser: find duplicates here");
                 self.dedup = None;
                 let dedup = self.ensure_dedup(window, cx);
                 dedup.update(cx, |view, cx| {
                     view.set_scan_path(path.clone(), cx);
                 });
-                self.active_view = ActiveView::Dedup;
-                cx.notify();
+                self.push_view(ActiveView::Dedup, window, cx);
             }
             FileBrowserEvent::MoveToOtherPane(paths) => {
+                tracing::debug!(count = paths.len(), "browser: move to other pane");
                 if let Some(ref pane) = self.split_pane {
                     let dest = pane.current_path.clone();
                     for src in paths {
@@ -359,7 +420,6 @@ impl ZeroApp {
                             let _ = std::fs::rename(src, &target);
                         }
                     }
-                    // Refresh both panes
                     self.split_browser = None;
                     if let Some(browser) = &self.file_browser {
                         browser.update(cx, |view, cx| view.reload(cx));
@@ -368,6 +428,7 @@ impl ZeroApp {
                 }
             }
             FileBrowserEvent::CopyToOtherPane(paths) => {
+                tracing::debug!(count = paths.len(), "browser: copy to other pane");
                 if let Some(ref pane) = self.split_pane {
                     let dest = pane.current_path.clone();
                     for src in paths {
@@ -435,6 +496,7 @@ impl ZeroApp {
     ) {
         match event {
             DedupEvent::ScanStarted(progress) => {
+                tracing::debug!("dedup: scan started");
                 self.start_dedup_progress_polling(
                     BannerKind::Dedup,
                     "Finding duplicate files...".to_string(),
@@ -443,6 +505,7 @@ impl ZeroApp {
                 );
             }
             DedupEvent::ScanFinished => {
+                tracing::debug!("dedup: scan finished");
                 self.clear_banner(cx);
             }
         }
@@ -484,6 +547,7 @@ impl ZeroApp {
     ) {
         match event {
             SettingsEvent::IndexRebuildStarted(progress) => {
+                tracing::debug!("settings: index rebuild started");
                 let cancel_progress = progress.clone();
                 let on_cancel: std::sync::Arc<dyn Fn() + Send + Sync> =
                     std::sync::Arc::new(move || cancel_progress.cancel());
@@ -496,6 +560,7 @@ impl ZeroApp {
                 );
             }
             SettingsEvent::IndexRebuildFinished => {
+                tracing::debug!("settings: index rebuild finished");
                 self.clear_banner(cx);
             }
         }
@@ -557,10 +622,9 @@ impl ZeroApp {
     ) {
         match event {
             EditorEvent::Close => {
+                tracing::debug!("editor: close");
                 self.editor = None;
-                self.active_view = ActiveView::FileBrowser;
-                self.focus_content(window, cx);
-                cx.notify();
+                self.go_back(window, cx);
             }
         }
     }
@@ -595,10 +659,9 @@ impl ZeroApp {
     ) {
         match event {
             DataTableEvent::Close => {
+                tracing::debug!("data_table: close");
                 self.data_table = None;
-                self.active_view = ActiveView::FileBrowser;
-                self.focus_content(window, cx);
-                cx.notify();
+                self.go_back(window, cx);
             }
         }
     }
@@ -643,11 +706,13 @@ impl ZeroApp {
     ) {
         match event {
             PaletteEvent::Dismiss => {
+                tracing::debug!("palette: dismiss");
                 self.command_palette_open = false;
                 self.focus_content(window, cx);
                 cx.notify();
             }
             PaletteEvent::OpenResult(path) => {
+                tracing::debug!(path = %path.display(), "palette: open result");
                 self.command_palette_open = false;
 
                 if let Some(path_str) = path.to_str() {
@@ -683,6 +748,14 @@ impl ZeroApp {
                             cx.notify();
                             return;
                         }
+                        "action://go_home" => {
+                            if let Some(home) = dirs::home_dir() {
+                                self.navigate_to(home, window, cx);
+                            }
+                            self.focus_content(window, cx);
+                            cx.notify();
+                            return;
+                        }
                         "action://new_folder" => {
                             if let Some(browser) = &self.file_browser {
                                 browser.update(cx, |view, cx| {
@@ -698,9 +771,7 @@ impl ZeroApp {
 
                     // View-switching actions
                     if let Some(view) = Self::action_view(path_str) {
-                        self.active_view = view;
-                        self.focus_content(window, cx);
-                        cx.notify();
+                        self.push_view(view, window, cx);
                         return;
                     }
                     if let Some(app_path) = path_str.strip_prefix("app://") {
@@ -710,7 +781,6 @@ impl ZeroApp {
                         return;
                     }
                     if path_str.starts_with("type://") {
-                        // type:// paths are now handled internally by PaletteView::drill_into()
                         tracing::warn!(path = %path_str, "unexpected type:// path reached navigation");
                         return;
                     }
@@ -720,14 +790,10 @@ impl ZeroApp {
                     self.navigate_to(path.clone(), window, cx);
                 } else if crate::views::data_table::is_data_table(path) {
                     self.data_table = None;
-                    self.active_view = ActiveView::DataTable(path.clone());
-                    cx.notify();
-                    return;
+                    self.push_view(ActiveView::DataTable(path.clone()), window, cx);
                 } else if crate::views::editor::is_editable(path) {
                     self.editor = None;
-                    self.active_view = ActiveView::Editor(path.clone());
-                    cx.notify();
-                    return;
+                    self.push_view(ActiveView::Editor(path.clone()), window, cx);
                 } else {
                     #[cfg(target_os = "macos")]
                     crate::platform::open::open_path(path);
@@ -736,6 +802,7 @@ impl ZeroApp {
                 cx.notify();
             }
             PaletteEvent::ShowInBrowser(query) => {
+                tracing::debug!(query = %query, "palette: show in browser");
                 self.command_palette_open = false;
 
                 let results = self.services.search.read(cx).search(query, 500);
@@ -747,7 +814,8 @@ impl ZeroApp {
                     })
                     .collect();
 
-                self.active_view = ActiveView::FileBrowser;
+                let current = self.current_path.clone();
+                self.active_view = ActiveView::FileBrowser(current.clone());
                 self.file_browser = None;
                 self.file_grid = None;
                 cx.notify();
@@ -755,6 +823,52 @@ impl ZeroApp {
                 let browser = self.ensure_file_browser(window, cx);
                 browser.update(cx, |view, cx| {
                     view.show_search_results(query.clone(), entries, cx);
+                });
+
+                self.focus_content(window, cx);
+                cx.notify();
+            }
+            PaletteEvent::ShowTypeInBrowser {
+                type_filter,
+                query,
+                label,
+            } => {
+                tracing::debug!(
+                    type_filter = %type_filter,
+                    query = %query,
+                    "palette: show type in browser"
+                );
+                self.command_palette_open = false;
+
+                let search = self.services.search.read(cx);
+                let results = if query.is_empty() {
+                    search.search_by_type(type_filter, 500)
+                } else {
+                    search.search_with_type(query, type_filter, 500)
+                };
+                let entries: Vec<crate::views::file_browser::state::BrowserEntry> = results
+                    .iter()
+                    .filter_map(|r| {
+                        let path = std::path::Path::new(&r.node.path);
+                        crate::views::file_browser::state::BrowserEntry::from_fs(path, 0)
+                    })
+                    .collect();
+
+                let display_query = if query.is_empty() {
+                    label.clone()
+                } else {
+                    format!("{label}: {query}")
+                };
+
+                let current = self.current_path.clone();
+                self.active_view = ActiveView::FileBrowser(current.clone());
+                self.file_browser = None;
+                self.file_grid = None;
+                cx.notify();
+
+                let browser = self.ensure_file_browser(window, cx);
+                browser.update(cx, |view, cx| {
+                    view.show_search_results(display_query, entries, cx);
                 });
 
                 self.focus_content(window, cx);
@@ -789,7 +903,10 @@ impl ZeroApp {
         cx: &mut Context<Self>,
     ) {
         match event {
-            FileGridEvent::NavigateToDir(path) => self.navigate_to(path.clone(), window, cx),
+            FileGridEvent::NavigateToDir(path) => {
+                tracing::debug!(path = %path.display(), "grid: navigate to dir");
+                self.navigate_to(path.clone(), window, cx);
+            }
         }
     }
 
@@ -818,11 +935,13 @@ impl ZeroApp {
     ) {
         match event {
             DrivesPopoverEvent::Dismiss => {
+                tracing::debug!("drives: dismiss");
                 self.drives_popover_open = false;
                 self.focus_content(window, cx);
                 cx.notify();
             }
             DrivesPopoverEvent::OpenPath(path) => {
+                tracing::debug!(path = %path.display(), "drives: open path");
                 self.drives_popover_open = false;
                 self.navigate_to(path.clone(), window, cx);
             }
