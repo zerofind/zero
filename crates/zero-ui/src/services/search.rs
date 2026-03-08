@@ -351,7 +351,11 @@ impl SearchService {
     pub fn remove_paths(&mut self, paths: &[String]) {
         let removed = Arc::make_mut(&mut self.manager).remove_paths(paths);
         if removed > 0 {
-            tracing::debug!(removed, paths = paths.len(), "search_svc: removed paths from index");
+            tracing::debug!(
+                removed,
+                paths = paths.len(),
+                "search_svc: removed paths from index"
+            );
         }
     }
 

@@ -1,0 +1,29 @@
+[package]
+name = "llm-kit-anthropic"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Anthropic provider for LLM Kit - Complete Claude integration with streaming, tools, thinking, and citations"
+keywords = ["anthropic", "claude", "ai", "llm", "sdk"]
+categories = ["api-bindings", "asynchronous", "web-programming"]
+
+[dependencies]
+llm-kit-provider = { path = "../llm-kit-provider" }
+llm-kit-provider-utils = { path = "../llm-kit-provider-utils" }
+async-trait = "0.1"
+base64 = "0.22.1"
+regex = "1.11"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = { version = "1.11", features = ["v4"] }
+reqwest = { version = "0.12", features = ["json", "stream"] }
+tokio = { version = "1.41", features = ["full"] }
+futures-util = "0.3"
+async-stream = "0.3"
+bytes = "1.9"
+thiserror = "2.0"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt"] }
+futures = "0.3"
+chrono = "0.4"

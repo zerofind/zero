@@ -1,0 +1,39 @@
+[package]
+name = "llm-kit-core"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Core functionality for the LLM Kit - unified interface for building AI-powered applications"
+keywords = ["ai", "llm", "language-model", "openai", "sdk"]
+categories = ["api-bindings", "asynchronous"]
+
+[dependencies]
+llm-kit-provider-utils = { path = "../llm-kit-provider-utils" }
+llm-kit-provider = { path = "../llm-kit-provider" }
+tokio = { version = "1.41", features = ["time"] }
+tokio-util = "0.7.16"
+thiserror = "2.0.9"
+base64 = "0.22.1"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+serde_bytes = "0.11"
+schemars = "0.8"
+url = "2.5.7"
+async-stream = "0.3"
+futures-util = "0.3"
+async-trait = "0.1.89"
+futures = "0.3"
+jsonschema = "0.29"
+reqwest = "0.12"
+log = "0.4"
+uuid = { version = "1.11", features = ["v4"] }
+chrono = { version = "0.4", optional = true }
+
+[features]
+default = []
+storage = ["chrono"]
+
+[dev-dependencies]
+tokio = { version = "1.41", features = ["macros", "rt"] }
+async-trait = "0.1.89"
+regex = "1.12.2"

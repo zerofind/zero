@@ -118,6 +118,3 @@ ttf-parser = { opt-level = 3 }
 lto = false
 codegen-units = 1
 strip = true
-
-[patch.crates-io]
-gpui-component = { path = "../gpui-component/crates/ui" }

@@ -1,0 +1,27 @@
+[package]
+name = "llm-kit-openai-compatible"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "OpenAI-compatible provider implementation for the LLM Kit - supports OpenAI, Azure OpenAI, and compatible APIs"
+keywords = ["ai", "openai", "azure", "llm", "provider"]
+categories = ["api-bindings", "asynchronous"]
+
+[dependencies]
+llm-kit-provider = { path = "../llm-kit-provider" }
+tokio = { version = "1.41", features = ["full"] }
+reqwest = { version = "0.12", features = ["json", "stream"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+async-trait = "0.1"
+futures-util = "0.3"
+url = "2.5"
+regex = "1.12"
+base64 = "0.22.1"
+uuid = { version = "1.11", features = ["v4"] }
+async-stream = "0.3"
+bytes = "1.9"
+
+[dev-dependencies]
+tokio = { version = "1.41", features = ["macros", "rt-multi-thread"] }

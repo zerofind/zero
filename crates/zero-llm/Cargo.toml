@@ -6,12 +6,12 @@ edition = "2024"
 [dependencies]
 zero = { path = "../.." }
 
-# llm-kit (standalone, no tell-rs coupling)
-llm-kit-core = { path = "../../../../tell/tell-rs/llm-kit/llm-kit-core" }
-llm-kit-provider = { path = "../../../../tell/tell-rs/llm-kit/llm-kit-provider" }
-llm-kit-provider-utils = { path = "../../../../tell/tell-rs/llm-kit/llm-kit-provider-utils" }
-llm-kit-anthropic = { path = "../../../../tell/tell-rs/llm-kit/llm-kit-anthropic" }
-llm-kit-openai-compatible = { path = "../../../../tell/tell-rs/llm-kit/llm-kit-openai-compatible" }
+# llm-kit (vendored)
+llm-kit-core = { path = "../llm-kit/llm-kit-core" }
+llm-kit-provider = { path = "../llm-kit/llm-kit-provider" }
+llm-kit-provider-utils = { path = "../llm-kit/llm-kit-provider-utils" }
+llm-kit-anthropic = { path = "../llm-kit/llm-kit-anthropic" }
+llm-kit-openai-compatible = { path = "../llm-kit/llm-kit-openai-compatible" }
 
 tokio = { version = "1", features = ["rt-multi-thread", "sync"] }
 futures-util = "0.3"
