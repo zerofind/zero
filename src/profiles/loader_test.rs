@@ -3,7 +3,7 @@
 //! Tests profile parsing, merging, and caching behavior.
 
 use super::loader::*;
-use super::schema::{CleanupGroup, Os};
+use super::schema::{AggregateMode, CleanupGroup, CleanupProfile, Os};
 
 #[test]
 fn test_parse_duration_days() {
@@ -464,6 +464,109 @@ fn test_ensure_user_profiles_dir() {
     // This test just verifies the function doesn't panic
     // We don't actually create the directory in tests to avoid side effects
     let _ = ensure_user_profiles_dir();
+}
+
+#[test]
+fn test_sibling_field_parses() {
+    let toml_str = r#"
+[rust_target]
+name = "Rust Build Cache"
+patterns = ["**/target"]
+sibling = "Cargo.toml"
+aggregate = "directory"
+group = "developer"
+"#;
+    let profile: CleanupProfile = toml::from_str(toml_str).expect("should parse");
+    let cat = &profile.categories["rust_target"];
+    assert_eq!(cat.sibling.as_deref(), Some("Cargo.toml"));
+    assert_eq!(cat.aggregate, Some(AggregateMode::Directory));
+}
+
+#[test]
+fn test_aggregate_field_parses() {
+    let toml_str = r#"
+[node_modules]
+name = "node_modules"
+patterns = ["**/node_modules"]
+aggregate = "directory"
+group = "developer"
+"#;
+    let profile: CleanupProfile = toml::from_str(toml_str).expect("should parse");
+    let cat = &profile.categories["node_modules"];
+    assert_eq!(cat.aggregate, Some(AggregateMode::Directory));
+}
+
+#[test]
+fn test_aggregate_file_mode() {
+    let toml_str = r#"
+[log_files]
+name = "Log Files"
+patterns = ["**/*.log"]
+aggregate = "file"
+group = "system"
+"#;
+    let profile: CleanupProfile = toml::from_str(toml_str).expect("should parse");
+    let cat = &profile.categories["log_files"];
+    assert_eq!(cat.aggregate, Some(AggregateMode::File));
+}
+
+#[test]
+fn test_backward_compat_no_new_fields() {
+    let toml_str = r#"
+[old_category]
+name = "Old Category"
+patterns = ["**/*.tmp"]
+group = "system"
+"#;
+    let profile: CleanupProfile =
+        toml::from_str(toml_str).expect("should parse without new fields");
+    let cat = &profile.categories["old_category"];
+    assert_eq!(cat.sibling, None);
+    assert_eq!(cat.aggregate, None);
+}
+
+#[test]
+fn test_resolved_category_has_sibling_and_aggregate() {
+    let profile = load_cleanup().expect("should load cleanup profile");
+
+    let rust_target = profile
+        .get("rust_target")
+        .expect("rust_target should exist");
+    assert_eq!(rust_target.sibling.as_deref(), Some("Cargo.toml"));
+    assert_eq!(rust_target.aggregate, AggregateMode::Directory);
+
+    let node_modules = profile
+        .get("node_modules")
+        .expect("node_modules should exist");
+    assert_eq!(node_modules.sibling.as_deref(), Some("package.json"));
+    assert_eq!(node_modules.aggregate, AggregateMode::Directory);
+}
+
+#[test]
+fn test_new_developer_categories_exist() {
+    let profile = load_cleanup().expect("should load cleanup profile");
+
+    let expected = [
+        "nextjs_cache",
+        "python_venv",
+        "tox_cache",
+        "flutter_build",
+        "zig_cache",
+        "cmake_build",
+        "elixir_build",
+        "ruby_vendor",
+        "cocoapods_proj",
+        "parcel_cache",
+        "turbo_cache",
+    ];
+
+    for id in &expected {
+        let cat = profile.get(id);
+        assert!(cat.is_some(), "category '{}' should exist", id);
+        let cat = cat.unwrap();
+        assert_eq!(cat.group, CleanupGroup::Developer);
+        assert_eq!(cat.aggregate, AggregateMode::Directory);
+    }
 }
 
 #[test]

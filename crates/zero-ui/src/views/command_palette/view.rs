@@ -1,9 +1,11 @@
 use std::path::PathBuf;
+use std::time::Duration;
 
 use gpui::*;
 use gpui_component::input::InputState;
 
 use crate::services::apps::AppEntry;
+use crate::services::search::SearchEvent;
 use crate::services::{AppService, SearchService};
 use crate::theme::FONT_SIZE_CAPTION;
 
@@ -45,6 +47,7 @@ pub struct PaletteView {
     pub(super) mode: PaletteMode,
     pub(super) focus_handle: FocusHandle,
     _input_sub: Subscription,
+    _search_sub: Subscription,
     pub(super) scroll_handle: ScrollHandle,
 }
 
@@ -55,7 +58,7 @@ impl PaletteView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let input = cx.new(|cx| InputState::new(window, cx).placeholder("Search files..."));
+        let input = cx.new(|cx| InputState::new(window, cx).placeholder("Search..."));
 
         let input_sub = cx.subscribe(
             &input,
@@ -65,8 +68,46 @@ impl PaletteView {
                 cx.notify();
             },
         );
+
+        let search_sub = cx.subscribe(
+            &search,
+            |this: &mut Self, _, ev: &SearchEvent, cx| match ev {
+                SearchEvent::RootLoaded { .. }
+                | SearchEvent::IndexLoaded
+                | SearchEvent::IndexingFinished => {
+                    if !this.query.is_empty() {
+                        let q = this.query.clone();
+                        this.perform_search(&q, cx);
+                    }
+                    cx.notify();
+                }
+                _ => {}
+            },
+        );
+
         let bookmarks = crate::session::Settings::load().sidebar_bookmarks;
-        let storages = StorageEntry::discover();
+
+        // Poll every 500ms while loading/indexing so the banner file count updates live.
+        cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(Duration::from_millis(500))
+                    .await;
+                let still_loading = this
+                    .update(cx, |view, cx| {
+                        let loading = view.is_loading(cx);
+                        if loading {
+                            cx.notify();
+                        }
+                        loading
+                    })
+                    .unwrap_or(false);
+                if !still_loading {
+                    break;
+                }
+            }
+        })
+        .detach();
 
         Self {
             search,
@@ -75,12 +116,13 @@ impl PaletteView {
             results: Vec::new(),
             app_results: Vec::new(),
             bookmarks,
-            storages,
+            storages: Vec::new(),
             selected_idx: 0,
             query: String::new(),
             mode: PaletteMode::Root,
             focus_handle: cx.focus_handle(),
             _input_sub: input_sub,
+            _search_sub: search_sub,
             scroll_handle: ScrollHandle::new(),
         }
     }
@@ -90,9 +132,21 @@ impl PaletteView {
         self.results.clear();
         self.selected_idx = 0;
         self.mode = PaletteMode::Root;
-        self.storages = StorageEntry::discover();
+        // Read cached storages from the search service (no I/O)
+        self.storages = self
+            .search
+            .read(cx)
+            .storages()
+            .iter()
+            .map(|s| StorageEntry {
+                name: s.name.clone(),
+                mount_point: s.mount_point.clone(),
+                is_external: s.is_external,
+            })
+            .collect();
         self.input.update(cx, |state, cx| {
             state.set_value("", window, cx);
+            state.set_placeholder("Search...", window, cx);
         });
         self.input.focus_handle(cx).focus(window);
         cx.notify();
@@ -112,8 +166,10 @@ impl PaletteView {
         };
         self.query.clear();
         self.selected_idx = 0;
+        let placeholder = format!("Search {}...", label.to_lowercase());
         self.input.update(cx, |state, cx| {
             state.set_value("", window, cx);
+            state.set_placeholder(&placeholder, window, cx);
         });
         if type_filter == "apps" {
             self.results.clear();
@@ -134,6 +190,7 @@ impl PaletteView {
         self.selected_idx = 0;
         self.input.update(cx, |state, cx| {
             state.set_value("", window, cx);
+            state.set_placeholder("Search...", window, cx);
         });
         cx.notify();
     }
@@ -280,6 +337,12 @@ impl PaletteView {
 
     pub(super) fn is_showing_results(&self) -> bool {
         !self.query.is_empty() || matches!(self.mode, PaletteMode::DrilledIn { .. })
+    }
+
+    /// True when the search service is still loading indexes from disk.
+    pub(super) fn is_loading(&self, cx: &Context<Self>) -> bool {
+        let svc = self.search.read(cx);
+        svc.is_loading() || svc.is_indexing()
     }
 
     /// Compute the scroll child index accounting for section headers.
@@ -483,11 +546,11 @@ impl PaletteView {
             offset += act;
 
             // File results
-            if idx < offset + f {
-                if let Some(result) = self.results.get(idx - offset) {
-                    let path = PathBuf::from(&result.node.path);
-                    cx.emit(PaletteEvent::OpenResult(path));
-                }
+            if idx < offset + f
+                && let Some(result) = self.results.get(idx - offset)
+            {
+                let path = PathBuf::from(&result.node.path);
+                cx.emit(PaletteEvent::OpenResult(path));
             }
             return;
         }

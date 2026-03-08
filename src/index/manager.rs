@@ -433,6 +433,20 @@ impl IndexManager {
         file_count
     }
 
+    /// Remove specific paths from all indexes.
+    ///
+    /// For directories, also removes all entries under them.
+    /// Returns the total number of entries removed.
+    pub fn remove_paths(&mut self, paths: &[String]) -> usize {
+        let mut total = 0;
+        for index in self.indexes.values_mut() {
+            for path in paths {
+                total += index.remove_dir(path);
+            }
+        }
+        total
+    }
+
     /// Check if a root is already indexed
     pub fn has_root(&self, root: &str) -> bool {
         self.roots_cache.contains_key(root)

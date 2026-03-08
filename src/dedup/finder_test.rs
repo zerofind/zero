@@ -1,9 +1,19 @@
 //! Tests for duplicate file finder
 
 use super::*;
+use crate::dedup::types::*;
 use std::fs::File;
 use std::io::Write;
+use std::path::PathBuf;
 use tempfile::TempDir;
+
+/// Test options with a low min_size so small test files are included.
+fn test_options() -> DedupOptions {
+    DedupOptions {
+        min_size: 1,
+        ..Default::default()
+    }
+}
 
 fn create_file(dir: &Path, name: &str, content: &[u8]) -> PathBuf {
     let path = dir.join(name);
@@ -22,7 +32,7 @@ fn test_find_no_duplicates() {
     create_file(dir.path(), "b.txt", b"content b");
     create_file(dir.path(), "c.txt", b"content c");
 
-    let result = find_duplicates(dir.path(), DedupOptions::default()).unwrap();
+    let result = find_duplicates(dir.path(), test_options()).unwrap();
 
     assert!(!result.has_duplicates());
     assert_eq!(result.groups.len(), 0);
@@ -36,7 +46,7 @@ fn test_find_duplicates() {
     create_file(dir.path(), "b.txt", b"same content");
     create_file(dir.path(), "c.txt", b"different");
 
-    let result = find_duplicates(dir.path(), DedupOptions::default()).unwrap();
+    let result = find_duplicates(dir.path(), test_options()).unwrap();
 
     assert!(result.has_duplicates());
     assert_eq!(result.groups.len(), 1);
@@ -54,7 +64,7 @@ fn test_find_multiple_duplicate_groups() {
     create_file(dir.path(), "b2.txt", b"content B");
     create_file(dir.path(), "unique.txt", b"unique");
 
-    let result = find_duplicates(dir.path(), DedupOptions::default()).unwrap();
+    let result = find_duplicates(dir.path(), test_options()).unwrap();
 
     assert!(result.has_duplicates());
     assert_eq!(result.groups.len(), 2);
@@ -67,7 +77,7 @@ fn test_keeper_shortest_path() {
     create_file(dir.path(), "a.txt", b"content");
     create_file(dir.path(), "subdir/longer/path/a.txt", b"content");
 
-    let result = find_duplicates(dir.path(), DedupOptions::default()).unwrap();
+    let result = find_duplicates(dir.path(), test_options()).unwrap();
 
     assert_eq!(result.groups.len(), 1);
     let keeper = result.groups[0].keeper().unwrap();
@@ -81,7 +91,7 @@ fn test_delete_duplicates() {
     let keep = create_file(dir.path(), "a.txt", b"content");
     let dup = create_file(dir.path(), "subdir/duplicate.txt", b"content");
 
-    let result = find_duplicates(dir.path(), DedupOptions::default()).unwrap();
+    let result = find_duplicates(dir.path(), test_options()).unwrap();
     assert_eq!(result.duplicate_count, 1);
 
     let delete_result = delete_duplicates(&result);
@@ -134,6 +144,7 @@ fn test_verify_mode() {
     create_file(dir.path(), "b.txt", b"content");
 
     let options = DedupOptions {
+        min_size: 1,
         verify: true,
         ..Default::default()
     };

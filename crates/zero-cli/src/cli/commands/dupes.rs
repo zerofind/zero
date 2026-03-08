@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use zero::dedup::{DedupOptions, DedupResult, delete_duplicates, find_duplicates};
-use zero::index::{FileTypeCategory, SearchIndex, SearchQuery, persistence};
+use zero::index::{FileTypeCategory, IndexManager, SearchIndex, SearchQuery};
 use zero::output::*;
 use zero::{cmd_error, cmd_success};
 
@@ -123,42 +123,34 @@ fn cmd_dupes_filtered(
     print_mode_info(out, args);
     out.newline();
 
-    // Load search index from snapshot
+    // Load search index via IndexManager
     out.info("Loading search index...");
-    let index_path = match zero::dirs::legacy_index_dir() {
-        Some(p) => p,
-        None => {
+    let manager = match IndexManager::load() {
+        Ok(m) if m.total_file_count() > 0 => m,
+        _ => {
             cmd_error!(
                 out,
                 "dupes",
                 start_time.elapsed().as_millis() as u64,
-                "NO_CACHE_DIR",
-                "Could not determine cache directory"
+                "INDEX_NOT_FOUND",
+                "Search index not found. Run 'zero search --index <path>' first.".to_string(),
+                {
+                    out.error("Search index not found");
+                    out.info("Run 'zero search --index <path>' to build the index first");
+                }
             );
             return Ok(());
         }
     };
 
-    if !index_path.is_file() {
-        cmd_error!(
-            out,
-            "dupes",
-            start_time.elapsed().as_millis() as u64,
-            "INDEX_NOT_FOUND",
-            "Search index not found. Run 'zero search --index <path>' first.".to_string(),
-            {
-                out.error("Search index not found");
-                out.info("Run 'zero search --index <path>' to build the index first");
-            }
-        );
-        return Ok(());
-    }
-
-    let index = persistence::load_index(&index_path)?;
+    let index = match manager.indexes().next() {
+        Some(idx) => idx,
+        None => return Ok(()),
+    };
 
     // Search for files matching criteria
     out.info("Searching for matching files...");
-    let paths = search_files(&index, args.query.as_deref(), args.type_filter, path);
+    let paths = search_files(index, args.query.as_deref(), args.type_filter, path);
 
     if paths.is_empty() {
         let data = DupesData {

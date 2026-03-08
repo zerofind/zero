@@ -25,6 +25,7 @@ pub struct ConfirmDialog {
     destructive: bool,
     on_confirm: Handler,
     on_cancel: Handler,
+    focus_handle: Option<FocusHandle>,
 }
 
 #[allow(dead_code)]
@@ -43,6 +44,7 @@ impl ConfirmDialog {
             destructive: false,
             on_confirm: Rc::new(on_confirm),
             on_cancel: Rc::new(on_cancel),
+            focus_handle: None,
         }
     }
 
@@ -64,14 +66,30 @@ impl ConfirmDialog {
         self
     }
 
-    pub fn render_element(self, _window: &mut Window, cx: &mut App) -> Stateful<Div> {
+    /// Enable keyboard support: Enter to confirm, Escape to cancel.
+    /// The dialog auto-focuses when rendered.
+    #[allow(dead_code)]
+    pub fn focus(mut self, handle: FocusHandle) -> Self {
+        self.focus_handle = Some(handle);
+        self
+    }
+
+    pub fn render_element(self, window: &mut Window, cx: &mut App) -> Stateful<Div> {
         let muted = cx.theme().muted_foreground;
+        let focus_handle = self.focus_handle;
 
-        let backdrop_cancel = self.on_cancel.clone();
-        let confirm_handler = self.on_confirm.clone();
-        let cancel_handler = self.on_cancel;
+        if let Some(ref handle) = focus_handle {
+            handle.focus(window);
+        }
 
-        div()
+        let on_confirm = self.on_confirm;
+        let on_cancel = self.on_cancel;
+
+        let backdrop_cancel = on_cancel.clone();
+        let confirm_handler = on_confirm.clone();
+        let cancel_handler = on_cancel.clone();
+
+        let mut el = div()
             .id("confirm-dialog-overlay")
             .absolute()
             .size_full()
@@ -83,66 +101,81 @@ impl ConfirmDialog {
             .justify_center()
             .on_mouse_down(MouseButton::Left, move |_ev, window, cx| {
                 backdrop_cancel(window, cx);
-            })
-            .child(
-                v_flex()
-                    .on_mouse_down(MouseButton::Left, |_, _, _| {
-                        // Stop propagation
-                    })
-                    .w(MODAL_MD_WIDTH)
-                    .rounded(RADIUS_LG)
-                    .bg(theme::popover_bg(cx))
-                    .border_1()
-                    .border_color(cx.theme().border)
-                    .shadow_lg()
-                    .p_5()
-                    .gap_4()
-                    .child(
-                        v_flex()
-                            .gap_1()
-                            .child(
-                                div()
-                                    .text_size(FONT_SIZE_BODY)
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .child(self.title),
-                            )
-                            .child(
-                                div()
-                                    .text_size(FONT_SIZE_CAPTION)
-                                    .text_color(muted)
-                                    .child(self.message),
-                            ),
-                    )
-                    .child(
-                        h_flex()
-                            .justify_end()
-                            .gap_2()
-                            .child(
-                                Button::new("dialog-cancel")
-                                    .label(self.cancel_label)
-                                    .compact()
-                                    .small()
-                                    .ghost()
-                                    .on_click(move |_ev, window, cx| {
-                                        cancel_handler(window, cx);
-                                    }),
-                            )
-                            .child({
-                                let btn = Button::new("dialog-confirm")
-                                    .label(self.confirm_label)
-                                    .compact()
-                                    .small();
-                                if self.destructive {
-                                    btn.danger().on_click(move |_ev, window, cx| {
-                                        confirm_handler(window, cx);
-                                    })
-                                } else {
-                                    btn.primary().on_click(move |_ev, window, cx| {
-                                        confirm_handler(window, cx);
-                                    })
-                                }
-                            }),
-                    ),
-            )
+            });
+
+        if let Some(ref handle) = focus_handle {
+            let key_confirm = on_confirm;
+            let key_cancel = on_cancel;
+            el = el
+                .track_focus(handle)
+                .on_key_down(move |ev: &KeyDownEvent, window, cx| {
+                    match ev.keystroke.key.as_str() {
+                        "enter" => key_confirm(window, cx),
+                        "escape" => key_cancel(window, cx),
+                        _ => {}
+                    }
+                });
+        }
+
+        el.child(
+            v_flex()
+                .on_mouse_down(MouseButton::Left, |_, _, _| {
+                    // Stop propagation
+                })
+                .w(MODAL_MD_WIDTH)
+                .rounded(RADIUS_LG)
+                .bg(theme::popover_bg(cx))
+                .border_1()
+                .border_color(cx.theme().border)
+                .shadow_lg()
+                .p_5()
+                .gap_4()
+                .child(
+                    v_flex()
+                        .gap_1()
+                        .child(
+                            div()
+                                .text_size(FONT_SIZE_BODY)
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .child(self.title),
+                        )
+                        .child(
+                            div()
+                                .text_size(FONT_SIZE_CAPTION)
+                                .text_color(muted)
+                                .child(self.message),
+                        ),
+                )
+                .child(
+                    h_flex()
+                        .justify_end()
+                        .gap_2()
+                        .child(
+                            Button::new("dialog-cancel")
+                                .label(self.cancel_label)
+                                .compact()
+                                .small()
+                                .ghost()
+                                .on_click(move |_ev, window, cx| {
+                                    cancel_handler(window, cx);
+                                }),
+                        )
+                        .child({
+                            let btn = Button::new("dialog-confirm")
+                                .label(self.confirm_label)
+                                .compact()
+                                .small();
+                            if self.destructive {
+                                btn.danger().on_click(move |_ev, window, cx| {
+                                    confirm_handler(window, cx);
+                                })
+                            } else {
+                                btn.primary().on_click(move |_ev, window, cx| {
+                                    confirm_handler(window, cx);
+                                })
+                            }
+                        }),
+                ),
+        )
     }
 }

@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use gpui::*;
@@ -8,6 +9,7 @@ use zero::prelude::AtomicProgress;
 use zero::scanner::CrawlProgress;
 
 use crate::ui::{BannerData, BannerKind};
+use crate::views::cleanup::CleanupProgress;
 
 use super::ZeroApp;
 
@@ -173,6 +175,7 @@ impl ZeroApp {
         kind: BannerKind,
         message: String,
         progress: Arc<DedupProgress>,
+        on_cancel: Option<Arc<dyn Fn() + Send + Sync>>,
         cx: &mut Context<Self>,
     ) {
         self.banner = Some(BannerData {
@@ -184,7 +187,7 @@ impl ZeroApp {
             files_total: 0,
             phase: Some("Scanning...".to_string()),
             indeterminate: true,
-            on_cancel: None,
+            on_cancel,
         });
         cx.notify();
 
@@ -239,6 +242,88 @@ impl ZeroApp {
                                 banner.indeterminate = false;
                                 banner.phase = Some("Finishing...".to_string());
                             }
+                        }
+
+                        cx.notify();
+                        false
+                    })
+                    .unwrap_or(true);
+
+                if should_stop {
+                    break;
+                }
+            }
+        })
+        .detach();
+    }
+
+    /// Start polling a `CleanupProgress` for real-time deletion feedback.
+    pub fn start_cleanup_progress_polling(
+        &mut self,
+        message: String,
+        progress: Arc<CleanupProgress>,
+        cx: &mut Context<Self>,
+    ) {
+        let cancel_progress = Arc::clone(&progress);
+        let on_cancel: Arc<dyn Fn() + Send + Sync> = Arc::new(move || cancel_progress.cancel());
+
+        self.banner = Some(BannerData {
+            kind: BannerKind::Cleanup,
+            message,
+            bytes_done: 0,
+            bytes_total: 0,
+            files_done: 0,
+            files_total: progress.files_total.load(Ordering::Relaxed),
+            phase: Some("Moving to Trash...".to_string()),
+            indeterminate: false,
+            on_cancel: Some(on_cancel),
+        });
+        cx.notify();
+
+        cx.spawn(async move |this, cx| {
+            let mut ticks: u64 = 0;
+            loop {
+                cx.background_executor()
+                    .timer(Duration::from_millis(150))
+                    .await;
+
+                let should_stop = this
+                    .update(cx, |app, cx| {
+                        let Some(banner) = &mut app.banner else {
+                            return true;
+                        };
+
+                        let done = progress.files_done.load(Ordering::Relaxed);
+                        let total = progress.files_total.load(Ordering::Relaxed);
+                        let failed = progress.failed.load(Ordering::Relaxed);
+
+                        banner.files_done = done;
+                        banner.files_total = total;
+
+                        if total > 0 {
+                            let pct = (done as f64 / total as f64 * 100.0).min(100.0);
+                            // Use bytes fields to drive the progress bar fraction
+                            banner.bytes_done = done;
+                            banner.bytes_total = total;
+                            let mut phase = format!(
+                                "{:.0}% · {} / {} items",
+                                pct,
+                                crate::ui::format_number(done),
+                                crate::ui::format_number(total),
+                            );
+                            if failed > 0 {
+                                phase.push_str(&format!(
+                                    " ({} failed)",
+                                    crate::ui::format_number(failed),
+                                ));
+                            }
+                            banner.phase = Some(phase);
+                        }
+
+                        // Log every ~3s (20 ticks × 150ms)
+                        ticks += 1;
+                        if ticks == 1 || ticks.is_multiple_of(20) {
+                            tracing::info!(done, total, failed, "cleanup progress");
                         }
 
                         cx.notify();

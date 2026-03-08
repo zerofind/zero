@@ -3,6 +3,23 @@ use std::path::{Path, PathBuf};
 
 use crate::models::{SortDirection, SortField};
 pub use crate::ui::{format_date, format_size};
+use natord::compare_ignore_case;
+
+/// Symlink target information.
+#[derive(Debug, Clone)]
+pub enum SymlinkInfo {
+    /// Target exists.
+    Valid(String),
+    /// Target is broken (dangling).
+    Broken(String),
+}
+
+/// Owner (user:group) information.
+#[derive(Debug, Clone)]
+pub struct OwnerInfo {
+    pub user: String,
+    pub group: String,
+}
 
 /// A single entry in the file browser — file or folder.
 #[derive(Debug, Clone)]
@@ -15,37 +32,92 @@ pub struct BrowserEntry {
     pub extension: Option<String>,
     pub depth: usize,
     pub expanded: bool,
+    /// Unix mode bits from stat (e.g. 0o755). Populated on Unix.
+    pub mode: Option<u32>,
+    /// Whether the file has extended attributes.
+    pub has_xattrs: bool,
+    /// Whether this entry is a symbolic link.
+    pub is_symlink: bool,
+    /// Symlink target path and validity.
+    pub symlink_target: Option<SymlinkInfo>,
+    /// BSD file flags string (macOS). Empty or "-" means none.
+    pub flags: Option<String>,
+    /// Owner user:group.
+    pub owner: Option<OwnerInfo>,
 }
 
 impl BrowserEntry {
     pub fn from_fs(path: &Path, depth: usize) -> Option<Self> {
-        let metadata = std::fs::metadata(path).ok()?;
+        // Use symlink_metadata to detect symlinks without following them
+        let symlink_meta = std::fs::symlink_metadata(path).ok()?;
+        let is_symlink = symlink_meta.is_symlink();
+
+        // For actual file info (size, is_dir), follow the link
+        let metadata = if is_symlink {
+            std::fs::metadata(path).ok()
+        } else {
+            Some(symlink_meta.clone())
+        };
+
+        // If the symlink is broken, metadata will be None
+        let (is_dir, size, mtime) = match &metadata {
+            Some(m) => {
+                let mt = m
+                    .modified()
+                    .ok()
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+                (m.is_dir(), if m.is_dir() { 0 } else { m.len() }, mt)
+            }
+            None => {
+                // Broken symlink: use symlink_metadata for mtime
+                let mt = symlink_meta
+                    .modified()
+                    .ok()
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+                (false, 0, mt)
+            }
+        };
+
         let name = path
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_default();
-        let is_dir = metadata.is_dir();
         let extension = if is_dir {
             None
         } else {
             path.extension().map(|e| e.to_string_lossy().to_string())
         };
-        let mtime = metadata
-            .modified()
-            .ok()
-            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
+
+        // Extract Unix metadata from symlink_metadata (don't follow links for mode)
+        let (mode, owner, flags) = extract_unix_metadata(&symlink_meta);
+
+        let has_xattrs = has_extended_attrs(path);
+
+        let symlink_target = if is_symlink {
+            Some(resolve_symlink(path))
+        } else {
+            None
+        };
 
         Some(Self {
             name,
             path: path.to_path_buf(),
-            size: if is_dir { 0 } else { metadata.len() },
+            size,
             mtime,
             is_dir,
             extension,
             depth,
             expanded: false,
+            mode,
+            has_xattrs,
+            is_symlink,
+            symlink_target,
+            flags,
+            owner,
         })
     }
 
@@ -94,11 +166,11 @@ pub fn load_directory(dir: &Path) -> Vec<BrowserEntry> {
         .filter_map(|e| BrowserEntry::from_fs(&e.path(), 0))
         .collect();
 
-    // Directories first, then alphabetical
+    // Directories first, then natural sort
     entries.sort_by(|a, b| {
         b.is_dir
             .cmp(&a.is_dir)
-            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+            .then_with(|| compare_ignore_case(&a.name, &b.name))
     });
 
     entries
@@ -114,13 +186,19 @@ pub fn sort_entries(entries: &mut [BrowserEntry], field: SortField, direction: S
         }
 
         let cmp = match field {
-            SortField::Name => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+            SortField::Name => compare_ignore_case(&a.name, &b.name),
             SortField::DateModified => a.mtime.cmp(&b.mtime),
             SortField::Size => a.size.cmp(&b.size),
             SortField::Kind => {
                 let ak = a.extension.as_deref().unwrap_or("");
                 let bk = b.extension.as_deref().unwrap_or("");
                 ak.cmp(bk)
+            }
+            SortField::Permissions => a.mode.unwrap_or(0).cmp(&b.mode.unwrap_or(0)),
+            SortField::Owner => {
+                let au = a.owner.as_ref().map(|o| o.user.as_str()).unwrap_or("");
+                let bu = b.owner.as_ref().map(|o| o.user.as_str()).unwrap_or("");
+                au.cmp(bu)
             }
         };
 
@@ -169,3 +247,207 @@ pub fn toggle_expand(entries: &mut Vec<BrowserEntry>, idx: usize) -> usize {
 
     count
 }
+
+// -- Unix metadata extraction -------------------------------------------------
+
+/// Extract mode, owner, and flags from metadata. Returns (mode, owner, flags).
+#[cfg(unix)]
+fn extract_unix_metadata(
+    meta: &std::fs::Metadata,
+) -> (Option<u32>, Option<OwnerInfo>, Option<String>) {
+    use std::os::unix::fs::MetadataExt;
+
+    let mode = Some(meta.mode());
+
+    let owner = resolve_owner(meta.uid(), meta.gid());
+
+    let flags = extract_bsd_flags(meta);
+
+    (mode, owner, flags)
+}
+
+#[cfg(not(unix))]
+fn extract_unix_metadata(
+    _meta: &std::fs::Metadata,
+) -> (Option<u32>, Option<OwnerInfo>, Option<String>) {
+    (None, None, None)
+}
+
+/// Resolve uid/gid to user:group names via libc.
+#[cfg(unix)]
+fn resolve_owner(uid: u32, gid: u32) -> Option<OwnerInfo> {
+    let user = unsafe {
+        let pw = libc::getpwuid(uid);
+        if pw.is_null() {
+            uid.to_string()
+        } else {
+            std::ffi::CStr::from_ptr((*pw).pw_name)
+                .to_string_lossy()
+                .into_owned()
+        }
+    };
+    let group = unsafe {
+        let gr = libc::getgrgid(gid);
+        if gr.is_null() {
+            gid.to_string()
+        } else {
+            std::ffi::CStr::from_ptr((*gr).gr_name)
+                .to_string_lossy()
+                .into_owned()
+        }
+    };
+    Some(OwnerInfo { user, group })
+}
+
+/// Extract BSD file flags via fflagstostr (macOS/BSD).
+#[cfg(target_os = "macos")]
+fn extract_bsd_flags(meta: &std::fs::Metadata) -> Option<String> {
+    use std::os::macos::fs::MetadataExt;
+
+    unsafe extern "C" {
+        fn fflagstostr(flags: libc::c_ulong) -> *mut libc::c_char;
+    }
+
+    let st_flags = meta.st_flags() as libc::c_ulong;
+    if st_flags == 0 {
+        return None;
+    }
+
+    let ptr = unsafe { fflagstostr(st_flags) };
+    if ptr.is_null() {
+        return None;
+    }
+
+    let result = unsafe { std::ffi::CStr::from_ptr(ptr) }
+        .to_string_lossy()
+        .into_owned();
+
+    unsafe {
+        libc::free(ptr.cast());
+    }
+
+    if result.is_empty() || result == "-" {
+        None
+    } else {
+        Some(result)
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn extract_bsd_flags(_meta: &std::fs::Metadata) -> Option<String> {
+    None
+}
+
+/// Check if a path has extended attributes (lightweight — no value retrieval).
+#[cfg(target_os = "macos")]
+fn has_extended_attrs(path: &Path) -> bool {
+    use std::os::unix::ffi::OsStrExt;
+    let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {
+        return false;
+    };
+    let result = unsafe {
+        libc::listxattr(
+            c_path.as_ptr(),
+            std::ptr::null_mut(),
+            0,
+            libc::XATTR_NOFOLLOW,
+        )
+    };
+    result > 0
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn has_extended_attrs(path: &Path) -> bool {
+    use std::os::unix::ffi::OsStrExt;
+    let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {
+        return false;
+    };
+    let result = unsafe { libc::listxattr(c_path.as_ptr(), std::ptr::null_mut(), 0) };
+    result > 0
+}
+
+#[cfg(not(unix))]
+fn has_extended_attrs(_path: &Path) -> bool {
+    false
+}
+
+/// Resolve a symlink target and check if it's valid.
+fn resolve_symlink(path: &Path) -> SymlinkInfo {
+    match std::fs::read_link(path) {
+        Ok(target) => {
+            // Check if target exists (resolve relative to parent)
+            let absolute_target = if target.is_relative() {
+                path.parent()
+                    .map(|p| p.join(&target))
+                    .unwrap_or_else(|| target.clone())
+            } else {
+                target.clone()
+            };
+            let display = target.to_string_lossy().into_owned();
+            if absolute_target.exists() {
+                SymlinkInfo::Valid(display)
+            } else {
+                SymlinkInfo::Broken(display)
+            }
+        }
+        Err(_) => SymlinkInfo::Broken("?".to_string()),
+    }
+}
+
+/// Format a Unix mode as `drwxr-xr-x` (10 characters).
+pub fn format_mode(mode: u32, is_dir: bool, is_symlink: bool) -> String {
+    let mut s = String::with_capacity(10);
+
+    // File type character
+    if is_symlink {
+        s.push('l');
+    } else if is_dir {
+        s.push('d');
+    } else if mode & 0o170000 == 0o140000 {
+        s.push('s'); // socket
+    } else if mode & 0o170000 == 0o010000 {
+        s.push('p'); // FIFO
+    } else if mode & 0o170000 == 0o060000 {
+        s.push('b'); // block device
+    } else if mode & 0o170000 == 0o020000 {
+        s.push('c'); // char device
+    } else {
+        s.push('-');
+    }
+
+    // User
+    s.push(if mode & 0o400 != 0 { 'r' } else { '-' });
+    s.push(if mode & 0o200 != 0 { 'w' } else { '-' });
+    s.push(match (mode & 0o100 != 0, mode & 0o4000 != 0) {
+        (true, true) => 's',
+        (false, true) => 'S',
+        (true, false) => 'x',
+        (false, false) => '-',
+    });
+
+    // Group
+    s.push(if mode & 0o040 != 0 { 'r' } else { '-' });
+    s.push(if mode & 0o020 != 0 { 'w' } else { '-' });
+    s.push(match (mode & 0o010 != 0, mode & 0o2000 != 0) {
+        (true, true) => 's',
+        (false, true) => 'S',
+        (true, false) => 'x',
+        (false, false) => '-',
+    });
+
+    // Other
+    s.push(if mode & 0o004 != 0 { 'r' } else { '-' });
+    s.push(if mode & 0o002 != 0 { 'w' } else { '-' });
+    s.push(match (mode & 0o001 != 0, mode & 0o1000 != 0) {
+        (true, true) => 't',
+        (false, true) => 'T',
+        (true, false) => 'x',
+        (false, false) => '-',
+    });
+
+    s
+}
+
+#[cfg(test)]
+#[path = "state_test.rs"]
+mod state_test;

@@ -1,13 +1,18 @@
 mod actions;
+pub(super) mod delegate;
 mod render;
 
-use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use gpui::*;
+use gpui_component::table::TableState;
 
 use zero::dedup::DedupProgress;
+
+use crate::services::SearchService;
+
+use delegate::DedupDelegate;
 
 // -- Events emitted to the parent ZeroApp ------------------------------------
 
@@ -19,33 +24,6 @@ pub enum DedupEvent {
 impl EventEmitter<DedupEvent> for DedupView {}
 
 // -- Types -------------------------------------------------------------------
-
-/// Sort order for duplicate groups.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-pub(super) enum DedupSort {
-    /// By wasted space (most waste first).
-    #[default]
-    Savings,
-    /// By individual file size (largest first).
-    Size,
-    /// By number of copies (most copies first).
-    Count,
-    /// Alphabetical by filename.
-    Name,
-}
-
-impl DedupSort {
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Savings => "Savings",
-            Self::Size => "Size",
-            Self::Count => "Count",
-            Self::Name => "Name",
-        }
-    }
-
-    pub const ALL: &[DedupSort] = &[Self::Savings, Self::Size, Self::Count, Self::Name];
-}
 
 /// File type filter for dedup scans.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -83,19 +61,10 @@ impl DedupFilter {
     ];
 }
 
-pub(super) struct DuplicateGroup {
-    #[allow(dead_code)]
-    pub hash: String,
-    pub size: u64,
-    pub files: Vec<PathBuf>,
-    pub expanded: bool,
-}
-
 // -- View state --------------------------------------------------------------
 
 pub struct DedupView {
-    pub(super) groups: Vec<DuplicateGroup>,
-    pub(super) selected_for_deletion: HashSet<PathBuf>,
+    pub(super) table: Option<Entity<TableState<DedupDelegate>>>,
     pub(super) scanning: bool,
     pub(super) deleting: bool,
     pub(super) scan_complete: bool,
@@ -103,16 +72,15 @@ pub struct DedupView {
     pub(super) scan_status: Option<String>,
     pub(super) confirm_delete: bool,
     pub(super) active_filter: DedupFilter,
-    pub(super) sort_order: DedupSort,
+    pub(super) search: Entity<SearchService>,
     #[allow(dead_code)]
     focus_handle: FocusHandle,
 }
 
 impl DedupView {
-    pub fn new(cx: &mut Context<Self>) -> Self {
+    pub fn new(search: Entity<SearchService>, cx: &mut Context<Self>) -> Self {
         Self {
-            groups: Vec::new(),
-            selected_for_deletion: HashSet::new(),
+            table: None,
             scanning: false,
             deleting: false,
             scan_complete: false,
@@ -120,7 +88,7 @@ impl DedupView {
             scan_status: None,
             confirm_delete: false,
             active_filter: DedupFilter::All,
-            sort_order: DedupSort::default(),
+            search,
             focus_handle: cx.focus_handle(),
         }
     }

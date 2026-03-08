@@ -19,7 +19,7 @@ use zero::scanner::CrawlProgress;
 
 use gpui_component::theme::ThemeMode;
 
-use crate::services::{SearchEvent, SearchService};
+use crate::services::{McpService, SearchEvent, SearchService};
 use crate::session::Settings;
 use crate::theme::{self, FONT_SIZE_BODY};
 
@@ -48,6 +48,7 @@ pub struct SettingsView {
     pub(super) active_tab: SettingsTab,
     pub(super) settings: Settings,
     pub(super) search: Entity<SearchService>,
+    pub(super) mcp: Entity<McpService>,
     pub(super) mode_select: Entity<SelectState<Vec<String>>>,
     pub(super) light_theme_select: Entity<SelectState<Vec<String>>>,
     pub(super) dark_theme_select: Entity<SelectState<Vec<String>>>,
@@ -73,7 +74,12 @@ pub struct SettingsView {
 }
 
 impl SettingsView {
-    pub fn new(search: Entity<SearchService>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(
+        search: Entity<SearchService>,
+        mcp: Entity<McpService>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let root_input =
             cx.new(|cx| InputState::new(window, cx).placeholder("~/Documents, ~/Photos, ..."));
 
@@ -153,6 +159,7 @@ impl SettingsView {
             active_tab: SettingsTab::General,
             settings,
             search,
+            mcp,
             mode_select,
             light_theme_select,
             dark_theme_select,

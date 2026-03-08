@@ -4,3 +4,5 @@ pub mod open;
 pub mod quicklook;
 #[cfg(target_os = "macos")]
 pub mod traffic_lights;
+#[cfg(target_os = "macos")]
+pub mod trash;

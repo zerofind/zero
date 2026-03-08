@@ -56,6 +56,8 @@ struct DriveEntry {
     name: String,
     path: PathBuf,
     is_external: bool,
+    #[allow(dead_code)]
+    fstype: String,
 }
 
 impl AppSidebar {
@@ -82,13 +84,17 @@ impl AppSidebar {
     }
 
     pub fn set_active_view(&mut self, view: ActiveView, cx: &mut Context<Self>) {
-        self.active_view = view;
-        cx.notify();
+        if self.active_view != view {
+            self.active_view = view;
+            cx.notify();
+        }
     }
 
     pub fn set_current_path(&mut self, path: PathBuf, cx: &mut Context<Self>) {
-        self.current_path = path;
-        cx.notify();
+        if self.current_path != path {
+            self.current_path = path;
+            cx.notify();
+        }
     }
 
     pub fn add_bookmark(&mut self, path: PathBuf, cx: &mut Context<Self>) {
@@ -129,19 +135,39 @@ impl AppSidebar {
         cx.notify();
     }
 
-    pub fn set_toolbar_state(&mut self, visible: bool, can_back: bool, can_forward: bool) {
-        self.toolbar_visible = visible;
-        self.can_go_back = can_back;
-        self.can_go_forward = can_forward;
+    pub fn set_toolbar_state(
+        &mut self,
+        visible: bool,
+        can_back: bool,
+        can_forward: bool,
+        cx: &mut Context<Self>,
+    ) {
+        if self.toolbar_visible != visible
+            || self.can_go_back != can_back
+            || self.can_go_forward != can_forward
+        {
+            self.toolbar_visible = visible;
+            self.can_go_back = can_back;
+            self.can_go_forward = can_forward;
+            cx.notify();
+        }
     }
 
     fn discover_drives() -> Vec<DriveEntry> {
+        use crate::views::file_browser::mount::fstype_for_path;
+        use std::path::Path;
+
         let mut drives = Vec::new();
+
+        let root_fstype = fstype_for_path(Path::new("/"))
+            .unwrap_or("apfs")
+            .to_uppercase();
 
         drives.push(DriveEntry {
             name: "Macintosh HD".into(),
             path: PathBuf::from("/"),
             is_external: false,
+            fstype: root_fstype,
         });
 
         if let Ok(entries) = std::fs::read_dir("/Volumes") {
@@ -151,10 +177,12 @@ impl AppSidebar {
                 if name == "Macintosh HD" {
                     continue;
                 }
+                let fstype = fstype_for_path(&path).unwrap_or("").to_uppercase();
                 drives.push(DriveEntry {
                     name,
                     path,
                     is_external: true,
+                    fstype,
                 });
             }
         }
@@ -292,6 +320,7 @@ impl AppSidebar {
     fn render_pinned_bookmarks(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let muted = cx.theme().muted_foreground;
         let sidebar = cx.entity().clone();
+        let active_bm = self.active_bookmark_path();
 
         let items: Vec<_> = self
             .pinned_bookmarks
@@ -310,7 +339,7 @@ impl AppSidebar {
                     _ => IconName::Folder,
                 };
 
-                let is_active = self.current_path.starts_with(path);
+                let is_active = active_bm == Some(path);
                 let is_system = Settings::is_system_bookmark(path);
                 let p = path.clone();
 
@@ -408,6 +437,7 @@ impl AppSidebar {
         }
 
         let sidebar = cx.entity().clone();
+        let active_bm = self.active_bookmark_path();
 
         let items: Vec<_> = self
             .bookmarks
@@ -420,7 +450,7 @@ impl AppSidebar {
                     .unwrap_or_else(|| path.to_string_lossy().to_string());
 
                 let icon = bookmark_icon(&name);
-                let is_active = self.current_path.starts_with(path);
+                let is_active = active_bm == Some(path);
                 let is_system = Settings::is_system_bookmark(path);
                 let p = path.clone();
                 let ctx_open = path.clone();
@@ -500,17 +530,52 @@ impl AppSidebar {
             .children(items)
     }
 
-    fn any_bookmark_matches(&self) -> bool {
+    /// The single most-specific bookmark whose path is a prefix of `current_path`.
+    /// Only returns a match when the active view is a file browser — tools, settings,
+    /// etc. should never co-highlight a bookmark.
+    fn active_bookmark_path(&self) -> Option<&PathBuf> {
+        if !matches!(self.active_view, ActiveView::FileBrowser(_)) {
+            return None;
+        }
         self.pinned_bookmarks
             .iter()
             .chain(self.bookmarks.iter())
-            .any(|b| self.current_path.starts_with(b))
+            .filter(|b| self.current_path.starts_with(b))
+            .max_by_key(|b| b.as_os_str().len())
+    }
+
+    fn render_tools(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let is_cleanup = matches!(
+            self.active_view,
+            ActiveView::Cleanup | ActiveView::CleanupDetail(_)
+        );
+        let is_dedup = self.active_view == ActiveView::Dedup;
+
+        v_flex()
+            .gap_0p5()
+            .child(SectionHeader::new("TOOLS"))
+            .child(
+                SidebarRow::new("nav-cleanup", "Cleanup", IconName::Delete)
+                    .active(is_cleanup)
+                    .on_click(cx.listener(move |_, _, _, cx| {
+                        cx.emit(SidebarEvent::Navigate(ActiveView::Cleanup));
+                    })),
+            )
+            .child(
+                SidebarRow::new("nav-dedup", "Duplicates", IconName::Copy)
+                    .active(is_dedup)
+                    .on_click(cx.listener(move |_, _, _, cx| {
+                        cx.emit(SidebarEvent::Navigate(ActiveView::Dedup));
+                    })),
+            )
     }
 
     fn render_drives(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        // Only highlight a drive if no bookmark already claims the current path.
-        // This prevents Macintosh HD (/) from always appearing active.
-        let active_drive_idx = if self.any_bookmark_matches() {
+        // Only highlight a drive when browsing files and no bookmark already
+        // claims the path. Non-browser views (tools, settings) never highlight.
+        let active_drive_idx = if !matches!(self.active_view, ActiveView::FileBrowser(_))
+            || self.active_bookmark_path().is_some()
+        {
             None
         } else {
             self.drives
@@ -666,7 +731,8 @@ impl Render for AppSidebar {
                 .overflow_y_scroll()
                 .child(self.render_pinned_bookmarks(cx))
                 .child(self.render_regular_bookmarks(cx))
-                .child(self.render_drives(cx)),
+                .child(self.render_drives(cx))
+                .child(self.render_tools(cx)),
         )
         // Settings pinned at bottom
         .child(self.render_settings_row(cx))

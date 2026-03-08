@@ -9,6 +9,6 @@ mod hash;
 
 pub use algorithm::HashAlgorithm;
 pub use hash::{
-    HashError, HashResult, hash_file, hash_file_with_atomic_progress, hash_file_with_buffer,
-    hash_file_with_progress,
+    HashError, HashResult, hash_file, hash_file_prefix, hash_file_with_atomic_progress,
+    hash_file_with_buffer, hash_file_with_progress,
 };

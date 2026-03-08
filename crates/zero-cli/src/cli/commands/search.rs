@@ -7,7 +7,8 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use zero::index::{
-    FileTypeCategory, IndexWatcher, SearchIndex, SearchQuery, WatcherConfig, persistence,
+    FileTypeCategory, IndexManager, IndexWatcher, SearchIndex, SearchQuery, WatcherConfig,
+    hash_path, persistence,
 };
 use zero::output::*;
 use zero::scanner::CrawlProgress;
@@ -48,34 +49,46 @@ pub fn cmd_search_index(
         eprintln!();
     });
 
-    // Build index
-    let mut index = SearchIndex::new();
-    index.build_from_path_with_progress(path, Some(progress))?;
+    if let Some(custom_path) = cache_path {
+        // Custom path: build a standalone index and save directly
+        let mut index = SearchIndex::new();
+        index.build_from_path_with_progress(path, Some(progress))?;
 
-    // Stop progress display
-    stop_flag.store(true, std::sync::atomic::Ordering::Relaxed);
-    let _ = progress_handle.join();
+        stop_flag.store(true, std::sync::atomic::Ordering::Relaxed);
+        let _ = progress_handle.join();
 
-    let duration = start.elapsed();
+        let duration = start.elapsed();
+        out.info(&format!(
+            "Indexed {} files ({:.1} MB) in {:.2}s",
+            index.file_count(),
+            index.total_bytes() as f64 / 1_000_000.0,
+            duration.as_secs_f64()
+        ));
+        out.indented(&format!("{} unique filenames", index.unique_names()));
 
-    out.info(&format!(
-        "Indexed {} files ({:.1} MB) in {:.2}s",
-        index.file_count(),
-        index.total_bytes() as f64 / 1_000_000.0,
-        duration.as_secs_f64()
-    ));
-    out.indented(&format!("{} unique filenames", index.unique_names()));
-
-    // Save index as compressed snapshot
-    let index_path = if let Some(p) = cache_path {
-        p.to_path_buf()
+        out.info(&format!("Saving index to {}", custom_path.display()));
+        persistence::save_index(&index, custom_path)?;
     } else {
-        zero::dirs::legacy_index_dir()
-            .ok_or_else(|| anyhow::anyhow!("Could not determine cache directory"))?
-    };
+        // Default: use IndexManager (saves to ~/.zero/indexes/)
+        let mut manager = IndexManager::new()?;
+        let root = path.to_string_lossy().to_string();
+        manager.add_root_with_progress(&root, Some(progress))?;
 
-    out.info(&format!("Saving index to {}", index_path.display()));
-    persistence::save_index(&index, &index_path)?;
+        stop_flag.store(true, std::sync::atomic::Ordering::Relaxed);
+        let _ = progress_handle.join();
+
+        let duration = start.elapsed();
+        let stats = manager.root_stats(&root);
+        let file_count = stats.as_ref().map(|s| s.file_count).unwrap_or(0);
+        let total_bytes = stats.as_ref().map(|s| s.total_bytes).unwrap_or(0);
+
+        out.info(&format!(
+            "Indexed {} files ({:.1} MB) in {:.2}s",
+            file_count,
+            total_bytes as f64 / 1_000_000.0,
+            duration.as_secs_f64()
+        ));
+    }
 
     out.success("Search index built successfully");
 
@@ -111,21 +124,33 @@ pub fn cmd_search(out: &Outputter, opts: &SearchOptions<'_>) -> anyhow::Result<(
     } = *opts;
     let total_start = Instant::now();
 
-    // Load index from snapshot
+    // Load index
     let load_start = Instant::now();
-    let index_path = if let Some(p) = cache_path {
-        p.to_path_buf()
-    } else {
-        zero::dirs::legacy_index_dir()
-            .ok_or_else(|| anyhow::anyhow!("Could not determine cache directory"))?
-    };
 
-    if !index_path.is_file() {
-        out.error("Search index not found. Run 'zero search --index <path>' first.");
-        return Ok(());
+    enum IndexSource {
+        Standalone(Box<SearchIndex>),
+        Manager(Box<IndexManager>),
     }
 
-    let index = persistence::load_index(&index_path)?;
+    let source = if let Some(p) = cache_path {
+        if !p.is_file() {
+            out.error("Search index not found at specified path.");
+            return Ok(());
+        }
+        IndexSource::Standalone(Box::new(persistence::load_index(p)?))
+    } else {
+        let mgr = IndexManager::load()?;
+        if mgr.total_file_count() == 0 {
+            out.error("Search index not found. Run 'zero search --index <path>' first.");
+            return Ok(());
+        }
+        IndexSource::Manager(Box::new(mgr))
+    };
+
+    let index: &SearchIndex = match &source {
+        IndexSource::Standalone(idx) => idx,
+        IndexSource::Manager(mgr) => mgr.indexes().next().unwrap(),
+    };
     let load_duration = load_start.elapsed();
 
     let search_start = Instant::now();
@@ -422,59 +447,42 @@ pub fn cmd_search_watch(
 ) -> anyhow::Result<()> {
     out.header(&format!("Watching {} for changes", path.display()));
 
-    // Load or build index
-    let index_path = if let Some(p) = cache_path {
-        p.to_path_buf()
+    // Load or build index, and determine save path for periodic snapshots
+    let (index, save_path) = if let Some(custom_path) = cache_path {
+        if custom_path.is_file() {
+            out.info(&format!(
+                "Loading existing index from {}",
+                custom_path.display()
+            ));
+            (
+                persistence::load_index(custom_path)?,
+                custom_path.to_path_buf(),
+            )
+        } else {
+            out.info("Building initial index...");
+            let mut index = SearchIndex::new();
+            index.build_from_path(path)?;
+            persistence::save_index(&index, custom_path)?;
+            (index, custom_path.to_path_buf())
+        }
     } else {
-        zero::dirs::legacy_index_dir()
-            .ok_or_else(|| anyhow::anyhow!("Could not determine cache directory"))?
-    };
+        let root = path.to_string_lossy().to_string();
+        let manager = IndexManager::load()?;
+        let idx_path = manager
+            .indexes_dir()
+            .join(format!("{}.zidx", hash_path(&root)));
 
-    let index = if index_path.is_file() {
-        out.info(&format!(
-            "Loading existing index from {}",
-            index_path.display()
-        ));
-        persistence::load_index(&index_path)?
-    } else {
-        out.info("Building initial index...");
-        let progress = Arc::new(CrawlProgress::new());
-        let progress_clone = Arc::clone(&progress);
-
-        let stop_flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let stop_flag_clone = Arc::clone(&stop_flag);
-
-        let progress_handle = thread::spawn(move || {
-            while !stop_flag_clone.load(std::sync::atomic::Ordering::Relaxed) {
-                let files = progress_clone.files();
-                let bytes = progress_clone.bytes();
-                eprint!(
-                    "\r  Scanning... {} files ({:.1} MB)    ",
-                    files,
-                    bytes as f64 / 1_000_000.0
-                );
-                thread::sleep(Duration::from_millis(100));
-            }
-            eprintln!();
-        });
-
-        let mut index = SearchIndex::new();
-        index.build_from_path_with_progress(path, Some(progress))?;
-
-        stop_flag.store(true, std::sync::atomic::Ordering::Relaxed);
-        let _ = progress_handle.join();
-
-        out.info(&format!(
-            "Indexed {} files ({:.1} MB)",
-            index.file_count(),
-            index.total_bytes() as f64 / 1_000_000.0
-        ));
-
-        // Save initial index snapshot
-        persistence::save_index(&index, &index_path)?;
-        out.indented(&format!("Saved to {}", index_path.display()));
-
-        index
+        let index = if let Some(idx) = manager.get_index(&root) {
+            out.info("Loading existing index...");
+            idx.clone()
+        } else {
+            out.info("Building initial index...");
+            drop(manager);
+            let mut mgr = IndexManager::new()?;
+            mgr.add_root(&root)?;
+            mgr.get_index(&root).cloned().unwrap_or_default()
+        };
+        (index, idx_path)
     };
 
     out.info(&format!(
@@ -525,7 +533,7 @@ pub fn cmd_search_watch(
 
             // Save index periodically when there are changes (every 10 events)
             if stats.events_processed >= last_save_processed + 10 {
-                if let Err(e) = persistence::save_index(&idx, &index_path) {
+                if let Err(e) = persistence::save_index(&idx, &save_path) {
                     out.warn(&format!("Failed to save index: {}", e));
                 } else {
                     out.indented(&format!(

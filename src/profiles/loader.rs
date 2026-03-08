@@ -25,7 +25,9 @@ use std::path::PathBuf;
 use std::sync::OnceLock;
 
 use super::error::{ProfileError, ProfileResult};
-use super::schema::{CleanupCategory, CleanupGroup, CleanupProfile, FileTypesProfile, Os};
+use super::schema::{
+    AggregateMode, CleanupCategory, CleanupGroup, CleanupProfile, FileTypesProfile, Os,
+};
 
 use toml;
 
@@ -101,6 +103,12 @@ pub struct ResolvedCleanupCategory {
 
     /// Paths to exclude
     pub exclude: Vec<String>,
+
+    /// Sibling file required in parent dir for pattern to match
+    pub sibling: Option<String>,
+
+    /// How to aggregate results (file-level or directory-level)
+    pub aggregate: AggregateMode,
 }
 
 impl MergedCleanupProfile {
@@ -239,6 +247,27 @@ pub fn load_cleanup_for_os(os: Os) -> ProfileResult<MergedCleanupProfile> {
         {
             merge_user_cleanup_profile(&mut merged, user_os, os)?;
         }
+
+        // Load profile packs from ~/.zero/profiles/cleanup/packs/*.toml
+        let packs_dir = cleanup_dir.join("packs");
+        if packs_dir.is_dir() {
+            let mut pack_files: Vec<PathBuf> = fs::read_dir(&packs_dir)
+                .into_iter()
+                .flatten()
+                .filter_map(|e| e.ok())
+                .map(|e| e.path())
+                .filter(|p| p.extension().is_some_and(|ext| ext == "toml"))
+                .collect();
+            pack_files.sort();
+
+            for pack_file in pack_files {
+                if let Ok(content) = fs::read_to_string(&pack_file)
+                    && let Ok(pack) = toml::from_str::<CleanupProfile>(&content)
+                {
+                    merge_user_cleanup_profile(&mut merged, pack, os)?;
+                }
+            }
+        }
     }
 
     Ok(merged)
@@ -280,6 +309,12 @@ fn merge_user_cleanup_profile(
             if !resolved.exclude.is_empty() {
                 // Append user excludes to existing excludes
                 existing.exclude.extend(resolved.exclude);
+            }
+            if resolved.sibling.is_some() {
+                existing.sibling = resolved.sibling;
+            }
+            if resolved.aggregate != AggregateMode::default() {
+                existing.aggregate = resolved.aggregate;
             }
         } else {
             // New category from user profile
@@ -358,6 +393,8 @@ fn resolve_category(
         min_age_secs,
         min_size_bytes,
         exclude: category.exclude,
+        sibling: category.sibling,
+        aggregate: category.aggregate.unwrap_or_default(),
     })
 }
 

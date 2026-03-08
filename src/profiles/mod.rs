@@ -49,6 +49,6 @@ pub use loader::{
     load_cleanup, load_cleanup_for_os, load_file_types, user_profiles_dir,
 };
 pub use schema::{
-    CleanupCategory, CleanupGroup, CleanupProfile, FileTypeConfig, FileTypesProfile, MatchPatterns,
-    Os,
+    AggregateMode, CleanupCategory, CleanupGroup, CleanupProfile, FileTypeConfig, FileTypesProfile,
+    MatchPatterns, Os,
 };

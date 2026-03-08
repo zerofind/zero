@@ -58,11 +58,3 @@ pub fn settings_path() -> Option<PathBuf> {
 pub fn todo_context_path() -> Option<PathBuf> {
     data_dir().map(|d| d.join("todo-context"))
 }
-
-/// Legacy single-file search index directory: `~/.zero/search_index/`
-///
-/// Used by service handler and CLI search commands for the single-root index.
-/// Stored as an etch WAL directory.
-pub fn legacy_index_dir() -> Option<PathBuf> {
-    data_dir().map(|d| d.join("search_index"))
-}

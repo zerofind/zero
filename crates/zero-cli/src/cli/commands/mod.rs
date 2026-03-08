@@ -1,6 +1,7 @@
 //! Command handlers for CLI operations
 
 pub mod automation;
+pub mod cleanup;
 pub mod cloud;
 pub mod delete;
 pub mod diff;
@@ -18,6 +19,7 @@ pub mod verify;
 pub mod watch;
 
 pub use automation::*;
+pub use cleanup::*;
 pub use cloud::*;
 pub use delete::*;
 pub use diff::*;

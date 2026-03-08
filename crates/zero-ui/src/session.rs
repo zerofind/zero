@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
+use zero_llm::LlmConfig;
 
 /// Persisted user settings — survives across app restarts.
 #[derive(Serialize, Deserialize)]
@@ -50,6 +51,22 @@ pub struct Settings {
 
     #[serde(default)]
     pub toolbar_visible: bool,
+
+    /// Visible columns in the file browser (serialized FileColumn names).
+    #[serde(default)]
+    pub visible_columns: Vec<String>,
+
+    /// Whether the MCP server is enabled.
+    #[serde(default)]
+    pub mcp_enabled: bool,
+
+    /// Port for the MCP HTTP server.
+    #[serde(default = "default_mcp_port")]
+    pub mcp_port: u16,
+
+    /// LLM agent configuration.
+    #[serde(default)]
+    pub llm: LlmConfig,
 }
 
 fn default_theme_mode() -> String {
@@ -72,6 +89,10 @@ fn default_true() -> bool {
     true
 }
 
+fn default_mcp_port() -> u16 {
+    45557
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
@@ -90,6 +111,10 @@ impl Default for Settings {
             auto_update: default_true(),
             onboarding_complete: false,
             toolbar_visible: false,
+            visible_columns: Vec::new(),
+            mcp_enabled: false,
+            mcp_port: default_mcp_port(),
+            llm: LlmConfig::default(),
         }
     }
 }

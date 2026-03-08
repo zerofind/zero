@@ -1,3 +1,4 @@
+pub mod ask;
 pub mod automations;
 pub mod cleanup;
 pub mod command_palette;
@@ -12,11 +13,13 @@ pub mod onboarding;
 pub mod secure_erase;
 pub mod settings;
 pub mod sidebar;
+pub mod terminal;
 pub mod todo;
 
+pub use ask::{AskView, AskViewEvent};
 pub use automations::AutomationsView;
-pub use cleanup::CleanupView;
-pub use command_palette::{PaletteEvent, PaletteView};
+pub use cleanup::{CleanupView, CleanupViewEvent};
+pub use command_palette::{PaletteEvent, PaletteView, StorageEntry};
 pub use data_table::{DataTableEvent, DataTableView};
 pub use dedup::{DedupEvent, DedupView};
 pub use drives_popover::DrivesPopover;
@@ -28,4 +31,5 @@ pub use onboarding::{OnboardingEvent, OnboardingView};
 pub use secure_erase::SecureEraseView;
 pub use settings::{SettingsEvent, SettingsView};
 pub use sidebar::AppSidebar;
+pub use terminal::{TerminalView, TerminalViewEvent};
 pub use todo::TodoView;

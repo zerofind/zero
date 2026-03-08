@@ -4,6 +4,7 @@
 //! zstd-compressed. Single `.zidx` file per root.
 
 use std::fs;
+use std::io::Cursor;
 use std::path::Path;
 
 use super::node::FileNode;
@@ -43,8 +44,7 @@ pub fn load_index(path: &Path) -> Result<SearchIndex, IndexError> {
         return Err(IndexError::Serialize("invalid snapshot magic".into()));
     }
 
-    let decompressed =
-        zstd::bulk::decompress(&data[4..], 256 * 1024 * 1024).map_err(IndexError::Io)?;
+    let decompressed = zstd::stream::decode_all(Cursor::new(&data[4..])).map_err(IndexError::Io)?;
 
     let (roots, nodes): (Vec<String>, Vec<FileNode>) =
         postcard::from_bytes(&decompressed).map_err(|e| IndexError::Serialize(e.to_string()))?;

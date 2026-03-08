@@ -8,6 +8,8 @@
 [node_modules]
 name = "node_modules"
 patterns = ["**/node_modules"]
+sibling = "package.json"
+aggregate = "directory"
 group = "developer"
 description = "Node.js dependency folders"
 warning = "Run 'npm install' to restore dependencies"
@@ -15,6 +17,8 @@ warning = "Run 'npm install' to restore dependencies"
 [rust_target]
 name = "Rust Build Cache"
 patterns = ["**/target"]
+sibling = "Cargo.toml"
+aggregate = "directory"
 group = "developer"
 description = "Rust compilation artifacts (can be regenerated with cargo build)"
 
@@ -62,6 +66,103 @@ patterns = ["~/.nuget/packages", "~/.dotnet"]
 group = "developer"
 description = "NuGet packages cache"
 warning = "Run 'dotnet restore' to restore packages"
+
+# --- New developer categories ---
+
+[nextjs_cache]
+name = "Next.js Build Cache"
+patterns = ["**/.next"]
+sibling = "package.json"
+aggregate = "directory"
+group = "developer"
+description = "Next.js build output and cache"
+warning = "Run 'next build' to regenerate"
+
+[python_venv]
+name = "Python Virtual Env"
+patterns = ["**/.venv", "**/venv"]
+sibling = "pyproject.toml"
+aggregate = "directory"
+group = "developer"
+description = "Python virtual environments"
+warning = "Run 'python -m venv .venv && pip install -r requirements.txt' to restore"
+
+[tox_cache]
+name = "Tox Environments"
+patterns = ["**/.tox"]
+sibling = "tox.ini"
+aggregate = "directory"
+group = "developer"
+description = "Tox test environments"
+warning = "Run 'tox' to recreate"
+
+[flutter_build]
+name = "Flutter Build Cache"
+patterns = ["**/build"]
+sibling = "pubspec.yaml"
+aggregate = "directory"
+group = "developer"
+description = "Flutter/Dart build artifacts"
+warning = "Run 'flutter build' to regenerate"
+
+[zig_cache]
+name = "Zig Build Cache"
+patterns = ["**/zig-cache", "**/zig-out"]
+sibling = "build.zig"
+aggregate = "directory"
+group = "developer"
+description = "Zig build artifacts"
+
+[cmake_build]
+name = "CMake Build"
+patterns = ["**/build"]
+sibling = "CMakeLists.txt"
+aggregate = "directory"
+group = "developer"
+description = "CMake build directories"
+
+[elixir_build]
+name = "Elixir Build"
+patterns = ["**/_build", "**/deps"]
+sibling = "mix.exs"
+aggregate = "directory"
+group = "developer"
+description = "Elixir/Mix build artifacts and dependencies"
+warning = "Run 'mix deps.get && mix compile' to restore"
+
+[ruby_vendor]
+name = "Ruby Bundled Gems"
+patterns = ["**/vendor/bundle"]
+sibling = "Gemfile"
+aggregate = "directory"
+group = "developer"
+description = "Ruby vendored gem dependencies"
+warning = "Run 'bundle install' to restore"
+
+[cocoapods_proj]
+name = "CocoaPods"
+patterns = ["**/Pods"]
+sibling = "Podfile"
+aggregate = "directory"
+group = "developer"
+description = "CocoaPods project dependencies"
+warning = "Run 'pod install' to restore"
+
+[parcel_cache]
+name = "Parcel Cache"
+patterns = ["**/.parcel-cache"]
+sibling = "package.json"
+aggregate = "directory"
+group = "developer"
+description = "Parcel bundler cache"
+
+[turbo_cache]
+name = "Turborepo Cache"
+patterns = ["**/.turbo"]
+sibling = "turbo.json"
+aggregate = "directory"
+group = "developer"
+description = "Turborepo local cache"
 
 # =============================================================================
 # System - Generic system files

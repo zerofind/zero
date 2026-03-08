@@ -10,7 +10,7 @@ const DATA_TABLE_EXTENSIONS: &[&str] = &[
 ];
 
 /// Candidate delimiters to test when sniffing CSV content.
-const CANDIDATES: &[u8] = &[b',', b';', b'\t', b'|'];
+const CANDIDATES: &[u8] = b",;\t|";
 
 /// Number of lines to sample when sniffing the delimiter.
 const SNIFF_LINES: usize = 20;
@@ -71,7 +71,7 @@ fn sniff_delimiter(path: &Path) -> Option<u8> {
         }
         if counts.iter().all(|&c| c == first) {
             // Prefer the delimiter that yields more columns (more structure).
-            if best.map_or(true, |(_, prev)| first > prev) {
+            if best.is_none_or(|(_, prev)| first > prev) {
                 best = Some((delim, first));
             }
         }

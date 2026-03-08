@@ -9,6 +9,7 @@ pub use pane::{PaneId, SplitPane};
 pub enum ActiveView {
     FileBrowser(std::path::PathBuf),
     Cleanup,
+    CleanupDetail(usize),
     Dedup,
     Todo,
     Settings,
@@ -32,6 +33,8 @@ pub enum SortField {
     DateModified,
     Size,
     Kind,
+    Permissions,
+    Owner,
 }
 
 /// Sort direction.

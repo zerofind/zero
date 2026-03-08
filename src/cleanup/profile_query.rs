@@ -23,6 +23,7 @@
 //! let developer_results = execute_group_cleanup(&index_manager, CleanupGroup::Developer)?;
 //! ```
 
+use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::index::{FileNode, IndexManager};
@@ -34,28 +35,30 @@ pub struct ProfileCleanupItem {
     /// The file node from the index
     pub node: FileNode,
     /// The category ID that matched
-    pub category_id: String,
+    pub category_id: Arc<str>,
     /// The category display name
-    pub category_name: String,
+    pub category_name: Arc<str>,
     /// The UI group this category belongs to
     pub group: CleanupGroup,
     /// Human-readable reason for flagging
-    pub reason: String,
+    pub reason: Arc<str>,
 }
 
 impl ProfileCleanupItem {
-    /// Create a new cleanup item
-    pub fn new(
+    /// Create a new cleanup item with shared category strings
+    fn with_shared(
         node: FileNode,
-        category: &ResolvedCleanupCategory,
-        reason: impl Into<String>,
+        category_id: Arc<str>,
+        category_name: Arc<str>,
+        group: CleanupGroup,
+        reason: Arc<str>,
     ) -> Self {
         Self {
             node,
-            category_id: category.id.clone(),
-            category_name: category.name.clone(),
-            group: category.group,
-            reason: reason.into(),
+            category_id,
+            category_name,
+            group,
+            reason,
         }
     }
 
@@ -74,9 +77,9 @@ impl ProfileCleanupItem {
 #[derive(Debug, Clone)]
 pub struct ProfileCleanupResult {
     /// The category ID queried
-    pub category_id: String,
+    pub category_id: Arc<str>,
     /// The category display name
-    pub category_name: String,
+    pub category_name: Arc<str>,
     /// The UI group
     pub group: CleanupGroup,
     /// Items found
@@ -91,25 +94,31 @@ pub struct ProfileCleanupResult {
 
 impl ProfileCleanupResult {
     /// Create a new result
-    pub fn new(category: &ResolvedCleanupCategory, items: Vec<ProfileCleanupItem>) -> Self {
+    pub fn new(
+        cat_id: Arc<str>,
+        cat_name: Arc<str>,
+        group: CleanupGroup,
+        warning: Option<String>,
+        items: Vec<ProfileCleanupItem>,
+    ) -> Self {
         let total_bytes = items.iter().map(|i| i.size()).sum();
         let count = items.len();
         Self {
-            category_id: category.id.clone(),
-            category_name: category.name.clone(),
-            group: category.group,
+            category_id: cat_id,
+            category_name: cat_name,
+            group,
             items,
             total_bytes,
             count,
-            warning: category.warning.clone(),
+            warning,
         }
     }
 
     /// Create an empty result
     pub fn empty(category: &ResolvedCleanupCategory) -> Self {
         Self {
-            category_id: category.id.clone(),
-            category_name: category.name.clone(),
+            category_id: Arc::from(category.id.as_str()),
+            category_name: Arc::from(category.name.as_str()),
             group: category.group,
             items: Vec::new(),
             total_bytes: 0,
@@ -170,6 +179,7 @@ pub struct ProfileCleanupQuery<'a> {
     min_age_override: Option<u64>,
 }
 
+#[allow(clippy::too_many_arguments)]
 impl<'a> ProfileCleanupQuery<'a> {
     /// Create a query from a resolved category
     pub fn from_category(category: &'a ResolvedCleanupCategory) -> Self {
@@ -213,12 +223,26 @@ impl<'a> ProfileCleanupQuery<'a> {
         // Determine size minimum
         let min_size = self.min_size_override.or(self.category.min_size_bytes);
 
+        // Pre-create shared arcs for category strings (one atomic inc per item instead of full string clone)
+        let cat_id: Arc<str> = Arc::from(self.category.id.as_str());
+        let cat_name: Arc<str> = Arc::from(self.category.name.as_str());
+
         let mut items: Vec<ProfileCleanupItem> = Vec::new();
 
         // Execute different strategies based on pattern types
         if !self.category.patterns.is_empty() {
-            self.execute_pattern_query(manager, &mut items, cutoff_time, min_size);
+            self.execute_pattern_query(
+                manager,
+                &mut items,
+                cutoff_time,
+                min_size,
+                &cat_id,
+                &cat_name,
+            );
         }
+
+        // Filter out stale entries (files deleted since last index)
+        items.retain(|item| std::path::Path::new(item.path()).exists());
 
         // Sort by size descending
         items.sort_by_key(|a| std::cmp::Reverse(a.size()));
@@ -226,7 +250,13 @@ impl<'a> ProfileCleanupQuery<'a> {
         // Apply limit
         items.truncate(self.limit);
 
-        ProfileCleanupResult::new(self.category, items)
+        ProfileCleanupResult::new(
+            cat_id,
+            cat_name,
+            self.category.group,
+            self.category.warning.clone(),
+            items,
+        )
     }
 
     /// Execute pattern-based queries
@@ -236,19 +266,45 @@ impl<'a> ProfileCleanupQuery<'a> {
         items: &mut Vec<ProfileCleanupItem>,
         cutoff_time: Option<u64>,
         min_size: Option<u64>,
+        cat_id: &Arc<str>,
+        cat_name: &Arc<str>,
     ) {
         for pattern in &self.category.patterns {
             // Determine pattern type and execute appropriate query
             if let Some(path_pattern) = pattern.strip_prefix("~/") {
                 // Fixed path relative to home
-                self.query_fixed_path(manager, items, path_pattern, cutoff_time, min_size);
+                self.query_fixed_path(
+                    manager,
+                    items,
+                    path_pattern,
+                    cutoff_time,
+                    min_size,
+                    cat_id,
+                    cat_name,
+                );
             } else if pattern.starts_with("**/") {
                 // Recursive glob pattern
                 let search_term = pattern.trim_start_matches("**/");
-                self.query_recursive_pattern(manager, items, search_term, cutoff_time, min_size);
+                self.query_recursive_pattern(
+                    manager,
+                    items,
+                    search_term,
+                    cutoff_time,
+                    min_size,
+                    cat_id,
+                    cat_name,
+                );
             } else {
                 // Treat as search term
-                self.query_search_term(manager, items, pattern, cutoff_time, min_size);
+                self.query_search_term(
+                    manager,
+                    items,
+                    pattern,
+                    cutoff_time,
+                    min_size,
+                    cat_id,
+                    cat_name,
+                );
             }
         }
     }
@@ -261,6 +317,8 @@ impl<'a> ProfileCleanupQuery<'a> {
         path_pattern: &str,
         cutoff_time: Option<u64>,
         min_size: Option<u64>,
+        cat_id: &Arc<str>,
+        cat_name: &Arc<str>,
     ) {
         // Expand ~ to home directory
         let home = dirs::home_dir();
@@ -281,8 +339,14 @@ impl<'a> ProfileCleanupQuery<'a> {
                 && self.matches_filters(&result.node, cutoff_time, min_size)
                 && !self.is_excluded(&result.node.path)
             {
-                let reason = self.generate_reason(&result.node);
-                items.push(ProfileCleanupItem::new(result.node, self.category, reason));
+                let reason: Arc<str> = Arc::from(self.generate_reason(&result.node));
+                items.push(ProfileCleanupItem::with_shared(
+                    result.node,
+                    Arc::clone(cat_id),
+                    Arc::clone(cat_name),
+                    self.category.group,
+                    reason,
+                ));
 
                 if items.len() >= self.limit {
                     return;
@@ -299,22 +363,56 @@ impl<'a> ProfileCleanupQuery<'a> {
         search_term: &str,
         cutoff_time: Option<u64>,
         min_size: Option<u64>,
+        cat_id: &Arc<str>,
+        cat_name: &Arc<str>,
     ) {
         // Handle different pattern types
         if search_term.starts_with('.') {
             // Filename pattern like .DS_Store
-            self.query_filename_pattern(manager, items, search_term, cutoff_time, min_size);
+            self.query_filename_pattern(
+                manager,
+                items,
+                search_term,
+                cutoff_time,
+                min_size,
+                cat_id,
+                cat_name,
+            );
         } else if search_term.starts_with("*.") {
             // Extension pattern like *.dmg
             let ext = search_term.trim_start_matches("*.");
-            self.query_extension_pattern(manager, items, ext, cutoff_time, min_size);
+            self.query_extension_pattern(
+                manager,
+                items,
+                ext,
+                cutoff_time,
+                min_size,
+                cat_id,
+                cat_name,
+            );
         } else if search_term.ends_with("/*") {
             // Directory contents pattern
             let dir_name = search_term.trim_end_matches("/*");
-            self.query_directory_contents(manager, items, dir_name, cutoff_time, min_size);
+            self.query_directory_contents(
+                manager,
+                items,
+                dir_name,
+                cutoff_time,
+                min_size,
+                cat_id,
+                cat_name,
+            );
         } else {
             // Folder name pattern like node_modules
-            self.query_folder_pattern(manager, items, search_term, cutoff_time, min_size);
+            self.query_folder_pattern(
+                manager,
+                items,
+                search_term,
+                cutoff_time,
+                min_size,
+                cat_id,
+                cat_name,
+            );
         }
     }
 
@@ -326,6 +424,8 @@ impl<'a> ProfileCleanupQuery<'a> {
         filename: &str,
         cutoff_time: Option<u64>,
         min_size: Option<u64>,
+        cat_id: &Arc<str>,
+        cat_name: &Arc<str>,
     ) {
         // Search for the exact filename
         let results = manager.search(filename, self.limit);
@@ -335,8 +435,14 @@ impl<'a> ProfileCleanupQuery<'a> {
                 && self.matches_filters(&result.node, cutoff_time, min_size)
                 && !self.is_excluded(&result.node.path)
             {
-                let reason = self.generate_reason(&result.node);
-                items.push(ProfileCleanupItem::new(result.node, self.category, reason));
+                let reason: Arc<str> = Arc::from(self.generate_reason(&result.node));
+                items.push(ProfileCleanupItem::with_shared(
+                    result.node,
+                    Arc::clone(cat_id),
+                    Arc::clone(cat_name),
+                    self.category.group,
+                    reason,
+                ));
 
                 if items.len() >= self.limit {
                     return;
@@ -356,6 +462,8 @@ impl<'a> ProfileCleanupQuery<'a> {
         ext: &str,
         cutoff_time: Option<u64>,
         min_size: Option<u64>,
+        cat_id: &Arc<str>,
+        cat_name: &Arc<str>,
     ) {
         // Use O(1) extension bitmap lookup instead of text search
         // This is the key optimization: bitmap lookup vs O(n) text scan
@@ -366,8 +474,14 @@ impl<'a> ProfileCleanupQuery<'a> {
             if self.matches_filters(&result.node, cutoff_time, min_size)
                 && !self.is_excluded(&result.node.path)
             {
-                let reason = self.generate_reason(&result.node);
-                items.push(ProfileCleanupItem::new(result.node, self.category, reason));
+                let reason: Arc<str> = Arc::from(self.generate_reason(&result.node));
+                items.push(ProfileCleanupItem::with_shared(
+                    result.node,
+                    Arc::clone(cat_id),
+                    Arc::clone(cat_name),
+                    self.category.group,
+                    reason,
+                ));
 
                 if items.len() >= self.limit {
                     return;
@@ -384,6 +498,8 @@ impl<'a> ProfileCleanupQuery<'a> {
         dir_name: &str,
         cutoff_time: Option<u64>,
         min_size: Option<u64>,
+        cat_id: &Arc<str>,
+        cat_name: &Arc<str>,
     ) {
         // Search for the directory name
         let results = manager.search(dir_name, self.limit.saturating_mul(10));
@@ -394,8 +510,14 @@ impl<'a> ProfileCleanupQuery<'a> {
                 && self.matches_filters(&result.node, cutoff_time, min_size)
                 && !self.is_excluded(&result.node.path)
             {
-                let reason = self.generate_reason(&result.node);
-                items.push(ProfileCleanupItem::new(result.node, self.category, reason));
+                let reason: Arc<str> = Arc::from(self.generate_reason(&result.node));
+                items.push(ProfileCleanupItem::with_shared(
+                    result.node,
+                    Arc::clone(cat_id),
+                    Arc::clone(cat_name),
+                    self.category.group,
+                    reason,
+                ));
 
                 if items.len() >= self.limit {
                     return;
@@ -415,6 +537,8 @@ impl<'a> ProfileCleanupQuery<'a> {
         folder_name: &str,
         cutoff_time: Option<u64>,
         min_size: Option<u64>,
+        cat_id: &Arc<str>,
+        cat_name: &Arc<str>,
     ) {
         // Try O(1) path component bitmap lookup first
         let results = manager.search_by_path_component(folder_name, self.limit.saturating_mul(10));
@@ -422,7 +546,15 @@ impl<'a> ProfileCleanupQuery<'a> {
         if results.is_empty() {
             // Fallback: component may not be in the selective index.
             // Use text search instead.
-            self.query_search_term(manager, items, folder_name, cutoff_time, min_size);
+            self.query_search_term(
+                manager,
+                items,
+                folder_name,
+                cutoff_time,
+                min_size,
+                cat_id,
+                cat_name,
+            );
             return;
         }
 
@@ -430,8 +562,14 @@ impl<'a> ProfileCleanupQuery<'a> {
             if self.matches_filters(&result.node, cutoff_time, min_size)
                 && !self.is_excluded(&result.node.path)
             {
-                let reason = self.generate_reason(&result.node);
-                items.push(ProfileCleanupItem::new(result.node, self.category, reason));
+                let reason: Arc<str> = Arc::from(self.generate_reason(&result.node));
+                items.push(ProfileCleanupItem::with_shared(
+                    result.node,
+                    Arc::clone(cat_id),
+                    Arc::clone(cat_name),
+                    self.category.group,
+                    reason,
+                ));
 
                 if items.len() >= self.limit {
                     return;
@@ -448,6 +586,8 @@ impl<'a> ProfileCleanupQuery<'a> {
         term: &str,
         cutoff_time: Option<u64>,
         min_size: Option<u64>,
+        cat_id: &Arc<str>,
+        cat_name: &Arc<str>,
     ) {
         let results = manager.search(term, self.limit.saturating_mul(10));
 
@@ -455,8 +595,14 @@ impl<'a> ProfileCleanupQuery<'a> {
             if self.matches_filters(&result.node, cutoff_time, min_size)
                 && !self.is_excluded(&result.node.path)
             {
-                let reason = self.generate_reason(&result.node);
-                items.push(ProfileCleanupItem::new(result.node, self.category, reason));
+                let reason: Arc<str> = Arc::from(self.generate_reason(&result.node));
+                items.push(ProfileCleanupItem::with_shared(
+                    result.node,
+                    Arc::clone(cat_id),
+                    Arc::clone(cat_name),
+                    self.category.group,
+                    reason,
+                ));
 
                 if items.len() >= self.limit {
                     return;
@@ -624,7 +770,7 @@ mod tests {
         let result = ProfileCleanupResult::empty(category);
         assert_eq!(result.count, 0);
         assert_eq!(result.total_bytes, 0);
-        assert_eq!(result.category_id, "node_modules");
+        assert_eq!(&*result.category_id, "node_modules");
     }
 
     #[test]
@@ -668,8 +814,8 @@ mod tests {
     #[test]
     fn test_group_summary_totals() {
         let result1 = ProfileCleanupResult {
-            category_id: "test1".into(),
-            category_name: "Test 1".into(),
+            category_id: Arc::from("test1"),
+            category_name: Arc::from("Test 1"),
             group: CleanupGroup::Developer,
             items: vec![],
             total_bytes: 1000,
@@ -678,8 +824,8 @@ mod tests {
         };
 
         let result2 = ProfileCleanupResult {
-            category_id: "test2".into(),
-            category_name: "Test 2".into(),
+            category_id: Arc::from("test2"),
+            category_name: Arc::from("Test 2"),
             group: CleanupGroup::Developer,
             items: vec![],
             total_bytes: 2000,

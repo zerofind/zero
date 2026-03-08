@@ -3,6 +3,7 @@ use gpui::*;
 use gpui_component::{
     ActiveTheme, Disableable as _, Sizable as _,
     button::{Button, ButtonVariants as _},
+    h_flex,
     select::Select,
     switch::Switch,
     v_flex,
@@ -73,7 +74,7 @@ impl SettingsView {
                                 muted,
                                 fg,
                                 border,
-                                false,
+                                true,
                             )),
                     ),
             )
@@ -160,6 +161,120 @@ impl SettingsView {
                             )),
                     ),
             )
+            // MCP Server
+            .child({
+                let mcp_running = self.mcp.read(cx).is_running();
+                let mcp_port = self.mcp.read(cx).port();
+                let mcp_enabled = self.settings.mcp_enabled;
+
+                v_flex()
+                    .gap_3()
+                    .child(group_label("MCP Server", fg))
+                    .child(
+                        v_flex()
+                            .rounded(RADIUS_LG)
+                            .border_1()
+                            .border_color(border)
+                            .overflow_hidden()
+                            .child(setting_row(
+                                "Enable MCP",
+                                "Expose search tools to AI assistants via HTTP on localhost.",
+                                Switch::new("mcp-enabled")
+                                    .checked(mcp_enabled)
+                                    .on_click(cx.listener(|this, checked: &bool, _, cx| {
+                                        this.settings.mcp_enabled = *checked;
+                                        this.settings.save();
+                                        if *checked {
+                                            let manager =
+                                                this.search.read(cx).clone_manager();
+                                            let port = this.settings.mcp_port;
+                                            this.mcp.update(cx, |mcp, cx| {
+                                                mcp.start(manager, port, cx);
+                                            });
+                                        } else {
+                                            this.mcp.update(cx, |mcp, cx| mcp.stop(cx));
+                                        }
+                                        cx.notify();
+                                    }))
+                                    .into_any_element(),
+                                muted,
+                                fg,
+                                border,
+                                true,
+                            ))
+                            .child(setting_row(
+                                "Endpoint",
+                                "Address where MCP clients connect.",
+                                div()
+                                    .text_size(FONT_SIZE_BODY)
+                                    .text_color(muted)
+                                    .child(SharedString::from(format!(
+                                        "localhost:{mcp_port}"
+                                    )))
+                                    .into_any_element(),
+                                muted,
+                                fg,
+                                border,
+                                true,
+                            ))
+                            .child(setting_row(
+                                "API Key",
+                                "Bearer token for authenticating MCP clients.",
+                                h_flex()
+                                    .gap_2()
+                                    .child(
+                                        Button::new("copy-mcp-key")
+                                            .small()
+                                            .rounded(RADIUS)
+                                            .label("Copy")
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                let key = this.mcp.read(cx).api_key().to_string();
+                                                cx.write_to_clipboard(
+                                                    ClipboardItem::new_string(key),
+                                                );
+                                            })),
+                                    )
+                                    .child(
+                                        Button::new("regen-mcp-key")
+                                            .small()
+                                            .rounded(RADIUS)
+                                            .label("Regenerate")
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.mcp.update(cx, |mcp, _| {
+                                                    mcp.regenerate_api_key();
+                                                });
+                                                cx.notify();
+                                            })),
+                                    )
+                                    .into_any_element(),
+                                muted,
+                                fg,
+                                border,
+                                true,
+                            ))
+                            .child(setting_row(
+                                "Status",
+                                "Current MCP server state.",
+                                div()
+                                    .text_size(FONT_SIZE_BODY)
+                                    .text_color(if mcp_running {
+                                        gpui::hsla(0.35, 0.8, 0.45, 1.0)
+                                    } else {
+                                        muted
+                                    })
+                                    .child(SharedString::from(if mcp_running {
+                                        "Running"
+                                    } else {
+                                        "Stopped"
+                                    }))
+                                    .into_any_element(),
+                                muted,
+                                fg,
+                                border,
+                                false,
+                            )),
+                    )
+            })
             // Updates
             .child(
                 v_flex()

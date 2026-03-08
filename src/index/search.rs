@@ -1025,6 +1025,7 @@ impl SearchIndex {
 
         let query_lower = text.to_lowercase();
         let mut results = Vec::new();
+        let limit2 = limit.saturating_mul(2);
 
         // Search main compact name index
         for entry in &self.name_index.entries {
@@ -1047,12 +1048,12 @@ impl SearchIndex {
                         node: node.to_file_node(&self.path_arena),
                         score,
                     });
-                    if results.len() >= limit * 2 {
+                    if results.len() >= limit2 {
                         break;
                     }
                 }
             }
-            if results.len() >= limit * 2 {
+            if results.len() >= limit2 {
                 break;
             }
         }
@@ -1075,12 +1076,12 @@ impl SearchIndex {
                         node: node.to_file_node(&self.path_arena),
                         score,
                     });
-                    if results.len() >= limit * 2 {
+                    if results.len() >= limit2 {
                         break;
                     }
                 }
             }
-            if results.len() >= limit * 2 {
+            if results.len() >= limit2 {
                 break;
             }
         }
@@ -1206,6 +1207,7 @@ impl SearchIndex {
 
         let query_lower = query.to_lowercase();
         let mut results = Vec::new();
+        let limit2 = limit.saturating_mul(2);
 
         // Search through compact name index
         for entry in &self.name_index.entries {
@@ -1226,12 +1228,12 @@ impl SearchIndex {
                         node: node.to_file_node(&self.path_arena),
                         score,
                     });
-                    if results.len() >= limit * 2 {
+                    if results.len() >= limit2 {
                         break;
                     }
                 }
             }
-            if results.len() >= limit * 2 {
+            if results.len() >= limit2 {
                 break;
             }
         }
@@ -1254,12 +1256,12 @@ impl SearchIndex {
                         node: node.to_file_node(&self.path_arena),
                         score,
                     });
-                    if results.len() >= limit * 2 {
+                    if results.len() >= limit2 {
                         break;
                     }
                 }
             }
-            if results.len() >= limit * 2 {
+            if results.len() >= limit2 {
                 break;
             }
         }
@@ -1402,7 +1404,7 @@ impl SearchIndex {
         };
 
         let mut results = Vec::new();
-        let limit2 = options.limit * 2;
+        let limit2 = options.limit.saturating_mul(2);
 
         // Search main compact name index
         for entry in &self.name_index.entries {

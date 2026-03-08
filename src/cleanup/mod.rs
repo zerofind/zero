@@ -35,10 +35,18 @@
 //! let dev_summary = execute_group_cleanup(&index_manager, CleanupGroup::Developer)?;
 //! ```
 
+pub mod dev_scan;
 mod profile_query;
 
 #[cfg(test)]
+mod dev_scan_test;
+#[cfg(test)]
 mod profile_query_test;
+
+// Dev garbage scanner
+pub use dev_scan::{
+    DevGarbageItem, DevScanError, DevScanProgress, DevScanResult, scan_dev_garbage,
+};
 
 // Profile-based cleanup (new system)
 pub use profile_query::{

@@ -8,6 +8,8 @@ use zero::index::{load_index_snapshot, persistence};
 use zero::prelude::{IndexManager, SearchIndex, SearchResult, hash_path};
 use zero::scanner::CrawlProgress;
 
+use crate::views::StorageEntry;
+
 // -- Events ------------------------------------------------------------------
 
 pub enum SearchEvent {
@@ -25,6 +27,8 @@ pub enum SearchEvent {
     IndexCleared,
     /// Live watcher detected changes; N files affected in rebuilt root(s).
     IndexUpdated(()),
+    /// Volume list changed (mount/unmount).
+    StoragesChanged,
 }
 
 impl EventEmitter<SearchEvent> for SearchService {}
@@ -32,53 +36,69 @@ impl EventEmitter<SearchEvent> for SearchService {}
 // -- Service -----------------------------------------------------------------
 
 pub struct SearchService {
-    manager: IndexManager,
+    manager: Arc<IndexManager>,
     roots: Vec<PathBuf>,
+    storages: Vec<StorageEntry>,
     loading: bool,
     indexing: bool,
+    indexing_progress: Option<Arc<CrawlProgress>>,
     watcher_active: bool,
+    usb_watcher_active: bool,
 }
 
 impl SearchService {
     pub fn new(cx: &mut Context<Self>) -> Self {
-        let manager = IndexManager::new().unwrap_or_else(|_| {
+        let manager = IndexManager::new().unwrap_or_else(|e| {
+            tracing::error!(error = %e, "IndexManager::new() failed, falling back to temp dir (indexes will not persist!)");
             let tmp = std::env::temp_dir().join("zero-index");
             IndexManager::with_dir(tmp).expect("Failed to create index manager")
         });
 
+        let storages = StorageEntry::discover();
+
         let mut svc = Self {
-            manager,
+            manager: Arc::new(manager),
             roots: Vec::new(),
+            storages,
             loading: false,
             indexing: false,
+            indexing_progress: None,
             watcher_active: false,
+            usb_watcher_active: false,
         };
         svc.loading = true;
         svc.async_load(cx);
+        svc.start_usb_watcher(cx);
         svc
     }
 
     /// Create without loading indexes or touching the filesystem.
     /// Call `activate()` once FDA is confirmed.
     pub fn new_deferred(_cx: &mut Context<Self>) -> Self {
-        let manager = IndexManager::new().unwrap_or_else(|_| {
+        let manager = IndexManager::new().unwrap_or_else(|e| {
+            tracing::error!(error = %e, "IndexManager::new() failed, falling back to temp dir (indexes will not persist!)");
             let tmp = std::env::temp_dir().join("zero-index");
             IndexManager::with_dir(tmp).expect("Failed to create index manager")
         });
 
         Self {
-            manager,
+            manager: Arc::new(manager),
             roots: Vec::new(),
+            storages: Vec::new(),
             loading: false,
             indexing: false,
+            indexing_progress: None,
             watcher_active: false,
+            usb_watcher_active: false,
         }
     }
 
     /// Start loading indexes after FDA is confirmed.
     pub fn activate(&mut self, cx: &mut Context<Self>) {
         self.loading = true;
+        self.storages = StorageEntry::discover();
         self.async_load(cx);
+        self.start_usb_watcher(cx);
     }
 
     // -- Queries (synchronous, fast) ------------------------------------------
@@ -108,7 +128,11 @@ impl SearchService {
         self.manager.roots()
     }
 
-    #[allow(dead_code)]
+    /// Cached storage entries (discovered once at startup, updated on mount/unmount).
+    pub fn storages(&self) -> &[StorageEntry] {
+        &self.storages
+    }
+
     pub fn is_loading(&self) -> bool {
         self.loading
     }
@@ -119,6 +143,14 @@ impl SearchService {
 
     pub fn file_count(&self) -> u64 {
         self.manager.total_file_count() as u64
+    }
+
+    /// Number of files discovered so far during active indexing.
+    pub fn indexing_files(&self) -> u64 {
+        self.indexing_progress
+            .as_ref()
+            .map(|p| p.files() as u64)
+            .unwrap_or(0)
     }
 
     /// Number of in-memory indexes currently loaded.
@@ -138,9 +170,14 @@ impl SearchService {
         f(&self.manager)
     }
 
-    /// Clone the IndexManager (for background work that needs a snapshot).
+    /// Get a cheap Arc reference to the IndexManager (for background work).
+    pub fn shared_manager(&self) -> Arc<IndexManager> {
+        Arc::clone(&self.manager)
+    }
+
+    /// Clone the IndexManager (for callers that need an owned copy, e.g. MCP server).
     pub fn clone_manager(&self) -> IndexManager {
-        self.manager.clone()
+        (*self.manager).clone()
     }
 
     // -- Mutations (async, background) ----------------------------------------
@@ -152,9 +189,9 @@ impl SearchService {
     ) -> Arc<CrawlProgress> {
         tracing::info!(roots = settings_roots.len(), "rebuild requested");
         self.indexing = true;
-        cx.notify();
-
         let progress = Arc::new(CrawlProgress::new());
+        self.indexing_progress = Some(progress.clone());
+        cx.notify();
 
         let roots_strings: Vec<String> = settings_roots
             .iter()
@@ -187,6 +224,7 @@ impl SearchService {
                 tracing::warn!("rebuild: no search roots configured");
                 this.update(cx, |svc, cx| {
                     svc.indexing = false;
+                    svc.indexing_progress = None;
                     cx.emit(SearchEvent::IndexingFinished);
                     cx.notify();
                 })
@@ -201,7 +239,7 @@ impl SearchService {
 
                 // Remove old index on main thread (fast HashMap remove)
                 let indexes_dir = this.update(cx, |svc, _| {
-                    svc.manager.remove_root(root);
+                    Arc::make_mut(&mut svc.manager).remove_root(root);
                     svc.manager.indexes_dir().to_path_buf()
                 });
                 let Ok(indexes_dir) = indexes_dir else {
@@ -230,7 +268,7 @@ impl SearchService {
                     Ok((root_str, index, count)) => {
                         tracing::info!(root = %root_str, files = count, "rebuild: root complete");
                         this.update(cx, |svc, _| {
-                            svc.manager
+                            Arc::make_mut(&mut svc.manager)
                                 .insert_index_memory_only(&root_str, index, count);
                         })
                         .ok();
@@ -244,6 +282,7 @@ impl SearchService {
             tracing::info!("rebuild: complete");
             this.update(cx, |svc, cx| {
                 svc.indexing = false;
+                svc.indexing_progress = None;
                 cx.emit(SearchEvent::IndexingFinished);
                 cx.notify();
             })
@@ -261,6 +300,7 @@ impl SearchService {
 
         let progress = Arc::new(CrawlProgress::new());
         self.indexing = true;
+        self.indexing_progress = Some(progress.clone());
         cx.emit(SearchEvent::IndexingStarted {
             progress: progress.clone(),
             path: path_owned.clone(),
@@ -289,7 +329,7 @@ impl SearchService {
                 match build_result {
                     Ok((root_str, index, count)) => {
                         tracing::info!(root = %root_str, files = count, "add_root: complete");
-                        svc.manager
+                        Arc::make_mut(&mut svc.manager)
                             .insert_index_memory_only(&root_str, index, count);
                     }
                     Err(e) => {
@@ -298,6 +338,7 @@ impl SearchService {
                 }
                 svc.roots = svc.manager.roots().into_iter().map(PathBuf::from).collect();
                 svc.indexing = false;
+                svc.indexing_progress = None;
                 cx.emit(SearchEvent::IndexingFinished);
                 cx.notify();
             })
@@ -306,9 +347,17 @@ impl SearchService {
         .detach();
     }
 
+    /// Remove specific paths from the in-memory index after cleanup deletion.
+    pub fn remove_paths(&mut self, paths: &[String]) {
+        let removed = Arc::make_mut(&mut self.manager).remove_paths(paths);
+        if removed > 0 {
+            tracing::debug!(removed, paths = paths.len(), "search_svc: removed paths from index");
+        }
+    }
+
     pub fn remove_root(&mut self, path: &str, cx: &mut Context<Self>) {
         tracing::debug!(path, "search_svc: remove root");
-        self.manager.remove_root(path);
+        Arc::make_mut(&mut self.manager).remove_root(path);
         self.roots = self
             .manager
             .roots()
@@ -320,7 +369,7 @@ impl SearchService {
 
     pub fn clear(&mut self, cx: &mut Context<Self>) {
         tracing::debug!("search_svc: clear");
-        self.manager.clear();
+        Arc::make_mut(&mut self.manager).clear();
         self.roots.clear();
         cx.emit(SearchEvent::IndexCleared);
         cx.notify();
@@ -368,7 +417,7 @@ impl SearchService {
                             let file_count = index.file_count();
                             let r = root.clone();
                             this.update(cx, |svc, cx| {
-                                svc.manager.insert_index_memory_only(&r, index, file_count);
+                                Arc::make_mut(&mut svc.manager).insert_index_memory_only(&r, index, file_count);
                                 svc.roots =
                                     svc.manager.roots().into_iter().map(PathBuf::from).collect();
                                 cx.emit(SearchEvent::RootLoaded {
@@ -381,9 +430,20 @@ impl SearchService {
                             tracing::info!(root = %root, files = file_count, "root loaded");
                         }
                         Err(e) => {
-                            tracing::warn!(root = %root, error = %e, "failed to load root index");
-                            this.update(cx, |svc, _| svc.manager.remove_stale_root(root))
-                                .ok();
+                            // Only remove the root from ControlDb if the snapshot file
+                            // is actually missing. For other errors (decompression,
+                            // deserialization) keep the entry so we retry next launch
+                            // instead of re-indexing from scratch.
+                            let is_not_found = matches!(&e,
+                                zero::index::IndexError::Io(io) if io.kind() == std::io::ErrorKind::NotFound
+                            );
+                            if is_not_found {
+                                tracing::warn!(root = %root, error = %e, "snapshot missing, removing stale root");
+                                this.update(cx, |svc, _| Arc::make_mut(&mut svc.manager).remove_stale_root(root))
+                                    .ok();
+                            } else {
+                                tracing::error!(root = %root, error = %e, "failed to load root index (snapshot exists but unreadable)");
+                            }
                         }
                     }
                 }
@@ -398,9 +458,11 @@ impl SearchService {
             })
             .ok();
 
-            // Check if we already have indexed roots
+            // Check if we have indexed roots (either loaded in memory or registered in ControlDb).
+            // We check both: loaded indexes AND roots_cache metadata. A root may fail to load
+            // from its snapshot but still be registered — in that case we should NOT auto-index.
             let has_roots = this
-                .update(cx, |svc, _| !svc.roots.is_empty())
+                .update(cx, |svc, _| !svc.roots.is_empty() || svc.manager.roots_count() > 0)
                 .unwrap_or(false);
 
             if has_roots {
@@ -428,6 +490,7 @@ impl SearchService {
             // Extract indexes_dir on main thread before going to background
             let indexes_dir = this.update(cx, |svc, cx| {
                 svc.indexing = true;
+                svc.indexing_progress = Some(progress.clone());
                 tracing::debug!(path = %home_str, "emitting IndexingStarted");
                 cx.emit(SearchEvent::IndexingStarted {
                     progress: progress.clone(),
@@ -467,7 +530,7 @@ impl SearchService {
                         "auto-index complete"
                     );
                     this.update(cx, |svc, _| {
-                        svc.manager
+                        Arc::make_mut(&mut svc.manager)
                             .insert_index_memory_only(&root_str, index, count);
                         svc.roots = svc.manager.roots().into_iter().map(PathBuf::from).collect();
                     })
@@ -480,6 +543,7 @@ impl SearchService {
 
             this.update(cx, |svc, cx| {
                 svc.indexing = false;
+                svc.indexing_progress = None;
                 cx.emit(SearchEvent::IndexingFinished);
                 cx.notify();
             })
@@ -591,7 +655,7 @@ impl SearchService {
                             match build_result {
                                 Ok((root_str, index, count)) => {
                                     this.update(cx, |svc, _| {
-                                        svc.manager
+                                        Arc::make_mut(&mut svc.manager)
                                             .insert_index_memory_only(&root_str, index, count);
                                     })
                                     .ok();
@@ -610,6 +674,65 @@ impl SearchService {
                         })
                         .ok();
                     }
+                }
+            }
+        })
+        .detach();
+    }
+
+    /// Start a background USB watcher that refreshes the storage cache on mount/unmount.
+    fn start_usb_watcher(&mut self, cx: &mut Context<Self>) {
+        if self.usb_watcher_active {
+            return;
+        }
+        self.usb_watcher_active = true;
+
+        cx.spawn(async move |this, cx| {
+            let watcher_result = cx
+                .background_executor()
+                .spawn(async move { zero_watcher::UsbWatcher::new() })
+                .await;
+
+            let mut watcher = match watcher_result {
+                Ok(w) => w,
+                Err(e) => {
+                    tracing::error!(error = %e, "usb_watcher: failed to start");
+                    this.update(cx, |svc, _| svc.usb_watcher_active = false)
+                        .ok();
+                    return;
+                }
+            };
+
+            tracing::info!("usb_watcher: started");
+
+            loop {
+                cx.background_executor()
+                    .timer(Duration::from_millis(500))
+                    .await;
+
+                let mut changed = false;
+                while let Some(event) = watcher.try_next_event() {
+                    tracing::info!(
+                        kind = ?event.kind,
+                        path = %event.mount_point.display(),
+                        "usb_watcher: volume event"
+                    );
+                    changed = true;
+                }
+
+                if changed {
+                    // Re-discover storages on background thread
+                    let new_storages = cx
+                        .background_executor()
+                        .spawn(async move { StorageEntry::discover() })
+                        .await;
+
+                    this.update(cx, |svc, cx| {
+                        svc.storages = new_storages;
+                        cx.emit(SearchEvent::StoragesChanged);
+                        cx.notify();
+                    })
+                    .ok();
                 }
             }
         })

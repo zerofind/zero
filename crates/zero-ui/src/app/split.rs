@@ -1,6 +1,6 @@
 use gpui::*;
 
-use crate::models::{ActiveView, PaneId, SplitPane};
+use crate::models::{PaneId, SplitPane};
 use crate::views::{FileBrowserEvent, FileBrowserView};
 
 use super::ZeroApp;
@@ -60,13 +60,7 @@ impl ZeroApp {
                 cx.notify();
             }
             FileBrowserEvent::OpenFile(path) => {
-                if crate::views::data_table::is_data_table(path) {
-                    self.data_table = None;
-                    self.push_view(ActiveView::DataTable(path.clone()), window, cx);
-                } else {
-                    self.editor = None;
-                    self.push_view(ActiveView::Editor(path.clone()), window, cx);
-                }
+                self.open_path(path, window, cx);
             }
             FileBrowserEvent::SetClipboard(clipboard) => {
                 self.file_clipboard = Some(clipboard.clone());

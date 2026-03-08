@@ -168,14 +168,16 @@ pub mod prelude {
 
     // Cleanup (profile-based)
     pub use crate::cleanup::{
-        GroupSummary, ProfileCleanupItem, ProfileCleanupQuery, ProfileCleanupResult,
-        ProfileCleanupSummary, execute_category_cleanup, execute_full_cleanup_scan,
-        execute_group_cleanup,
+        DevGarbageItem, DevScanError, DevScanProgress, DevScanResult, GroupSummary,
+        ProfileCleanupItem, ProfileCleanupQuery, ProfileCleanupResult, ProfileCleanupSummary,
+        execute_category_cleanup, execute_full_cleanup_scan, execute_group_cleanup,
+        scan_dev_garbage,
     };
 
     // Profiles
     pub use crate::profiles::{
-        CleanupGroup, MergedCleanupProfile, ResolvedCleanupCategory, load_cleanup, load_file_types,
+        AggregateMode, CleanupGroup, MergedCleanupProfile, ResolvedCleanupCategory, load_cleanup,
+        load_file_types,
     };
 
     // Delete

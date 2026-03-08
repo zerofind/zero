@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.6.0
+
+New:
+- zero-llm: LLM agent crate with streaming responses, tool use (search_files, search_by_type), multi-provider support (Anthropic, OpenAI-compatible), and conversation history
+- zero-mcp: MCP server crate exposing file search, directory listing, and file metadata over Streamable HTTP with Bearer auth
+- terminal: embedded terminal view using alacritty_terminal with mouse support, ANSI colors, selection, and Lilex font
+- ask: AI chat view with streaming messages, tool call visualization, and provider/model setup
+- cleanup: dev garbage scanner with sibling-aware matching and 12 new developer categories (Next.js, Python venv, Flutter, Zig, CMake, Elixir, Ruby, CocoaPods, Parcel, Turborepo)
+- cli: cleanup dev subcommand for interactive build artifact scanning and trash-based cleaning
+- file-browser: git status via libgit2, configurable/reorderable columns with persistence, typeahead navigation, mount point filesystem detection, inline rename, symlink display with broken-link detection, owner/permissions/flags metadata, natural sort via natord
+- dedup: streaming API with channel-based results, prefix hashing for early rejection, and index-accelerated discovery via IndexManager
+- settings: MCP server controls (enable, endpoint, API key copy/regenerate) and LLM provider configuration
+- platform: NSFileManager-based Trash with Put Back support replacing trash crate
+- service: migrated from legacy single-file SearchIndex to multi-root IndexManager
+- status-bar: multi-selection summary showing count and aggregate size, cleanup selection mode
+- profiles: sibling and aggregate_mode fields on cleanup categories, user pack loading from packs/ directory
+- index: remove_paths API for targeted entry removal from all indexes
+- sidebar: pin/unpin bookmarks, index location action, eject drive on macOS
+
+Fix:
+- keybindings: file clipboard shortcuts (cmd+c/v/x/d) scoped to DataTableView context, preventing conflicts with text inputs
+- index: search limit overflow protection via saturating_mul
+- index: zstd decompression switched from bounded bulk (256MB limit) to streaming
+- cleanup: detail view rewritten around group-based drill-in with virtualized table and delegate pattern
+- file-browser: trash is immediate multi-select with optimistic removal instead of single-file confirm dialog
+- quicklook: suppressed stdout/stderr noise from qlmanage
+- logging: centralized init() with alacritty_terminal and vte logs suppressed to warn level
+- profiles: removed raw from images extensions list
+
 ## v0.5.0
 
 New:
@@ -38,10 +67,6 @@ Fix:
 - file-browser: summary bar pinned to bottom of content instead of above it
 - navigation: closing editor or data table navigates back instead of hardcoding FileBrowser
 
-Infra:
-- logging: env_filter helper with RUST_LOG > --verbose > warn priority chain
-- logging: tracing::debug calls across all views for action-level observability
-
 ## v0.4.8
 
 New:
@@ -69,12 +94,6 @@ Fix:
 - theme: table.hover.background set to transparent across all 6 themes to stop mouse-tracking highlights during keyboard nav
 - file-browser: focus routed to Table's own handle so arrow-key navigation works after clicking status bar
 - search: expose search_with_type for combined query + type filtering
-
-Infra:
-- workspace: unified version/license fields across all crates via workspace.package
-- logging: replaced all eprintln with structured tracing calls, added startup banners with version/platform/arch
-- release: include AppIcon.icns in macOS release artifacts
-- tracing: added #[instrument] spans to hot paths (scan, sync, transfer, search, dedup)
 
 ## v0.4.6
 

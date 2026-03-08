@@ -496,6 +496,12 @@ pub enum Commands {
         verbose: bool,
     },
 
+    /// Find and clean developer build artifacts
+    Cleanup {
+        #[command(subcommand)]
+        cleanup_cmd: CleanupCommands,
+    },
+
     /// Manage todo lists and tasks
     Todo {
         #[command(subcommand)]
@@ -546,6 +552,29 @@ pub enum WatchCommands {
         /// Number of test iterations
         #[arg(long, default_value = "10")]
         iterations: usize,
+    },
+}
+
+/// Subcommands for cleanup
+#[derive(Subcommand)]
+pub enum CleanupCommands {
+    /// Scan for developer build artifacts (node_modules, target, .next, etc.)
+    Dev {
+        /// Directory to scan (default: current directory)
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Preview without deleting
+        #[arg(long, short = 'n')]
+        dry_run: bool,
+        /// Clean all found items without prompting
+        #[arg(long)]
+        all: bool,
+        /// Filter to specific category (e.g. "rust_target")
+        #[arg(long, short = 'c')]
+        category: Option<String>,
+        /// Maximum directory depth
+        #[arg(long, short = 'd')]
+        max_depth: Option<usize>,
     },
 }
 

@@ -6,54 +6,26 @@
 use std::time::{Duration, Instant};
 
 use crate::cleanup::{ProfileCleanupQuery, execute_full_cleanup_scan, execute_group_cleanup};
-use crate::index::{IndexManager, SearchIndex, persistence};
+use crate::index::{IndexManager, SearchIndex};
 use crate::profiles::{CleanupGroup, load_cleanup};
 
-/// Load the search index for benchmarks
-///
-/// This loads from the snapshot file used by `zero search --index`.
-/// Returns an IndexManager with the index injected.
+/// Load the IndexManager for benchmarks
 fn load_index_manager() -> Option<IndexManager> {
-    let index_path = crate::dirs::legacy_index_dir()?;
-
-    if !index_path.is_file() {
-        eprintln!(
-            "⚠️  No index found at {:?}. Run `zero search --index ~` first.",
-            index_path
-        );
-        return None;
-    }
-
-    let index = match persistence::load_index(&index_path) {
-        Ok(idx) => idx,
-        Err(e) => {
-            eprintln!("❌ Failed to load index: {}", e);
-            return None;
-        }
-    };
-    let file_count = index.file_count();
-    let dir_count = index.dir_count();
-    let unique_names = index.unique_names();
-
-    eprintln!(
-        "📁 Loaded index: {} files, {} dirs, {} unique names",
-        file_count, dir_count, unique_names
-    );
-
-    let temp_dir = std::env::temp_dir().join("zero_benchmark_indexes");
-    let _ = std::fs::create_dir_all(&temp_dir);
-
-    match IndexManager::with_dir(temp_dir) {
-        Ok(mut manager) => {
-            let root = dirs::home_dir()
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or_else(|| "/Users/benchmark".to_string());
-
-            manager.insert_loaded_index(&root, index, file_count);
+    match IndexManager::load() {
+        Ok(manager) if manager.total_file_count() > 0 => {
+            eprintln!(
+                "📁 Loaded index: {} files, {} dirs",
+                manager.total_file_count(),
+                manager.total_dir_count()
+            );
             Some(manager)
         }
+        Ok(_) => {
+            eprintln!("⚠️  No index found. Run `zero search --index ~` first.");
+            None
+        }
         Err(e) => {
-            eprintln!("❌ Failed to create IndexManager: {}", e);
+            eprintln!("❌ Failed to load index: {}", e);
             None
         }
     }
@@ -61,31 +33,8 @@ fn load_index_manager() -> Option<IndexManager> {
 
 /// Load the SearchIndex directly for benchmarks (for search comparison tests)
 fn load_search_index() -> Option<SearchIndex> {
-    let index_path = crate::dirs::legacy_index_dir()?;
-
-    if !index_path.is_file() {
-        eprintln!(
-            "⚠️  No index found at {:?}. Run `zero search --index ~` first.",
-            index_path
-        );
-        return None;
-    }
-
-    match persistence::load_index(&index_path) {
-        Ok(index) => {
-            eprintln!(
-                "📁 Loaded index: {} files, {} dirs, {} unique names",
-                index.file_count(),
-                index.dir_count(),
-                index.unique_names()
-            );
-            Some(index)
-        }
-        Err(e) => {
-            eprintln!("❌ Failed to load index: {}", e);
-            None
-        }
-    }
+    let manager = load_index_manager()?;
+    manager.indexes().next().cloned()
 }
 
 /// Benchmark result for a single operation

@@ -12,7 +12,7 @@ use tokio::sync::RwLock;
 
 use crate::automation::{AutomationEvent, Executor, ExecutorConfig};
 use crate::cache::CacheDb;
-use crate::index::{FileTypeCategory, SearchIndex, SearchQuery, persistence};
+use crate::index::{FileTypeCategory, IndexManager, SearchQuery};
 
 use super::logging::ServiceLogger;
 use super::protocol::{JsonRpcError, JsonRpcRequest, JsonRpcResponse};
@@ -25,8 +25,8 @@ pub struct ServiceHandler {
     /// Automation executor
     executor: Arc<Executor>,
 
-    /// Search index (loaded into memory)
-    index: Arc<RwLock<Option<SearchIndex>>>,
+    /// Search index manager (loaded into memory)
+    index_manager: Arc<RwLock<Option<IndexManager>>>,
 
     /// Logger
     logger: ServiceLogger,
@@ -42,7 +42,7 @@ impl ServiceHandler {
         Ok(Self {
             db,
             executor: Arc::new(executor),
-            index: Arc::new(RwLock::new(None)),
+            index_manager: Arc::new(RwLock::new(None)),
             logger,
         })
     }
@@ -52,7 +52,7 @@ impl ServiceHandler {
         Self {
             db,
             executor,
-            index: Arc::new(RwLock::new(None)),
+            index_manager: Arc::new(RwLock::new(None)),
             logger,
         }
     }
@@ -67,25 +67,15 @@ impl ServiceHandler {
         &self.executor
     }
 
-    /// Load search index into memory
+    /// Load search indexes into memory via IndexManager
     pub async fn load_index(&self) -> Result<u64, String> {
-        let index_dir = crate::dirs::legacy_index_dir()
-            .ok_or_else(|| "Could not determine index directory".to_string())?;
+        self.logger.info("handler", "Loading search indexes");
 
-        if !index_dir.is_dir() {
-            return Err("Index directory not found".to_string());
-        }
+        let manager = IndexManager::load().map_err(|e| e.to_string())?;
+        let file_count = manager.total_file_count() as u64;
 
-        self.logger.info(
-            "handler",
-            &format!("Loading search index from {}", index_dir.display()),
-        );
-
-        let index = persistence::load_index(&index_dir).map_err(|e| e.to_string())?;
-        let file_count = index.file_count() as u64;
-
-        let mut guard = self.index.write().await;
-        *guard = Some(index);
+        let mut guard = self.index_manager.write().await;
+        *guard = Some(manager);
 
         self.logger.info(
             "handler",
@@ -97,16 +87,16 @@ impl ServiceHandler {
 
     /// Check if index is loaded
     pub async fn is_index_loaded(&self) -> bool {
-        self.index.read().await.is_some()
+        self.index_manager.read().await.is_some()
     }
 
     /// Get index file count (if loaded)
     pub async fn index_file_count(&self) -> Option<u64> {
-        self.index
+        self.index_manager
             .read()
             .await
             .as_ref()
-            .map(|idx| idx.file_count() as u64)
+            .map(|mgr| mgr.total_file_count() as u64)
     }
 
     /// Handle a JSON-RPC request and return response
@@ -202,16 +192,16 @@ impl ServiceHandler {
         let type_filter: Option<String> = request.get_param("type");
 
         // Ensure index is loaded
-        let guard = self.index.read().await;
-        let index = guard.as_ref().ok_or_else(JsonRpcError::index_not_ready)?;
+        let guard = self.index_manager.read().await;
+        let manager = guard.as_ref().ok_or_else(JsonRpcError::index_not_ready)?;
 
         // Build unified search query
         let type_category = type_filter.as_deref().and_then(FileTypeCategory::parse_str);
 
         let q = SearchQuery::text(&query, limit).with_type_opt(type_category);
-        let results = index.query(q);
+        let results = manager.query(q);
 
-        let total_indexed = index.file_count();
+        let total_indexed = manager.total_file_count();
 
         // Convert results to JSON
         let results_json: Vec<Value> = results
@@ -250,25 +240,21 @@ impl ServiceHandler {
         self.logger
             .info("handler", &format!("Building index for {}", path.display()));
 
-        // Build index
-        let mut index = SearchIndex::new();
-        index
-            .build_from_path(&path)
+        // Build index via IndexManager
+        let root = path.to_string_lossy().to_string();
+        let mut manager =
+            IndexManager::new().map_err(|e| JsonRpcError::filesystem_error(e.to_string()))?;
+
+        manager
+            .add_root(&root)
             .map_err(|e| JsonRpcError::filesystem_error(e.to_string()))?;
 
-        let file_count = index.file_count();
-        let total_bytes = index.total_bytes();
+        let file_count = manager.total_file_count();
+        let total_bytes = manager.total_bytes();
 
-        // Save index snapshot
-        let index_path = crate::dirs::legacy_index_dir()
-            .ok_or_else(|| JsonRpcError::internal_error("Could not determine index directory"))?;
-
-        persistence::save_index(&index, &index_path)
-            .map_err(|e| JsonRpcError::filesystem_error(e.to_string()))?;
-
-        // Update in-memory index
-        let mut guard = self.index.write().await;
-        *guard = Some(index);
+        // Update in-memory manager
+        let mut guard = self.index_manager.write().await;
+        *guard = Some(manager);
 
         self.logger.info(
             "handler",
@@ -279,7 +265,6 @@ impl ServiceHandler {
             "success": true,
             "file_count": file_count,
             "total_bytes": total_bytes,
-            "index_path": index_path.to_string_lossy(),
         }))
     }
 

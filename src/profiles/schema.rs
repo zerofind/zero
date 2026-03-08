@@ -4,7 +4,7 @@
 //! - `file_types.toml` - File type classifications by extension
 //! - `cleanup/*.toml` - Cleanup category definitions
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 // =============================================================================
@@ -70,6 +70,15 @@ pub struct CleanupCategory {
     /// Paths to exclude from matching
     #[serde(default)]
     pub exclude: Vec<String>,
+
+    /// Sibling file that must exist in the parent dir for a pattern to match.
+    /// e.g. "Cargo.toml" means target/ only matches next to a Cargo.toml.
+    #[serde(default)]
+    pub sibling: Option<String>,
+
+    /// How to aggregate results: "file" (default) or "directory".
+    #[serde(default)]
+    pub aggregate: Option<AggregateMode>,
 }
 
 /// UI grouping for cleanup categories (Apple Storage style)
@@ -128,6 +137,17 @@ impl CleanupGroup {
             CleanupGroup::Trash,
         ]
     }
+}
+
+/// How to aggregate cleanup results
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AggregateMode {
+    /// Show individual files (default behavior)
+    #[default]
+    File,
+    /// Show matched directories as single items
+    Directory,
 }
 
 /// Pattern matching configuration

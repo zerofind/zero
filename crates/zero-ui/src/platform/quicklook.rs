@@ -8,5 +8,7 @@ use std::path::Path;
 pub fn preview_file(path: &Path) {
     let _ = std::process::Command::new("qlmanage")
         .args(["-p", &path.to_string_lossy()])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
         .spawn();
 }

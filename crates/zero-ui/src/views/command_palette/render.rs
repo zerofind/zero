@@ -5,6 +5,7 @@ use gpui_component::{ActiveTheme, Icon, IconName, Sizable as _, h_flex, input::I
 use crate::theme::{
     self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, ICON_XS, MODAL_PALETTE_WIDTH, RADIUS, RADIUS_LG,
 };
+use crate::ui::format_number;
 
 use super::items::{DEFAULT_ACTIONS, PaletteItem};
 use super::view::{PaletteEvent, PaletteMode, PaletteView};
@@ -74,8 +75,14 @@ impl Render for PaletteView {
                             .appearance(false)
                             .prefix(if is_drilled {
                                 h_flex()
+                                    .id("palette-back-btn")
                                     .gap_1()
                                     .items_center()
+                                    .px_1p5()
+                                    .py_0p5()
+                                    .rounded(RADIUS)
+                                    .bg(cx.theme().muted)
+                                    .cursor_pointer()
                                     .child(
                                         Icon::new(IconName::ChevronLeft)
                                             .with_size(ICON_XS)
@@ -87,6 +94,9 @@ impl Render for PaletteView {
                                             .text_color(cx.theme().muted_foreground)
                                             .child(drill_label.unwrap_or_default()),
                                     )
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.exit_drill(window, cx);
+                                    }))
                                     .into_any_element()
                             } else {
                                 Icon::new(IconName::Search)
@@ -96,6 +106,10 @@ impl Render for PaletteView {
                             }),
                     ),
             )
+            // Inline loading banner
+            .when(self.is_loading(cx), |el| {
+                el.child(self.render_loading_banner(cx))
+            })
             // DrilledIn mode: files + apps
             .when(show_results && is_drilled, |el| {
                 self.render_drilled_results(el, has_results, cx)
@@ -159,12 +173,7 @@ impl PaletteView {
                             .child("Search"),
                     )
                     .when(show_all_selected, |el| {
-                        el.child(
-                            div()
-                                .text_size(FONT_SIZE_CAPTION)
-                                .text_color(muted)
-                                .child("Run \u{21b5}"),
-                        )
+                        el.child(Self::action_pill("Run \u{21b5}", muted, cx))
                     }),
             );
 
@@ -369,11 +378,6 @@ impl PaletteView {
             .map(|(fi, &(_, storage))| {
                 let item_idx = idx_offset + fi;
                 let selected = self.selected_idx == item_idx;
-                let subtitle = if storage.is_external {
-                    String::new()
-                } else {
-                    storage.mount_point.to_string_lossy().to_string()
-                };
                 div()
                     .id(SharedString::from(format!("click-fst-{fi}")))
                     .on_click(cx.listener(move |this, _, window, cx| {
@@ -384,7 +388,7 @@ impl PaletteView {
                         PaletteItem::new(
                             SharedString::from(format!("fst-{fi}")),
                             SharedString::from(storage.name.clone()),
-                            SharedString::from(subtitle),
+                            SharedString::from(""),
                             None,
                             true,
                         )
@@ -447,12 +451,11 @@ impl PaletteView {
                                     .child(action.category),
                             )
                             .when(selected, |el| {
-                                el.child(
-                                    div()
-                                        .text_size(FONT_SIZE_CAPTION)
-                                        .text_color(muted)
-                                        .child(if is_type_search { "Search >" } else { label }),
-                                )
+                                el.child(Self::action_pill(
+                                    if is_type_search { "Search >" } else { label },
+                                    muted,
+                                    cx,
+                                ))
                             }),
                     )
             })
@@ -554,12 +557,7 @@ impl PaletteView {
                                         .child("Search"),
                                 )
                                 .when(search_files_selected, |el| {
-                                    el.child(
-                                        div()
-                                            .text_size(FONT_SIZE_CAPTION)
-                                            .text_color(muted)
-                                            .child("Run \u{21b5}"),
-                                    )
+                                    el.child(Self::action_pill("Run \u{21b5}", muted, cx))
                                 }),
                         ),
                 )
@@ -616,11 +614,6 @@ impl PaletteView {
             .map(|(si, storage)| {
                 let item_idx = bookmark_count + si;
                 let selected = self.selected_idx == item_idx;
-                let subtitle = if storage.is_external {
-                    String::new()
-                } else {
-                    storage.mount_point.to_string_lossy().to_string()
-                };
 
                 div()
                     .id(SharedString::from(format!("click-st-{si}")))
@@ -632,7 +625,7 @@ impl PaletteView {
                         PaletteItem::new(
                             SharedString::from(format!("st-{si}")),
                             SharedString::from(storage.name.clone()),
-                            SharedString::from(subtitle),
+                            SharedString::from(""),
                             None,
                             true,
                         )
@@ -700,12 +693,11 @@ impl PaletteView {
                                 )
                             })
                             .when(selected, |el| {
-                                el.child(
-                                    div()
-                                        .text_size(FONT_SIZE_CAPTION)
-                                        .text_color(muted)
-                                        .child(if is_type_search { "Search >" } else { label }),
-                                )
+                                el.child(Self::action_pill(
+                                    if is_type_search { "Search >" } else { label },
+                                    muted,
+                                    cx,
+                                ))
                             }),
                     )
             })
@@ -729,5 +721,44 @@ impl PaletteView {
                 .child(Self::section_header("Actions", muted))
                 .children(action_rows),
         )
+    }
+
+    fn render_loading_banner(&self, cx: &mut Context<Self>) -> Div {
+        let svc = self.search.read(cx);
+        let (label, files) = if svc.is_indexing() {
+            ("Indexing\u{2026}", svc.indexing_files())
+        } else {
+            ("Loading index\u{2026}", svc.file_count())
+        };
+
+        h_flex()
+            .w_full()
+            .px_3()
+            .py(px(6.0))
+            .bg(theme::banner_bg(cx))
+            .items_center()
+            .child(
+                div()
+                    .flex_1()
+                    .text_size(FONT_SIZE_CAPTION)
+                    .text_color(cx.theme().foreground)
+                    .child(label),
+            )
+            .child(
+                div()
+                    .text_size(FONT_SIZE_CAPTION)
+                    .text_color(cx.theme().muted_foreground)
+                    .child(format!("{} files", format_number(files))),
+            )
+    }
+
+    fn action_pill(label: &str, muted: Hsla, cx: &mut Context<Self>) -> Div {
+        div()
+            .px_1p5()
+            .py(px(2.))
+            .bg(cx.theme().muted)
+            .text_size(FONT_SIZE_CAPTION)
+            .text_color(muted)
+            .child(label.to_string())
     }
 }

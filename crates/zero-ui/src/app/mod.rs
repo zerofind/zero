@@ -1,7 +1,10 @@
+pub mod events;
 pub mod navigation;
 pub mod progress;
+pub mod routing;
 pub mod split;
 pub mod titlebar;
+pub mod views;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -17,8 +20,8 @@ use gpui_component::{
 use zero::scanner::CrawlProgress;
 
 use crate::actions::{
-    GoBack, GoForward, GoUp, OpenCommandPalette, OpenSettings, PasteFiles, ToggleSidebar,
-    ToggleSplitView, ToggleToolbar, ToggleViewMode,
+    GoBack, GoForward, GoUp, OpenCommandPalette, OpenSettings, PasteFiles, ToggleAsk,
+    ToggleSidebar, ToggleSplitView, ToggleTerminal, ToggleToolbar, ToggleViewMode,
 };
 use crate::models::{ActiveView, FileClipboard, PaneId, SplitPane, ViewMode};
 use crate::permissions;
@@ -28,10 +31,29 @@ use crate::session::Settings;
 use crate::theme::{self, CONTENT_INSET, FONT_SIZE_BODY, FONT_SIZE_CAPTION, RADIUS_LG};
 use crate::ui::{Alert, AlertStack, BannerData, BannerKind, ProgressBanner};
 use crate::views::{
-    AppSidebar, AutomationsView, CleanupView, DataTableView, DedupView, DrivesPopover, EditorView,
-    FdaOnboardingEvent, FdaOnboardingView, FileBrowserView, FileGridView, OnboardingEvent,
-    OnboardingView, PaletteView, SecureEraseView, SettingsView, TodoView,
+    AppSidebar, AskView, AutomationsView, CleanupView, DataTableView, DedupView, DrivesPopover,
+    EditorView, FdaOnboardingEvent, FdaOnboardingView, FileBrowserView, FileGridView,
+    OnboardingEvent, OnboardingView, PaletteView, SecureEraseView, SettingsView, TerminalView,
+    TodoView,
 };
+
+#[derive(Clone)]
+struct ResizeTerminalDrag;
+
+impl Render for ResizeTerminalDrag {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        div().size_full().cursor_row_resize()
+    }
+}
+
+#[derive(Clone)]
+struct ResizeAskDrag;
+
+impl Render for ResizeAskDrag {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        div().size_full().cursor_col_resize()
+    }
+}
 
 pub struct ZeroApp {
     // Navigation
@@ -68,6 +90,16 @@ pub struct ZeroApp {
     pub split_pane: Option<SplitPane>,
     pub split_browser: Option<Entity<FileBrowserView>>,
     pub active_pane: PaneId,
+
+    // Terminal panel
+    pub terminal: Option<Entity<TerminalView>>,
+    pub terminal_open: bool,
+    pub terminal_height: Pixels,
+
+    // Ask panel
+    pub ask: Option<Entity<AskView>>,
+    pub ask_open: bool,
+    pub ask_width: Pixels,
 
     // File clipboard
     pub file_clipboard: Option<FileClipboard>,
@@ -137,6 +169,12 @@ impl ZeroApp {
             command_palette_open: false,
             drives_popover_open: false,
             drives_popover: None,
+            terminal: None,
+            terminal_open: false,
+            terminal_height: px(300.0),
+            ask: None,
+            ask_open: false,
+            ask_width: px(360.0),
             split_pane: None,
             split_browser: None,
             active_pane: PaneId::Left,
@@ -260,6 +298,21 @@ impl ZeroApp {
                     self.services.search.update(cx, |svc, cx| {
                         svc.start_watcher(cx);
                     });
+
+                    // Auto-start MCP server if enabled in settings
+                    let settings = Settings::load();
+                    if settings.mcp_enabled {
+                        let manager = self.services.search.read(cx).clone_manager();
+                        let port = settings.mcp_port;
+                        self.services.mcp.update(cx, |mcp, cx| {
+                            mcp.start(manager, port, cx);
+                        });
+                    }
+
+                    // Provide the index to LLM tools (agent is independent)
+                    let llm_manager = self.services.search.read(cx).clone_manager();
+                    self.services.llm.read(cx).set_index(llm_manager);
+
                     cx.notify();
                 }
             }
@@ -316,18 +369,10 @@ impl ZeroApp {
             SearchEvent::IndexCleared => {
                 cx.notify();
             }
-            SearchEvent::IndexUpdated(_) => {
+            SearchEvent::IndexUpdated(_) | SearchEvent::StoragesChanged => {
                 cx.notify();
             }
         }
-    }
-
-    pub fn open_command_palette(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        tracing::debug!("action: open command palette");
-        self.command_palette_open = true;
-        let palette = self.ensure_command_palette(window, cx);
-        palette.update(cx, |view, cx| view.reset(window, cx));
-        cx.notify();
     }
 
     #[allow(dead_code)]
@@ -361,7 +406,7 @@ impl ZeroApp {
                     view.into_any_element()
                 }
             },
-            ActiveView::Cleanup => {
+            ActiveView::Cleanup | ActiveView::CleanupDetail(_) => {
                 let view = self.ensure_cleanup(window, cx);
                 view.into_any_element()
             }
@@ -544,6 +589,17 @@ impl Render for ZeroApp {
         } else {
             None
         };
+        let terminal_open = self.terminal_open;
+        let terminal_height = self.terminal_height;
+        let terminal_view = if terminal_open {
+            self.terminal.clone()
+        } else {
+            None
+        };
+        let ask_open = self.ask_open;
+        let ask_width = self.ask_width;
+        let ask_view = if ask_open { self.ask.clone() } else { None };
+
         let palette_view = if palette_open {
             Some(self.ensure_command_palette(window, cx))
         } else {
@@ -613,6 +669,28 @@ impl Render for ZeroApp {
                 tracing::debug!("action: toggle split view");
                 this.toggle_split_view(window, cx);
             }))
+            .on_action(cx.listener(|this, _: &ToggleAsk, window, cx| {
+                tracing::debug!(open = !this.ask_open, "action: toggle ask");
+                this.ask_open = !this.ask_open;
+                if this.ask_open {
+                    this.ensure_ask(window, cx);
+                }
+                cx.notify();
+            }))
+            .on_action(cx.listener(|this, _: &ToggleTerminal, window, cx| {
+                tracing::debug!(open = !this.terminal_open, "action: toggle terminal");
+                this.terminal_open = !this.terminal_open;
+                if this.terminal_open {
+                    this.ensure_terminal(window, cx);
+                    // Focus the terminal
+                    if let Some(tv) = &this.terminal {
+                        tv.read(cx).focus_handle.focus(window);
+                    }
+                } else {
+                    this.focus_content(window, cx);
+                }
+                cx.notify();
+            }))
             .on_action(cx.listener(|this, _: &ToggleViewMode, _, cx| {
                 let new_mode = match this.view_mode {
                     ViewMode::List => "grid",
@@ -651,7 +729,7 @@ impl Render for ZeroApp {
                             .pt(CONTENT_INSET)
                             .pr(CONTENT_INSET)
                             .pb(CONTENT_INSET)
-                            .when(sidebar_open, |el| el.pl(px(4.0)))
+                            .when(sidebar_open, |el| el.pl(px(0.0)))
                             .when(!sidebar_open, |el| el.pl(CONTENT_INSET))
                             .when_some(titlebar, |el, tb| el.child(tb))
                             .when_some(content_banner, |el, banner_el| el.child(banner_el))
@@ -660,12 +738,74 @@ impl Render for ZeroApp {
                                 h_flex()
                                     .flex_1()
                                     .overflow_hidden()
-                                    .child(content)
-                                    .when_some(split_content, |el, right| {
-                                        el.child(div().w(px(1.0)).h_full().bg(cx.theme().border))
-                                            .child(right)
+                                    .child(
+                                        div()
+                                            .flex_1()
+                                            .size_full()
+                                            .flex()
+                                            .flex_row()
+                                            .overflow_hidden()
+                                            .child(content)
+                                            .when_some(split_content, |el, right| {
+                                                el.child(div().w(px(1.0)).h_full().bg(cx.theme().border))
+                                                    .child(right)
+                                            }),
+                                    )
+                                    .when_some(ask_view, |el, ask| {
+                                        el.child(
+                                            div()
+                                                .id("ask-resize-handle")
+                                                .w(px(4.0))
+                                                .h_full()
+                                                .cursor_col_resize()
+                                                .bg(cx.theme().border)
+                                                .on_drag(ResizeAskDrag, |drag, _, _window, cx| {
+                                                    cx.new(|_| drag.clone())
+                                                })
+                                                .on_drag_move(cx.listener(
+                                                    |this, event: &DragMoveEvent<ResizeAskDrag>, window, _cx| {
+                                                        let window_width = window.viewport_size().width;
+                                                        let new_width = window_width - event.event.position.x;
+                                                        this.ask_width = new_width.clamp(px(280.0), px(600.0));
+                                                    },
+                                                )),
+                                        )
+                                        .child(
+                                            div()
+                                                .w(ask_width)
+                                                .h_full()
+                                                .child(ask),
+                                        )
                                     }),
-                            ),
+                            )
+                            .when_some(terminal_view, |el, tv| {
+                                el.child(
+                                    div()
+                                        .id("terminal-resize-handle")
+                                        .h(px(4.0))
+                                        .w_full()
+                                        .cursor_row_resize()
+                                        .bg(cx.theme().border)
+                                        .on_drag(ResizeTerminalDrag, |drag, _, _window, cx| {
+                                            cx.new(|_| drag.clone())
+                                        })
+                                        .on_drag_move(cx.listener(
+                                            |this, event: &DragMoveEvent<ResizeTerminalDrag>, window, _cx| {
+                                                let window_height = window.viewport_size().height;
+                                                let max_height = window_height * 0.6;
+                                                let new_height = window_height - event.event.position.y;
+                                                this.terminal_height =
+                                                    new_height.clamp(px(100.0), max_height);
+                                            },
+                                        )),
+                                )
+                                .child(
+                                    div()
+                                        .h(terminal_height)
+                                        .w_full()
+                                        .child(tv),
+                                )
+                            }),
                     ),
             )
             // Traffic lights when sidebar is hidden (native ones are offscreen)

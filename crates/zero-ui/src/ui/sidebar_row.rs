@@ -4,7 +4,7 @@ use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use gpui_component::{ActiveTheme, Icon, IconName, Sizable as _};
 
-use crate::theme::{self, FONT_SIZE_BODY, ICON_SM, RADIUS, SIDEBAR_ROW_HEIGHT};
+use crate::theme::{self, FONT_SIZE_BODY, FONT_SIZE_CAPTION, ICON_SM, RADIUS, SIDEBAR_ROW_HEIGHT};
 
 type ClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 
@@ -13,6 +13,7 @@ type ClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 pub struct SidebarRow {
     id: ElementId,
     label: SharedString,
+    subtitle: Option<SharedString>,
     icon: IconName,
     active: bool,
     on_click: Option<ClickHandler>,
@@ -23,6 +24,7 @@ impl SidebarRow {
         Self {
             id: id.into(),
             label: label.into(),
+            subtitle: None,
             icon,
             active: false,
             on_click: None,
@@ -32,6 +34,11 @@ impl SidebarRow {
     #[allow(dead_code)] // Used by design-system binary
     pub fn active(mut self, active: bool) -> Self {
         self.active = active;
+        self
+    }
+
+    pub fn subtitle(mut self, text: impl Into<SharedString>) -> Self {
+        self.subtitle = Some(text.into());
         self
     }
 
@@ -59,11 +66,47 @@ impl RenderOnce for SidebarRow {
             (cx.theme().foreground, muted, None)
         };
 
+        let row_height = if self.subtitle.is_some() {
+            px(36.0)
+        } else {
+            SIDEBAR_ROW_HEIGHT
+        };
+
         let on_click = self.on_click;
+        let subtitle = self.subtitle;
+
+        let label_el = if let Some(sub) = subtitle {
+            div()
+                .overflow_hidden()
+                .flex()
+                .flex_col()
+                .justify_center()
+                .flex_1()
+                .min_w_0()
+                .child(div().text_ellipsis().whitespace_nowrap().child(self.label))
+                .child(
+                    div()
+                        .text_size(FONT_SIZE_CAPTION)
+                        .text_color(muted.opacity(0.7))
+                        .text_ellipsis()
+                        .whitespace_nowrap()
+                        .child(sub),
+                )
+                .into_any_element()
+        } else {
+            div()
+                .overflow_hidden()
+                .text_ellipsis()
+                .whitespace_nowrap()
+                .flex_1()
+                .min_w_0()
+                .child(self.label)
+                .into_any_element()
+        };
 
         div()
             .id(self.id)
-            .h(SIDEBAR_ROW_HEIGHT)
+            .h(row_height)
             .flex()
             .flex_row()
             .gap_2()
@@ -85,14 +128,6 @@ impl RenderOnce for SidebarRow {
                     .with_size(ICON_SM)
                     .text_color(icon_color),
             )
-            .child(
-                div()
-                    .overflow_hidden()
-                    .text_ellipsis()
-                    .whitespace_nowrap()
-                    .flex_1()
-                    .min_w_0()
-                    .child(self.label),
-            )
+            .child(label_el)
     }
 }

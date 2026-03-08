@@ -36,5 +36,9 @@ actions!(
         CopyToOtherPane,
         OpenSettings,
         ToggleToolbar,
+        ShowColumnMenu,
+        ToggleTerminal,
+        ClearTerminal,
+        ToggleAsk,
     ]
 );

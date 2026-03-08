@@ -5,7 +5,7 @@
 [images]
 extensions = [
     "png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "bmp", "tiff", "tif",
-    "svg", "ico", "raw", "cr2", "nef", "arw", "orf", "raf", "psd", "ai", "eps",
+    "svg", "ico", "cr2", "nef", "arw", "orf", "raf", "psd", "ai", "eps",
     "dng", "rw2", "srw", "x3f"
 ]
 

@@ -1,9 +1,9 @@
 [workspace]
-members = ["crates/watcher", "crates/zero-ui", "crates/zero-cli"]
+members = ["crates/watcher", "crates/zero-ui", "crates/zero-cli", "crates/zero-mcp", "crates/zero-llm"]
 resolver = "2"
 
 [workspace.package]
-version = "0.5.0"
+version = "0.6.0"
 license = "MIT"
 
 [workspace.dependencies]
@@ -67,7 +67,7 @@ opendal = { version = "0.51", optional = true, features = ["services-s3", "servi
 
 # Logging
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "tracing-log"] }
 
 # Watcher (for watch subcommand - dev/testing)
 zero-watcher = { workspace = true }
@@ -119,4 +119,5 @@ lto = false
 codegen-units = 1
 strip = true
 
-
+[patch.crates-io]
+gpui-component = { path = "../gpui-component/crates/ui" }

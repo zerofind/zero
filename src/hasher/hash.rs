@@ -84,6 +84,86 @@ pub enum HashError {
     },
 }
 
+/// Hash only the first `prefix_bytes` of a file for cheap early rejection.
+///
+/// Two files with different prefix hashes cannot be duplicates, avoiding a
+/// full-file read. Returns `None` if the file is smaller than `prefix_bytes`
+/// (caller should fall through to a full hash instead).
+pub fn hash_file_prefix(
+    path: &Path,
+    algorithm: HashAlgorithm,
+    prefix_bytes: u64,
+    buffer: &mut [u8],
+) -> Result<Option<HashResult>, HashError> {
+    let path_str = path.to_string_lossy().to_string();
+
+    let file = File::open(path).map_err(|e| HashError::OpenError {
+        path: path_str.clone(),
+        source: e,
+    })?;
+
+    let file_size = file
+        .metadata()
+        .map_err(|e| HashError::SizeError {
+            path: path_str.clone(),
+            source: e,
+        })?
+        .len();
+
+    // Skip prefix hashing for files smaller than the prefix — just do a full hash
+    if file_size <= prefix_bytes {
+        return Ok(None);
+    }
+
+    let mut reader = BufReader::new(&file);
+    let mut remaining = prefix_bytes;
+
+    let hash = match algorithm {
+        HashAlgorithm::Blake3 => {
+            let mut hasher = Blake3Hasher::new();
+            while remaining > 0 {
+                let to_read = (remaining as usize).min(buffer.len());
+                let n = reader
+                    .read(&mut buffer[..to_read])
+                    .map_err(|e| HashError::ReadError {
+                        path: path_str.clone(),
+                        source: e,
+                    })?;
+                if n == 0 {
+                    break;
+                }
+                hasher.update(&buffer[..n]);
+                remaining -= n as u64;
+            }
+            hasher.finalize().as_bytes().to_vec()
+        }
+        HashAlgorithm::Xxh3 => {
+            let mut hasher = Xxh3::new();
+            while remaining > 0 {
+                let to_read = (remaining as usize).min(buffer.len());
+                let n = reader
+                    .read(&mut buffer[..to_read])
+                    .map_err(|e| HashError::ReadError {
+                        path: path_str.clone(),
+                        source: e,
+                    })?;
+                if n == 0 {
+                    break;
+                }
+                hasher.update(&buffer[..n]);
+                remaining -= n as u64;
+            }
+            hasher.digest128().to_le_bytes().to_vec()
+        }
+    };
+
+    Ok(Some(HashResult {
+        hash,
+        algorithm,
+        bytes_hashed: prefix_bytes - remaining,
+    }))
+}
+
 /// Hash a file using the specified algorithm
 ///
 /// Automatically chooses between memory-mapped I/O (for large files)

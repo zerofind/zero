@@ -9,8 +9,6 @@ use std::sync::{Arc, Mutex};
 
 use clap::{CommandFactory, Parser};
 use cli::Cli;
-use tracing_subscriber::FmtSubscriber;
-
 use zero::output::{OutputMode, Outputter};
 
 mod cli;
@@ -22,6 +20,7 @@ static PANICKING: AtomicBool = AtomicBool::new(false);
 /// All known CLI commands and flags (used by preprocess_args and looks_like_path)
 const KNOWN_COMMANDS: &[&str] = &[
     "automation",
+    "cleanup",
     "completions",
     "cp",
     "copy",
@@ -187,17 +186,11 @@ fn main() -> anyhow::Result<()> {
     // Set up logging (only in human mode).
     // Priority: RUST_LOG env > --verbose flag > default (warn).
     if !cli.json {
-        let filter = zero::logging::env_filter(if cli.verbose {
+        zero::logging::init(if cli.verbose {
             zero::logging::VERBOSE
         } else {
             "warn"
         });
-
-        FmtSubscriber::builder()
-            .with_env_filter(filter)
-            .with_target(true)
-            .without_time()
-            .init();
 
         tracing::info!(
             version = env!("CARGO_PKG_VERSION"),
@@ -532,8 +525,12 @@ fn main() -> anyhow::Result<()> {
         }
 
         // =====================================================================
-        // Legacy commands (kept for backwards compatibility)
+        // Cleanup
         // =====================================================================
+        Commands::Cleanup { cleanup_cmd } => {
+            cli::commands::cmd_cleanup(&out, cleanup_cmd)?;
+        }
+
         // =====================================================================
         // Todo management
         // =====================================================================

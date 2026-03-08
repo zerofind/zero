@@ -6,6 +6,7 @@ use zero::prelude::AtomicProgress;
 
 use crate::models::{ClipboardOperation, FileClipboard};
 
+use super::git::GitInfo;
 use super::render::FileBrowserView;
 use super::state::BrowserEntry;
 
@@ -79,30 +80,90 @@ impl FileBrowserView {
         cx.write_to_clipboard(ClipboardItem::new_string(text));
     }
 
-    /// Show confirmation dialog before trashing the selected entry.
+    /// Move all selected entries to the Trash (immediate, like Finder).
+    ///
+    /// On success, optimistically removes entries from the list instead of
+    /// reloading the entire directory — no flicker, instant feedback.
     pub fn trash_selected(&mut self, cx: &mut Context<Self>) {
-        let Some(entry) = self.selected_entry(cx) else {
-            return;
+        let selected_indices: Vec<usize> = {
+            let delegate = self.table_state.read(cx).delegate();
+            if delegate.selected.is_empty() {
+                return;
+            }
+            delegate.selected.clone()
         };
-        tracing::debug!(path = %entry.path.display(), "browser: trash selected (confirm)");
-        self.pending_trash = Some(entry.path.clone());
-        cx.notify();
-    }
 
-    /// Actually perform the trash operation (called after confirmation).
-    pub fn confirm_trash(&mut self, cx: &mut Context<Self>) {
-        if let Some(path) = self.pending_trash.take()
-            && trash::delete(&path).is_ok()
-        {
-            tracing::debug!(path = %path.display(), "browser: trash confirmed");
-            self.reload(cx);
+        // Collect paths for all selected entries before mutating
+        let to_trash: Vec<(usize, PathBuf)> = {
+            let delegate = self.table_state.read(cx).delegate();
+            selected_indices
+                .iter()
+                .filter_map(|&i| delegate.entries.get(i).map(|e| (i, e.path.clone())))
+                .collect()
+        };
+
+        if to_trash.is_empty() {
+            return;
         }
-        cx.notify();
-    }
 
-    /// Cancel the pending trash operation.
-    pub fn cancel_trash(&mut self, cx: &mut Context<Self>) {
-        self.pending_trash = None;
+        tracing::debug!(count = to_trash.len(), "browser: trash selected");
+
+        // Trash each entry, collect indices that succeeded
+        let mut trashed_indices: Vec<usize> = Vec::new();
+        for &(idx, ref path) in &to_trash {
+            match crate::platform::trash::move_to_trash(path) {
+                Ok(()) => {
+                    tracing::info!(path = %path.display(), "browser: trashed");
+                    trashed_indices.push(idx);
+                }
+                Err(e) => {
+                    tracing::error!(path = %path.display(), error = %e, "browser: trash failed");
+                }
+            }
+        }
+
+        if trashed_indices.is_empty() {
+            return;
+        }
+
+        let first_removed = *trashed_indices.iter().min().unwrap_or(&0);
+
+        self.table_state.update(cx, |state, cx| {
+            let delegate = state.delegate_mut();
+
+            // Expand each trashed index to include inline children (expanded dirs).
+            // Process in reverse order so removals don't shift earlier indices.
+            trashed_indices.sort_unstable();
+            trashed_indices.dedup();
+
+            let mut remove_set = Vec::new();
+            for &idx in &trashed_indices {
+                let depth = delegate.entries[idx].depth;
+                let mut end = idx + 1;
+                while end < delegate.entries.len() && delegate.entries[end].depth > depth {
+                    end += 1;
+                }
+                for i in idx..end {
+                    remove_set.push(i);
+                }
+            }
+            remove_set.sort_unstable();
+            remove_set.dedup();
+
+            // Remove from back to front so indices stay valid
+            for &i in remove_set.iter().rev() {
+                delegate.entries.remove(i);
+            }
+
+            // Clear selection and pick next sensible row
+            delegate.selected.clear();
+            if !delegate.entries.is_empty() {
+                let next = first_removed.min(delegate.entries.len() - 1);
+                delegate.selected.push(next);
+            }
+
+            cx.notify();
+        });
         cx.notify();
     }
 
@@ -112,16 +173,17 @@ impl FileBrowserView {
         self.path = path.clone();
 
         // Clear modal/search state (meaningless in new folder)
-        self.inline_edit = None;
-        self.inline_input = None;
-        self.pending_trash = None;
         self.search_active = false;
         self.search_input = None;
         self.display_mode = None;
+        self.clear_typeahead();
 
-        // Clear selection immediately
+        // Clear selection and editing state immediately
         self.table_state.update(cx, |state, cx| {
-            state.delegate_mut().selected.clear();
+            let delegate = state.delegate_mut();
+            delegate.selected.clear();
+            delegate.editing_row = None;
+            delegate.editing_input = None;
             cx.notify();
         });
 
@@ -131,9 +193,14 @@ impl FileBrowserView {
 
         cx.spawn(async move |this, cx| {
             let guard_path = load_path.clone();
+            let git_path = guard_path.clone();
             let entries = cx
                 .background_executor()
                 .spawn(async move { super::state::load_directory(&load_path) })
+                .await;
+            let git_info = cx
+                .background_executor()
+                .spawn(async move { GitInfo::discover(&git_path) })
                 .await;
 
             let elapsed = start.elapsed().as_secs_f64() * 1000.0;
@@ -148,6 +215,7 @@ impl FileBrowserView {
                 view.table_state.update(cx, |state, cx| {
                     let delegate = state.delegate_mut();
                     delegate.entries = entries;
+                    delegate.git_info = git_info;
                     delegate.selected.clear();
                     cx.notify();
                 });
@@ -163,13 +231,19 @@ impl FileBrowserView {
     /// Reload the current directory listing (async).
     pub fn reload(&mut self, cx: &mut Context<Self>) {
         self.loading = true;
+        self.clear_typeahead();
         cx.notify();
 
         let load_path = self.path.clone();
         cx.spawn(async move |this, cx| {
+            let git_path = load_path.clone();
             let entries = cx
                 .background_executor()
                 .spawn(async move { super::state::load_directory(&load_path) })
+                .await;
+            let git_info = cx
+                .background_executor()
+                .spawn(async move { GitInfo::discover(&git_path) })
                 .await;
 
             this.update(cx, |view, cx| {
@@ -177,6 +251,7 @@ impl FileBrowserView {
                 view.table_state.update(cx, |state, cx| {
                     let delegate = state.delegate_mut();
                     delegate.entries = entries;
+                    delegate.git_info = git_info;
                     delegate.selected.clear();
                     cx.notify();
                 });
@@ -380,7 +455,7 @@ impl FileBrowserView {
 // -- Helpers -----------------------------------------------------------------
 
 /// Generate a unique path by appending " 2", " 3", etc. if the target exists.
-fn unique_path(base: &Path) -> PathBuf {
+pub(super) fn unique_path(base: &Path) -> PathBuf {
     if !base.exists() {
         return base.to_path_buf();
     }

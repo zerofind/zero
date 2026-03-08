@@ -9,26 +9,23 @@ pub mod theme;
 pub mod ui;
 mod views;
 
+use std::borrow::Cow;
+
 use gpui::*;
 use gpui_component::Root;
 
 use actions::{
-    CopyFiles, CopyPath, CutFiles, DuplicateFiles, FindInBrowser, GoBack, GoForward, GoUp,
-    MoveToTrash, NewFolder, OpenCommandPalette, OpenSelected, OpenSettings, PasteFiles, QuickLook,
-    Quit, Refresh, Rename, SelectAll, ToggleSidebar, ToggleSplitView, ToggleToolbar,
-    ToggleViewMode,
+    ClearTerminal, CopyFiles, CopyPath, CutFiles, DuplicateFiles, FindInBrowser, GoBack, GoForward,
+    GoUp, MoveToTrash, NewFolder, OpenCommandPalette, OpenSelected, OpenSettings, PasteFiles,
+    QuickLook, Quit, Refresh, Rename, SelectAll, ToggleSidebar, ToggleSplitView, ToggleTerminal,
+    ToggleToolbar, ToggleViewMode,
 };
 use app::ZeroApp;
 
 /// Launch the GPUI-based file manager window.
 pub fn launch() {
-    // Set up tracing before gpui (which installs its own subscriber if none exists).
-    // Use try_init — when launched via `zero` CLI, its subscriber wins and this is a no-op.
-    let filter = zero::logging::env_filter("zero_ui=info,warn");
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        .with_target(true)
-        .try_init();
+    // First caller wins — when launched via `zero` CLI, its init takes priority.
+    zero::logging::init("zero_ui=info,alacritty_terminal=warn,vte=warn,warn");
 
     tracing::info!(
         version = env!("CARGO_PKG_VERSION"),
@@ -41,6 +38,7 @@ pub fn launch() {
 
     app.run(move |cx| {
         gpui_component::init(cx);
+        load_terminal_fonts(cx);
 
         theme::init_zero_theme(cx);
         theme::watch_user_themes(cx);
@@ -112,23 +110,23 @@ pub fn launch() {
             KeyBinding::new("cmd-shift-n", NewFolder, None),
             #[cfg(not(target_os = "macos"))]
             KeyBinding::new("ctrl-shift-n", NewFolder, None),
-            // File clipboard
+            // File clipboard — scoped to DataTableView so text inputs keep Cmd+C/V/X
             #[cfg(target_os = "macos")]
-            KeyBinding::new("cmd-c", CopyFiles, None),
+            KeyBinding::new("cmd-c", CopyFiles, Some("DataTableView")),
             #[cfg(not(target_os = "macos"))]
-            KeyBinding::new("ctrl-c", CopyFiles, None),
+            KeyBinding::new("ctrl-c", CopyFiles, Some("DataTableView")),
             #[cfg(target_os = "macos")]
-            KeyBinding::new("cmd-x", CutFiles, None),
+            KeyBinding::new("cmd-x", CutFiles, Some("DataTableView")),
             #[cfg(not(target_os = "macos"))]
-            KeyBinding::new("ctrl-x", CutFiles, None),
+            KeyBinding::new("ctrl-x", CutFiles, Some("DataTableView")),
             #[cfg(target_os = "macos")]
-            KeyBinding::new("cmd-v", PasteFiles, None),
+            KeyBinding::new("cmd-v", PasteFiles, Some("DataTableView")),
             #[cfg(not(target_os = "macos"))]
-            KeyBinding::new("ctrl-v", PasteFiles, None),
+            KeyBinding::new("ctrl-v", PasteFiles, Some("DataTableView")),
             #[cfg(target_os = "macos")]
-            KeyBinding::new("cmd-d", DuplicateFiles, None),
+            KeyBinding::new("cmd-d", DuplicateFiles, Some("DataTableView")),
             #[cfg(not(target_os = "macos"))]
-            KeyBinding::new("ctrl-d", DuplicateFiles, None),
+            KeyBinding::new("ctrl-d", DuplicateFiles, Some("DataTableView")),
             // Split view
             #[cfg(target_os = "macos")]
             KeyBinding::new("cmd-\\", ToggleSplitView, None),
@@ -144,6 +142,16 @@ pub fn launch() {
             KeyBinding::new("cmd-a", SelectAll, None),
             #[cfg(not(target_os = "macos"))]
             KeyBinding::new("ctrl-a", SelectAll, None),
+            // Terminal toggle
+            #[cfg(target_os = "macos")]
+            KeyBinding::new("cmd-`", ToggleTerminal, None),
+            #[cfg(not(target_os = "macos"))]
+            KeyBinding::new("ctrl-`", ToggleTerminal, None),
+            // Clear terminal (only active when terminal is focused)
+            #[cfg(target_os = "macos")]
+            KeyBinding::new("cmd-k", ClearTerminal, Some("Terminal")),
+            #[cfg(not(target_os = "macos"))]
+            KeyBinding::new("ctrl-k", ClearTerminal, Some("Terminal")),
         ]);
 
         cx.on_action(|_: &Quit, cx| cx.quit());
@@ -192,4 +200,17 @@ pub fn launch() {
         })
         .detach();
     });
+}
+
+/// Load bundled Lilex font (has powerline glyphs for terminal prompts).
+fn load_terminal_fonts(cx: &App) {
+    let fonts: Vec<Cow<'static, [u8]>> = vec![
+        Cow::Borrowed(include_bytes!("../assets/fonts/Lilex-Regular.ttf")),
+        Cow::Borrowed(include_bytes!("../assets/fonts/Lilex-Bold.ttf")),
+        Cow::Borrowed(include_bytes!("../assets/fonts/Lilex-Italic.ttf")),
+        Cow::Borrowed(include_bytes!("../assets/fonts/Lilex-BoldItalic.ttf")),
+    ];
+    if let Err(e) = cx.text_system().add_fonts(fonts) {
+        tracing::warn!("Failed to load terminal fonts: {e}");
+    }
 }

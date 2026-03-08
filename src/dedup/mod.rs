@@ -22,8 +22,11 @@
 //! ```
 
 mod finder;
+mod stream;
+mod types;
 
-pub use finder::{
-    DedupError, DedupOptions, DedupProgress, DedupResult, DuplicateGroup, delete_duplicates,
-    find_duplicates, find_duplicates_with_progress,
+pub use finder::{delete_duplicates, find_duplicates, find_duplicates_with_progress};
+pub use stream::{DedupStreamEvent, find_duplicates_streaming};
+pub use types::{
+    DedupError, DedupOptions, DedupProgress, DedupResult, DeleteResult, DuplicateGroup,
 };

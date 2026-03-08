@@ -137,7 +137,7 @@ pub(super) const DEFAULT_ACTIONS: &[PaletteAction] = &[
         shortcut: None,
     },
     PaletteAction {
-        name: "System Cleanup",
+        name: "Cleanup",
         icon: || IconName::Delete,
         path: "action://cleanup",
         category: "View",
@@ -182,7 +182,7 @@ pub(super) const DEFAULT_ACTIONS: &[PaletteAction] = &[
     },
 ];
 
-pub(super) struct StorageEntry {
+pub struct StorageEntry {
     pub name: String,
     pub mount_point: PathBuf,
     pub is_external: bool,
@@ -353,7 +353,12 @@ impl RenderOnce for PaletteItem {
                     })
                     .when(self.selected && self.is_drillable, |el| {
                         el.child(
-                            div()
+                            h_flex()
+                                .gap_1()
+                                .items_center()
+                                .px_1p5()
+                                .py(px(2.))
+                                .bg(cx.theme().muted)
                                 .text_size(FONT_SIZE_CAPTION)
                                 .text_color(muted)
                                 .child("Search >"),
@@ -363,7 +368,12 @@ impl RenderOnce for PaletteItem {
                         self.selected && !self.is_drillable && self.action_label.is_some(),
                         |el| {
                             el.child(
-                                div()
+                                h_flex()
+                                    .gap_1()
+                                    .items_center()
+                                    .px_1p5()
+                                    .py(px(2.))
+                                    .bg(cx.theme().muted)
                                     .text_size(FONT_SIZE_CAPTION)
                                     .text_color(muted)
                                     .child(self.action_label.unwrap()),

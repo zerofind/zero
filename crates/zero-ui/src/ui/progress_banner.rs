@@ -16,6 +16,7 @@ pub enum BannerKind {
     Copy,
     Search,
     Dedup,
+    Cleanup,
 }
 
 /// Data to drive the progress banner.
@@ -51,6 +52,7 @@ impl BannerData {
             BannerKind::Copy => IconName::Copy,
             BannerKind::Search => IconName::Search,
             BannerKind::Dedup => IconName::File,
+            BannerKind::Cleanup => IconName::Delete,
         }
     }
 }

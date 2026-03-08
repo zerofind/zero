@@ -34,6 +34,7 @@ impl ZeroMenuExt for PopupMenu {
 
             h_flex()
                 .flex_1()
+                .ml(px(2.))
                 .gap_3()
                 .items_center()
                 .justify_between()

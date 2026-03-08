@@ -20,7 +20,6 @@ impl SectionHeader {
 impl RenderOnce for SectionHeader {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         div()
-            .px_3()
             .py_1()
             .text_size(FONT_SIZE_CAPTION)
             .text_color(cx.theme().muted_foreground)
