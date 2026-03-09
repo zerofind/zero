@@ -1,9 +1,13 @@
 pub mod apps;
+pub mod code;
+pub mod git;
 pub mod llm;
 pub mod mcp;
 pub mod search;
 
 pub use apps::AppService;
+pub use code::CodeService;
+pub use git::GitService;
 pub use llm::{LlmEvent, LlmService};
 pub use mcp::McpService;
 pub use search::{SearchEvent, SearchService};
@@ -20,6 +24,9 @@ pub struct ServiceHub {
     pub apps: Entity<AppService>,
     pub mcp: Entity<McpService>,
     pub llm: Entity<LlmService>,
+    pub git: Entity<GitService>,
+    #[allow(dead_code)]
+    pub code: Entity<CodeService>,
 }
 
 impl ServiceHub {
@@ -28,12 +35,16 @@ impl ServiceHub {
         let apps = cx.new(AppService::new);
         let mcp = cx.new(McpService::new);
         let llm = cx.new(LlmService::new);
+        let git = cx.new(GitService::new);
+        let code = cx.new(CodeService::new);
 
         Self {
             search,
             apps,
             mcp,
             llm,
+            git,
+            code,
         }
     }
 
@@ -44,12 +55,16 @@ impl ServiceHub {
         let apps = cx.new(AppService::new_deferred);
         let mcp = cx.new(McpService::new);
         let llm = cx.new(LlmService::new);
+        let git = cx.new(GitService::new);
+        let code = cx.new(CodeService::new);
 
         Self {
             search,
             apps,
             mcp,
             llm,
+            git,
+            code,
         }
     }
 

@@ -37,9 +37,11 @@ impl ZeroApp {
                     sidebar.update(cx, |s, cx| s.remove_bookmark(path, cx));
                 }
                 let mut settings = crate::session::Settings::load();
-                settings.sidebar_bookmarks.retain(|b| b != path);
-                settings.sidebar_regular_bookmarks.retain(|b| b != path);
+                let ws = settings.active_ws_mut();
+                ws.pinned_bookmarks.retain(|b| b != path);
+                ws.regular_bookmarks.retain(|b| b != path);
                 settings.save();
+                self.refresh_sidebar_git(cx);
             }
             SidebarEvent::UnpinBookmark(path) => {
                 tracing::debug!(path = %path.display(), "sidebar: unpin bookmark");
@@ -47,10 +49,11 @@ impl ZeroApp {
                     sidebar.update(cx, |s, cx| s.unpin_bookmark(path, cx));
                 }
                 let mut settings = crate::session::Settings::load();
-                if let Some(pos) = settings.sidebar_bookmarks.iter().position(|b| b == path) {
-                    let removed = settings.sidebar_bookmarks.remove(pos);
-                    if !settings.sidebar_regular_bookmarks.contains(&removed) {
-                        settings.sidebar_regular_bookmarks.push(removed);
+                let ws = settings.active_ws_mut();
+                if let Some(pos) = ws.pinned_bookmarks.iter().position(|b| b == path) {
+                    let removed = ws.pinned_bookmarks.remove(pos);
+                    if !ws.regular_bookmarks.contains(&removed) {
+                        ws.regular_bookmarks.push(removed);
                     }
                 }
                 settings.save();
@@ -61,14 +64,11 @@ impl ZeroApp {
                     sidebar.update(cx, |s, cx| s.pin_bookmark(path, cx));
                 }
                 let mut settings = crate::session::Settings::load();
-                if let Some(pos) = settings
-                    .sidebar_regular_bookmarks
-                    .iter()
-                    .position(|b| b == path)
-                {
-                    let removed = settings.sidebar_regular_bookmarks.remove(pos);
-                    if !settings.sidebar_bookmarks.contains(&removed) {
-                        settings.sidebar_bookmarks.push(removed);
+                let ws = settings.active_ws_mut();
+                if let Some(pos) = ws.regular_bookmarks.iter().position(|b| b == path) {
+                    let removed = ws.regular_bookmarks.remove(pos);
+                    if !ws.pinned_bookmarks.contains(&removed) {
+                        ws.pinned_bookmarks.push(removed);
                     }
                 }
                 settings.save();
@@ -88,6 +88,36 @@ impl ZeroApp {
                     settings.search_roots.push(path.clone());
                     settings.save();
                 }
+            }
+            SidebarEvent::SwitchWorkspace(idx) => {
+                tracing::debug!(idx, "sidebar: switch workspace");
+                self.switch_workspace(*idx, window, cx);
+            }
+            SidebarEvent::CreateWorkspace => {
+                tracing::debug!("sidebar: create workspace");
+                let settings = crate::session::Settings::load();
+                let existing: std::collections::HashSet<&str> = settings
+                    .workspaces
+                    .iter()
+                    .map(|w| w.name.as_str())
+                    .collect();
+                let mut n = settings.workspaces.len() + 1;
+                let name = loop {
+                    let candidate = format!("Workspace {n}");
+                    if !existing.contains(candidate.as_str()) {
+                        break candidate;
+                    }
+                    n += 1;
+                };
+                self.create_workspace(name, window, cx);
+            }
+            SidebarEvent::RenameWorkspace(idx, name) => {
+                tracing::debug!(idx, name = %name, "sidebar: rename workspace");
+                self.rename_workspace(*idx, name.clone(), cx);
+            }
+            SidebarEvent::DeleteWorkspace(idx) => {
+                tracing::debug!(idx, "sidebar: delete workspace");
+                self.delete_workspace(*idx, window, cx);
             }
             SidebarEvent::GoBack => {
                 tracing::debug!("sidebar: go back");
@@ -168,12 +198,12 @@ impl ZeroApp {
                     sidebar.update(cx, |s, cx| s.add_bookmark(path.clone(), cx));
                 }
                 let mut settings = crate::session::Settings::load();
-                if !settings.sidebar_regular_bookmarks.contains(path)
-                    && !settings.sidebar_bookmarks.contains(path)
-                {
-                    settings.sidebar_regular_bookmarks.push(path.clone());
+                let ws = settings.active_ws_mut();
+                if !ws.regular_bookmarks.contains(path) && !ws.pinned_bookmarks.contains(path) {
+                    ws.regular_bookmarks.push(path.clone());
                     settings.save();
                 }
+                self.refresh_sidebar_git(cx);
             }
             FileBrowserEvent::PasteStarted(progress) => {
                 tracing::debug!("browser: paste started");
@@ -187,6 +217,7 @@ impl ZeroApp {
             FileBrowserEvent::PasteFinished => {
                 tracing::debug!("browser: paste finished");
                 self.clear_banner(cx);
+                self.refresh_sidebar_git(cx);
             }
             FileBrowserEvent::NewTodoFile(path) => {
                 tracing::debug!(path = %path.display(), "browser: new todo file");
@@ -217,6 +248,7 @@ impl ZeroApp {
                     }
                     cx.notify();
                 }
+                self.refresh_sidebar_git(cx);
             }
             FileBrowserEvent::CopyToOtherPane(paths) => {
                 tracing::debug!(count = paths.len(), "browser: copy to other pane");
@@ -231,6 +263,10 @@ impl ZeroApp {
                     self.split_browser = None;
                     cx.notify();
                 }
+                self.refresh_sidebar_git(cx);
+            }
+            FileBrowserEvent::GitStateChanged => {
+                self.refresh_sidebar_git(cx);
             }
         }
     }
@@ -632,6 +668,7 @@ impl ZeroApp {
                 tracing::debug!("terminal: close");
                 self.terminal_open = false;
                 self.terminal = None;
+                self.refresh_sidebar_git(cx);
                 cx.notify();
             }
         }

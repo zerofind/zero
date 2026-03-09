@@ -187,6 +187,11 @@ pub fn sort_entries(entries: &mut [BrowserEntry], field: SortField, direction: S
 
         let cmp = match field {
             SortField::Name => compare_ignore_case(&a.name, &b.name),
+            SortField::Location => {
+                let ap = a.path.parent().map(|p| p.as_os_str()).unwrap_or_default();
+                let bp = b.path.parent().map(|p| p.as_os_str()).unwrap_or_default();
+                ap.cmp(bp)
+            }
             SortField::DateModified => a.mtime.cmp(&b.mtime),
             SortField::Size => a.size.cmp(&b.size),
             SortField::Kind => {

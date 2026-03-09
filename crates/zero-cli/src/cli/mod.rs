@@ -429,7 +429,7 @@ pub enum Commands {
     ///   zero search "*.pdf" --type images  # Search with type filter
     ///   zero search --types                # List available type filters
     Search {
-        /// Search query (filename substring)
+        /// Search query (filename substring or glob pattern like "*.rs")
         query: Option<String>,
 
         /// Limit search to this directory (subdirectory of indexed path)
@@ -460,9 +460,9 @@ pub enum Commands {
         #[arg(long)]
         dirs_only: bool,
 
-        /// Filter by file extension (e.g., "pdf", "rs")
-        #[arg(short = 'e', long = "ext")]
-        extension: Option<String>,
+        /// Filter by file extension (comma-separated, e.g., "pdf,rs,txt")
+        #[arg(short = 'e', long = "ext", value_delimiter = ',')]
+        extension: Vec<String>,
 
         /// Filter by file type (images, videos, audio, documents, code, archives, config)
         #[arg(short = 't', long = "type")]
@@ -479,6 +479,30 @@ pub enum Commands {
         /// Watch directory for changes and update index in real-time
         #[arg(long)]
         watch: bool,
+
+        /// Sort results (relevance, recent, size-desc, size-asc, name)
+        #[arg(long)]
+        sort: Option<String>,
+
+        /// Minimum file size (e.g., "1KB", "10MB", "1GB")
+        #[arg(long)]
+        min_size: Option<String>,
+
+        /// Maximum file size (e.g., "100MB", "1GB")
+        #[arg(long)]
+        max_size: Option<String>,
+
+        /// Exclude files in hidden directories
+        #[arg(long)]
+        exclude_hidden: bool,
+
+        /// Open first result with default application
+        #[arg(long)]
+        open: bool,
+
+        /// Reveal first result in Finder
+        #[arg(long)]
+        reveal: bool,
     },
 
     // =========================================================================
@@ -516,6 +540,97 @@ pub enum Commands {
         /// Only check for updates, don't install
         #[arg(long)]
         check: bool,
+    },
+
+    /// Manage anonymous usage telemetry
+    ///
+    /// Zero collects anonymous usage statistics to improve the product.
+    /// No file names, paths, or personal data is ever collected.
+    ///
+    /// Examples:
+    ///   zero telemetry status     # Show enabled/disabled state
+    ///   zero telemetry show       # Print exactly what would be sent
+    ///   zero telemetry off        # Disable collection
+    ///   zero telemetry on         # Re-enable collection
+    ///   zero telemetry reset      # Generate a new anonymous identity
+    Telemetry {
+        #[command(subcommand)]
+        telemetry_cmd: commands::telemetry::TelemetryCommands,
+    },
+
+    // =========================================================================
+    // Code indexing
+    // =========================================================================
+    /// Index and search code structure (functions, types, traits)
+    ///
+    /// Build a structural code index, then search across projects:
+    ///   zero code index ~/code                  # Discover and index all git projects
+    ///   zero code index ~/code/myapp            # Index a single project
+    ///   zero code search "transfer"             # Search symbols across all projects
+    ///   zero code search "Error" --kind enum    # Filter by element kind
+    ///   zero code overview ~/code/myapp         # Project summary
+    ///   zero code list                          # List indexed projects
+    Code {
+        #[command(subcommand)]
+        code_cmd: CodeCommands,
+    },
+}
+
+/// Subcommands for code indexing
+#[derive(Subcommand)]
+pub enum CodeCommands {
+    /// Discover and index code projects
+    Index {
+        /// Path to index (single project or parent directory)
+        path: PathBuf,
+        /// Only index directories containing .git (default: true)
+        #[arg(long, default_value = "true")]
+        git_only: bool,
+    },
+
+    /// Search for code symbols (functions, types, traits)
+    Search {
+        /// Symbol name or pattern to search for
+        query: String,
+        /// Filter by element kind: function, struct, trait, enum, method, const, type_alias, macro
+        #[arg(short, long)]
+        kind: Option<String>,
+        /// Filter by language: rust, go
+        #[arg(short, long)]
+        language: Option<String>,
+        /// Scope search to a specific project
+        #[arg(short, long)]
+        project: Option<PathBuf>,
+        /// Maximum results (default: 30)
+        #[arg(short = 'n', long, default_value = "30")]
+        limit: usize,
+    },
+
+    /// Get a concise overview of a project
+    Overview {
+        /// Project path
+        path: PathBuf,
+    },
+
+    /// List all indexed projects
+    List,
+
+    /// Remove a project from the index
+    Remove {
+        /// Project path to remove
+        path: PathBuf,
+    },
+
+    /// List all symbols in a project
+    Symbols {
+        /// Project path
+        project: PathBuf,
+        /// Filter by element kind
+        #[arg(short, long)]
+        kind: Option<String>,
+        /// Maximum results (default: 200)
+        #[arg(short = 'n', long, default_value = "200")]
+        limit: usize,
     },
 }
 

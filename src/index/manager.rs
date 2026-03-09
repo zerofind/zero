@@ -633,6 +633,19 @@ impl IndexManager {
             SortBy::Relevance => {
                 all_results.sort_by_key(|a| std::cmp::Reverse(a.score));
             }
+            SortBy::SizeDesc => {
+                all_results.sort_by_key(|a| std::cmp::Reverse(a.node.size));
+            }
+            SortBy::SizeAsc => {
+                all_results.sort_by_key(|a| a.node.size);
+            }
+            SortBy::NameAsc => {
+                all_results.sort_by(|a, b| {
+                    let name_a = a.node.path.rsplit('/').next().unwrap_or(&a.node.path);
+                    let name_b = b.node.path.rsplit('/').next().unwrap_or(&b.node.path);
+                    name_a.cmp(name_b)
+                });
+            }
             SortBy::None => {
                 // Type-only results: sort by mtime for consistent ordering
                 all_results.sort_by_key(|a| std::cmp::Reverse(a.node.mtime));

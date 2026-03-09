@@ -85,7 +85,8 @@ impl PaletteView {
             },
         );
 
-        let bookmarks = crate::session::Settings::load().sidebar_bookmarks;
+        let settings = crate::session::Settings::load();
+        let bookmarks = settings.active_ws().pinned_bookmarks.clone();
 
         // Poll every 500ms while loading/indexing so the banner file count updates live.
         cx.spawn(async move |this, cx| {
@@ -279,10 +280,7 @@ impl PaletteView {
         DEFAULT_ACTIONS
             .iter()
             .enumerate()
-            .filter(|(_, a)| {
-                Self::matches_query(a.name, &self.query)
-                    || Self::matches_query(a.category, &self.query)
-            })
+            .filter(|(_, a)| Self::matches_query(a.name, &self.query))
             .collect()
     }
 
@@ -437,7 +435,15 @@ impl PaletteView {
     }
 
     pub(super) fn default_item_count(&self) -> usize {
-        self.bookmarks.len() + self.storages.len() + DEFAULT_ACTIONS.len()
+        self.bookmarks.len() + self.storages.len() + Self::visible_default_actions().len()
+    }
+
+    /// Default actions filtered to those visible in the empty-state palette.
+    pub(super) fn visible_default_actions() -> Vec<&'static PaletteAction> {
+        DEFAULT_ACTIONS
+            .iter()
+            .filter(|a| a.default_visible)
+            .collect()
     }
 
     pub(super) fn confirm_selection(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -568,7 +574,8 @@ impl PaletteView {
             }
         } else {
             let action_idx = self.selected_idx - bookmark_count - storage_count;
-            if let Some(action) = DEFAULT_ACTIONS.get(action_idx) {
+            let visible = Self::visible_default_actions();
+            if let Some(action) = visible.get(action_idx) {
                 // Handle type:// drill-in internally
                 if let Some(type_name) = action.path.strip_prefix("type://") {
                     self.drill_into(type_name, action.name, window, cx);
@@ -591,17 +598,7 @@ impl PaletteView {
 
     /// Action label for a result item.
     pub(super) fn action_label_for_result(_is_dir: bool) -> &'static str {
-        "Open \u{21b5}"
-    }
-
-    pub(super) fn action_label_for_action(action: &PaletteAction) -> &'static str {
-        if action.path.starts_with("type://") || action.path == "apps://" {
-            "Search >"
-        } else if action.path.starts_with("app://") {
-            "Launch \u{21b5}"
-        } else {
-            "Run \u{21b5}"
-        }
+        "Run"
     }
 
     pub(super) fn section_header(title: &'static str, muted: Hsla) -> Div {

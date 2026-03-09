@@ -589,6 +589,8 @@ fn output_results(
         bytes_reclaimed,
     };
 
+    zero::telemetry::record_dedup(result.duplicate_count as u64, bytes_reclaimed.unwrap_or(0));
+
     cmd_success!(out, "dupes", duration_ms, data, {
         out.newline();
 

@@ -38,7 +38,7 @@ impl LlmService {
             .build()
             .expect("failed to create LLM tokio runtime");
 
-        let has_key = config.api_key.as_deref().is_some_and(|k| !k.is_empty());
+        let has_key = config.api_key_for_provider(&config.provider).is_some();
         let agent = if config.enabled && has_key {
             match ZeroAgent::new(&config, index.clone(), runtime.handle().clone()) {
                 Ok(agent) => {
@@ -72,28 +72,42 @@ impl LlmService {
         }
     }
 
-    /// Save an API key and build the agent immediately.
+    /// Save an API key for a provider and build the agent immediately.
     ///
-    /// Preserves the current model if the provider hasn't changed,
-    /// otherwise falls back to the provider's default model.
+    /// Switches to the provider if not already active, using its default model.
     pub fn set_api_key(&mut self, provider: &str, api_key: &str, cx: &mut Context<Self>) {
+        // Store key in the provider-specific field
+        match provider {
+            "anthropic" => self.config.anthropic_api_key = Some(api_key.to_string()),
+            "openai" | "openai-compatible" => {
+                self.config.openai_api_key = Some(api_key.to_string());
+            }
+            _ => {}
+        }
+
         let provider_changed = self.config.provider != provider;
         self.config.provider = provider.to_string();
         if provider_changed {
             self.config.model = LlmConfig::default_model(provider).to_string();
         }
         self.config.enabled = true;
-        self.config.api_key = Some(api_key.to_string());
 
         self.rebuild_agent(cx);
     }
 
-    /// Switch model within the current provider.
-    pub fn set_model(&mut self, model: &str, cx: &mut Context<Self>) {
-        if self.config.model == model {
+    /// Switch model, auto-switching provider if the model belongs to a different one.
+    pub fn set_model(&mut self, model: &str, thinking: bool, cx: &mut Context<Self>) {
+        if self.config.model == model && self.config.thinking == thinking {
             return;
         }
+        // Auto-switch provider if needed
+        if let Some(needed) = LlmConfig::provider_for_model(model)
+            && self.config.provider != needed
+        {
+            self.config.provider = needed.to_string();
+        }
         self.config.model = model.to_string();
+        self.config.thinking = thinking;
         self.rebuild_agent(cx);
     }
 
@@ -174,15 +188,14 @@ impl LlmService {
         self.error.as_deref()
     }
 
-    pub fn provider(&self) -> &str {
-        &self.config.provider
-    }
-
     pub fn model(&self) -> &str {
         &self.config.model
     }
 
-    #[allow(dead_code)]
+    pub fn thinking(&self) -> bool {
+        self.config.thinking
+    }
+
     pub fn config(&self) -> &LlmConfig {
         &self.config
     }

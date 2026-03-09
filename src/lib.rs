@@ -104,6 +104,7 @@ pub mod apps;
 pub mod automation;
 pub mod cache;
 pub mod cleanup;
+pub mod code;
 pub mod dedup;
 pub mod delete;
 pub mod differ;
@@ -119,6 +120,7 @@ pub mod scanner;
 pub mod service;
 pub mod storage;
 pub mod sync;
+pub mod telemetry;
 pub mod templates;
 pub mod todo;
 pub mod transfer;
@@ -202,6 +204,12 @@ pub mod prelude {
     pub use crate::todo::{
         DEFAULT_LIST, ListCounts, StatusCounts, Task, TaskFilter, TaskStatus, TodoError, TodoFile,
         TodoManager,
+    };
+
+    // Code Index
+    pub use crate::code::{
+        CodeElement, CodeIndex, CodeIndexError, CodeProject, CodeSearchOpts, CodeSearchResult,
+        ElementKind, Language, ProjectOverview, ProjectSummary, Visibility,
     };
 }
 

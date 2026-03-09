@@ -8,7 +8,7 @@ name = "zero_ui"
 path = "src/lib.rs"
 
 [[bin]]
-name = "zero-app"
+name = "Zero"
 path = "src/main.rs"
 
 [[bin]]
@@ -19,8 +19,8 @@ path = "src/bin/design_system.rs"
 zero = { path = "../.." }
 zero-watcher = { path = "../watcher" }
 gpui = "0.2.2"
-gpui-component = { version = "0.5.1", features = ["tree-sitter-languages"] }
-gpui-component-assets = "0.5.1"
+gpui-component = { path = "../../vendor/gpui-component/crates/ui", features = ["tree-sitter-languages"] }
+gpui-component-assets = { path = "../../vendor/gpui-component/crates/assets" }
 anyhow = "1"
 tracing = "0.1"
 serde = { version = "1", features = ["derive"] }

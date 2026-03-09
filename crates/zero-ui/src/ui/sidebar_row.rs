@@ -16,6 +16,7 @@ pub struct SidebarRow {
     subtitle: Option<SharedString>,
     icon: IconName,
     active: bool,
+    color_override: Option<Hsla>,
     on_click: Option<ClickHandler>,
 }
 
@@ -27,6 +28,7 @@ impl SidebarRow {
             subtitle: None,
             icon,
             active: false,
+            color_override: None,
             on_click: None,
         }
     }
@@ -34,6 +36,12 @@ impl SidebarRow {
     #[allow(dead_code)] // Used by design-system binary
     pub fn active(mut self, active: bool) -> Self {
         self.active = active;
+        self
+    }
+
+    /// Override both text and icon color (e.g. warning for git-dirty bookmarks).
+    pub fn color_override(mut self, color: Hsla) -> Self {
+        self.color_override = Some(color);
         self
     }
 
@@ -56,7 +64,7 @@ impl RenderOnce for SidebarRow {
         let hover_bg = theme::surface_hover(cx);
         let muted = cx.theme().muted_foreground;
 
-        let (text_color, icon_color, active_bg) = if self.active {
+        let (mut text_color, mut icon_color, active_bg) = if self.active {
             (
                 cx.theme().foreground,
                 theme::selection_color(cx),
@@ -65,6 +73,11 @@ impl RenderOnce for SidebarRow {
         } else {
             (cx.theme().foreground, muted, None)
         };
+
+        if let Some(c) = self.color_override {
+            text_color = c;
+            icon_color = c;
+        }
 
         let row_height = if self.subtitle.is_some() {
             px(36.0)

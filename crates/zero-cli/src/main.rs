@@ -21,6 +21,7 @@ static PANICKING: AtomicBool = AtomicBool::new(false);
 const KNOWN_COMMANDS: &[&str] = &[
     "automation",
     "cleanup",
+    "code",
     "completions",
     "cp",
     "copy",
@@ -41,6 +42,7 @@ const KNOWN_COMMANDS: &[&str] = &[
     "search",
     "service",
     "sync",
+    "telemetry",
     "templates",
     "todo",
     "update",
@@ -200,14 +202,29 @@ fn main() -> anyhow::Result<()> {
         );
     }
 
+    // First-run telemetry notice (only once, on first launch)
+    if !cli.json && zero::telemetry::check_first_run() {
+        eprintln!("Zero collects anonymous usage statistics to improve the product.");
+        eprintln!("No file names, paths, or personal data is ever collected.");
+        eprintln!("Run `zero telemetry show` to see exactly what is sent.");
+        eprintln!("Run `zero telemetry off` to disable.\n");
+    }
+
     // Handle no command: launch GUI
     let command = match cli.command {
         Some(cmd) => cmd,
         None => {
+            zero::telemetry::record_ui_launch();
             zero_ui::launch();
             return Ok(());
         }
     };
+
+    // Background telemetry report (skip for telemetry/service commands)
+    match &command {
+        Commands::Telemetry { .. } | Commands::Service { .. } => {}
+        _ => zero::telemetry::maybe_report(),
+    }
 
     // Background update check: spawn a thread for non-update, non-service commands
     // when auto_update is enabled and enough time has passed since the last check
@@ -466,6 +483,12 @@ fn main() -> anyhow::Result<()> {
             types,
             recent,
             watch,
+            sort,
+            min_size,
+            max_size,
+            exclude_hidden,
+            open,
+            reveal,
         } => {
             if types {
                 cli::commands::cmd_search_types(&out)?;
@@ -481,7 +504,7 @@ fn main() -> anyhow::Result<()> {
                 cli::commands::cmd_search_index(&out, &index_path, cache.as_deref())?;
             } else if query.is_some()
                 || type_filter.is_some()
-                || extension.is_some()
+                || !extension.is_empty()
                 || path_filter.is_some()
                 || recent.is_some()
             {
@@ -496,9 +519,15 @@ fn main() -> anyhow::Result<()> {
                         count_only: count,
                         files_only,
                         dirs_only,
-                        extension: extension.as_deref(),
+                        extensions: &extension,
                         type_filter,
                         recent,
+                        sort: sort.as_deref(),
+                        min_size: min_size.as_deref(),
+                        max_size: max_size.as_deref(),
+                        exclude_hidden,
+                        open,
+                        reveal,
                     },
                 )?;
             } else {
@@ -543,6 +572,62 @@ fn main() -> anyhow::Result<()> {
         // =====================================================================
         Commands::Update { check } => {
             cli::commands::cmd_update(&out, check)?;
+        }
+
+        // =====================================================================
+        // Telemetry
+        // =====================================================================
+        Commands::Telemetry { telemetry_cmd } => {
+            cli::commands::cmd_telemetry(&out, &telemetry_cmd)?;
+        }
+
+        // =====================================================================
+        // Code indexing
+        // =====================================================================
+        Commands::Code { code_cmd } => {
+            use cli::CodeCommands;
+            match code_cmd {
+                CodeCommands::Index { path, git_only } => {
+                    cli::commands::cmd_code_index(&out, &path, git_only)?;
+                }
+                CodeCommands::Search {
+                    query,
+                    kind,
+                    language,
+                    project,
+                    limit,
+                } => {
+                    cli::commands::cmd_code_search(
+                        &out,
+                        &query,
+                        kind.as_deref(),
+                        language.as_deref(),
+                        project.as_ref(),
+                        limit,
+                    )?;
+                }
+                CodeCommands::Overview { path } => {
+                    cli::commands::cmd_code_overview(&out, &path)?;
+                }
+                CodeCommands::List => {
+                    cli::commands::cmd_code_list(&out)?;
+                }
+                CodeCommands::Remove { path } => {
+                    cli::commands::cmd_code_remove(&out, &path)?;
+                }
+                CodeCommands::Symbols {
+                    project,
+                    kind,
+                    limit,
+                } => {
+                    cli::commands::cmd_code_project_symbols(
+                        &out,
+                        &project,
+                        kind.as_deref(),
+                        limit,
+                    )?;
+                }
+            }
         }
     }
 

@@ -4,6 +4,15 @@ actions!(
     zero,
     [
         Quit,
+        About,
+        CheckForUpdates,
+        Hide,
+        HideOthers,
+        ShowAll,
+        Minimize,
+        Zoom,
+        CloseWindow,
+        // Navigation
         ToggleSidebar,
         GoBack,
         GoForward,
@@ -11,9 +20,11 @@ actions!(
         OpenCommandPalette,
         ToggleViewMode,
         Refresh,
+        // Selection
         SelectAll,
         SelectPrev,
         SelectNext,
+        // File operations
         OpenSelected,
         RevealInFinder,
         MoveToTrash,
@@ -34,11 +45,32 @@ actions!(
         FindDuplicatesHere,
         MoveToOtherPane,
         CopyToOtherPane,
+        // Views
         OpenSettings,
+        OpenCleanup,
+        OpenDuplicates,
+        OpenSecureErase,
+        OpenAutomations,
         ToggleToolbar,
         ShowColumnMenu,
         ToggleTerminal,
         ClearTerminal,
         ToggleAsk,
+        // Go shortcuts
+        GoHome,
+        GoDesktop,
+        GoDocuments,
+        GoDownloads,
+        GoApplications,
+        // Workspaces
+        SwitchWorkspace1,
+        SwitchWorkspace2,
+        SwitchWorkspace3,
+        SwitchWorkspace4,
+        SwitchWorkspace5,
+        SwitchWorkspace6,
+        SwitchWorkspace7,
+        SwitchWorkspace8,
+        SwitchWorkspace9,
     ]
 );

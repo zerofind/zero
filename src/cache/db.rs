@@ -721,6 +721,29 @@ impl ControlDb {
             .cloned()
             .collect())
     }
+
+    // ==================== Usage Store Operations ====================
+
+    /// Record a file open event for frequency tracking
+    pub fn record_file_open(&self, path: &str) -> Result<(), CacheError> {
+        let now = crate::util::now_timestamp() as u64;
+        self.store
+            .write(|tx| {
+                let mut usage = tx.state.usage_store.clone();
+                usage.record_open(path, now);
+                tx.put_usage_store(&usage);
+                Ok(())
+            })
+            .map_err(|e| CacheError::Etch(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Get frequency bonus for a file path (0–150)
+    pub fn frequency_bonus(&self, path: &str) -> u32 {
+        let state = self.store.read();
+        let now = crate::util::now_timestamp() as u64;
+        state.frequency_bonus(path, now)
+    }
 }
 
 // =============================================================================

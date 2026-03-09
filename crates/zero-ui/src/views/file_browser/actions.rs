@@ -23,6 +23,8 @@ pub enum FileBrowserEvent {
     FindDuplicatesHere(PathBuf),
     MoveToOtherPane(Vec<PathBuf>),
     CopyToOtherPane(Vec<PathBuf>),
+    /// Git info was discovered — sidebar should refresh dirty state.
+    GitStateChanged,
 }
 
 impl EventEmitter<FileBrowserEvent> for FileBrowserView {}
@@ -210,6 +212,7 @@ impl FileBrowserView {
                 if view.path != guard_path {
                     return;
                 }
+                let has_git = git_info.is_some();
                 view.loading = false;
                 view.load_time_ms = elapsed;
                 view.table_state.update(cx, |state, cx| {
@@ -219,6 +222,9 @@ impl FileBrowserView {
                     delegate.selected.clear();
                     cx.notify();
                 });
+                if has_git {
+                    cx.emit(FileBrowserEvent::GitStateChanged);
+                }
                 cx.notify();
             })
             .ok();
@@ -247,6 +253,7 @@ impl FileBrowserView {
                 .await;
 
             this.update(cx, |view, cx| {
+                let has_git = git_info.is_some();
                 view.loading = false;
                 view.table_state.update(cx, |state, cx| {
                     let delegate = state.delegate_mut();
@@ -255,6 +262,9 @@ impl FileBrowserView {
                     delegate.selected.clear();
                     cx.notify();
                 });
+                if has_git {
+                    cx.emit(FileBrowserEvent::GitStateChanged);
+                }
                 cx.notify();
             })
             .ok();

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -15,8 +16,9 @@ use llm_kit_provider_utils::message::{
     ToolMessage, ToolResultOutput, ToolResultPart, UserMessage,
 };
 use llm_kit_provider_utils::tool::{ToolCall, ToolOutput};
+use serde_json::json;
 use tokio::sync::mpsc;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use crate::SharedIndex;
 use crate::config::LlmConfig;
@@ -32,6 +34,8 @@ const MAX_ITERATIONS: u32 = 10;
 pub enum StreamEvent {
     /// Streaming text chunk.
     TextDelta(String),
+    /// A thinking/reasoning text chunk.
+    ThinkingDelta(String),
     /// A tool call is starting.
     ToolCallStart(String),
     /// A tool call completed with a result summary.
@@ -53,6 +57,8 @@ pub struct ZeroAgent {
     index: SharedIndex,
     messages: Vec<Message>,
     max_output_tokens: u32,
+    thinking: bool,
+    thinking_budget: u32,
     runtime: tokio::runtime::Handle,
 }
 
@@ -75,6 +81,8 @@ impl ZeroAgent {
             index,
             messages: Vec::new(),
             max_output_tokens: config.max_output_tokens,
+            thinking: config.thinking,
+            thinking_budget: config.thinking_budget,
             runtime,
         })
     }
@@ -96,9 +104,22 @@ impl ZeroAgent {
         let system = system_prompt(&self.index);
         let messages = self.messages.clone();
         let max_tokens = self.max_output_tokens;
+        let thinking = self.thinking;
+        let thinking_budget = self.thinking_budget;
 
         self.runtime.spawn(async move {
-            match run_agentic_loop(model, tools, system, messages, max_tokens, &tx).await {
+            match run_agentic_loop(
+                model,
+                tools,
+                system,
+                messages,
+                max_tokens,
+                thinking,
+                thinking_budget,
+                &tx,
+            )
+            .await
+            {
                 Ok(full_text) => {
                     let _ = tx.send(StreamEvent::Done(full_text));
                 }
@@ -125,18 +146,52 @@ impl ZeroAgent {
     }
 }
 
+/// Build provider_options for Anthropic: disable tool streaming beta header,
+/// and optionally enable thinking mode.
+fn build_anthropic_provider_options(
+    thinking: bool,
+    thinking_budget: u32,
+) -> HashMap<String, HashMap<String, serde_json::Value>> {
+    let mut anthropic = HashMap::new();
+    anthropic.insert("toolStreaming".to_string(), json!(false));
+
+    if thinking {
+        anthropic.insert(
+            "thinking".to_string(),
+            json!({"type": "enabled", "budgetTokens": thinking_budget}),
+        );
+    }
+
+    let mut opts = HashMap::new();
+    opts.insert("anthropic".to_string(), anthropic);
+    opts
+}
+
 /// Drive the agentic loop: stream LLM -> execute tools -> repeat.
+#[allow(clippy::too_many_arguments)]
 async fn run_agentic_loop(
     model: Arc<dyn LanguageModel>,
     tools: ToolSet,
     system: String,
     mut messages: Vec<Message>,
     max_output_tokens: u32,
+    thinking: bool,
+    thinking_budget: u32,
     tx: &mpsc::UnboundedSender<StreamEvent>,
 ) -> Result<String> {
     let started = Instant::now();
 
     let (provider_tools, tool_choice) = prepare_tools_and_tool_choice(Some(&tools), None);
+    let provider_options = build_anthropic_provider_options(thinking, thinking_budget);
+
+    let tool_count = provider_tools.as_ref().map_or(0, |t| t.len());
+    info!(
+        model = %model.model_id(),
+        max_output_tokens,
+        thinking,
+        tool_count,
+        "Agentic loop starting"
+    );
 
     let mut full_text = String::new();
     let mut total_tool_calls = 0u32;
@@ -151,12 +206,15 @@ async fn run_agentic_loop(
 
         let mut options =
             LanguageModelCallOptions::new(lm_prompt).with_max_output_tokens(max_output_tokens);
+        options.provider_options = Some(provider_options.clone());
         if let Some(ref t) = provider_tools {
             options.tools = Some(t.clone());
         }
         if let Some(ref tc) = tool_choice {
             options.tool_choice = Some(tc.clone());
         }
+
+        debug!(provider_options = ?provider_options, "Request provider_options");
 
         let response = model
             .do_stream(options)
@@ -172,6 +230,15 @@ async fn run_agentic_loop(
                 LanguageModelStreamPart::TextDelta(td) => {
                     iteration_text.push_str(&td.delta);
                     let _ = tx.send(StreamEvent::TextDelta(td.delta));
+                }
+                LanguageModelStreamPart::ReasoningDelta(rd) => {
+                    let _ = tx.send(StreamEvent::ThinkingDelta(rd.delta));
+                }
+                LanguageModelStreamPart::ReasoningStart(_) => {
+                    debug!(iteration, "Reasoning block started");
+                }
+                LanguageModelStreamPart::ReasoningEnd(_) => {
+                    debug!(iteration, "Reasoning block ended");
                 }
                 LanguageModelStreamPart::ToolCall(tc) => {
                     info!(tool = %tc.tool_name, id = %tc.tool_call_id, "Tool call received");

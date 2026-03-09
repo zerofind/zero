@@ -58,3 +58,13 @@ pub fn settings_path() -> Option<PathBuf> {
 pub fn todo_context_path() -> Option<PathBuf> {
     data_dir().map(|d| d.join("todo-context"))
 }
+
+/// Telemetry state file: `~/.zero/telemetry.json`
+pub fn telemetry_path() -> Option<PathBuf> {
+    data_dir().map(|d| d.join("telemetry.json"))
+}
+
+/// Code indexes: `~/.zero/code/`
+pub fn code_dir() -> Option<PathBuf> {
+    data_dir().map(|d| d.join("code"))
+}

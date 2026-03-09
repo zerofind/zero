@@ -52,6 +52,7 @@ impl FileBrowserDelegate {
     fn sort_field_for_column(col: FileColumn) -> SortField {
         match col {
             FileColumn::Name => SortField::Name,
+            FileColumn::Location => SortField::Location,
             FileColumn::DateModified => SortField::DateModified,
             FileColumn::Size => SortField::Size,
             FileColumn::Kind => SortField::Kind,
@@ -62,7 +63,7 @@ impl FileBrowserDelegate {
         }
     }
 
-    fn rebuild_columns(&mut self) {
+    pub(super) fn rebuild_columns(&mut self) {
         self.columns = self
             .visible_columns
             .iter()
@@ -203,6 +204,7 @@ impl TableDelegate for FileBrowserDelegate {
                 }
                 render_name_column(entry, row_ix, git_status, cx)
             }
+            FileColumn::Location => render_location_column(entry, cx),
             FileColumn::DateModified => div()
                 .h_full()
                 .flex()
@@ -413,6 +415,39 @@ fn render_name_column(
     }
 
     el.into_any_element()
+}
+
+fn render_location_column(
+    entry: &BrowserEntry,
+    cx: &mut Context<TableState<FileBrowserDelegate>>,
+) -> AnyElement {
+    let muted = cx.theme().muted_foreground;
+
+    let location = entry
+        .path
+        .parent()
+        .map(|p| {
+            // Abbreviate home dir to ~
+            if let Some(home) = dirs::home_dir()
+                && let Ok(suffix) = p.strip_prefix(&home)
+            {
+                return format!("~/{}", suffix.display());
+            }
+            p.to_string_lossy().to_string()
+        })
+        .unwrap_or_default();
+
+    div()
+        .h_full()
+        .flex()
+        .items_center()
+        .text_size(FONT_SIZE_CAPTION)
+        .text_color(muted)
+        .text_ellipsis()
+        .whitespace_nowrap()
+        .min_w_0()
+        .child(SharedString::from(location))
+        .into_any_element()
 }
 
 fn render_permissions_column(

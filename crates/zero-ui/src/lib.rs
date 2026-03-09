@@ -1,5 +1,6 @@
 mod actions;
 mod app;
+mod app_menus;
 mod models;
 mod permissions;
 mod platform;
@@ -8,6 +9,7 @@ mod session;
 pub mod theme;
 pub mod ui;
 mod views;
+mod workspace;
 
 use std::borrow::Cow;
 
@@ -15,9 +17,12 @@ use gpui::*;
 use gpui_component::Root;
 
 use actions::{
-    ClearTerminal, CopyFiles, CopyPath, CutFiles, DuplicateFiles, FindInBrowser, GoBack, GoForward,
-    GoUp, MoveToTrash, NewFolder, OpenCommandPalette, OpenSelected, OpenSettings, PasteFiles,
-    QuickLook, Quit, Refresh, Rename, SelectAll, ToggleSidebar, ToggleSplitView, ToggleTerminal,
+    ClearTerminal, CloseWindow, CopyFiles, CopyPath, CutFiles, DuplicateFiles, FindInBrowser,
+    GoBack, GoDesktop, GoDocuments, GoDownloads, GoForward, GoHome, GoUp, Hide, HideOthers,
+    MoveToTrash, NewFolder, OpenCommandPalette, OpenSelected, OpenSettings, PasteFiles, QuickLook,
+    Quit, Refresh, Rename, SelectAll, ShowAll, SwitchWorkspace1, SwitchWorkspace2,
+    SwitchWorkspace3, SwitchWorkspace4, SwitchWorkspace5, SwitchWorkspace6, SwitchWorkspace7,
+    SwitchWorkspace8, SwitchWorkspace9, ToggleAsk, ToggleSidebar, ToggleSplitView, ToggleTerminal,
     ToggleToolbar, ToggleViewMode,
 };
 use app::ZeroApp;
@@ -81,11 +86,48 @@ pub fn launch() {
             KeyBinding::new("cmd-/", ToggleToolbar, None),
             #[cfg(not(target_os = "macos"))]
             KeyBinding::new("ctrl-/", ToggleToolbar, None),
-            // View mode toggle
+            // View mode toggle (Shift+Cmd+2 — Cmd+1..9 used for workspaces)
             #[cfg(target_os = "macos")]
-            KeyBinding::new("cmd-2", ToggleViewMode, None),
+            KeyBinding::new("cmd-shift-2", ToggleViewMode, None),
             #[cfg(not(target_os = "macos"))]
-            KeyBinding::new("ctrl-2", ToggleViewMode, None),
+            KeyBinding::new("ctrl-shift-2", ToggleViewMode, None),
+            // Workspace switching (Cmd+1..9)
+            #[cfg(target_os = "macos")]
+            KeyBinding::new("cmd-1", SwitchWorkspace1, None),
+            #[cfg(target_os = "macos")]
+            KeyBinding::new("cmd-2", SwitchWorkspace2, None),
+            #[cfg(target_os = "macos")]
+            KeyBinding::new("cmd-3", SwitchWorkspace3, None),
+            #[cfg(target_os = "macos")]
+            KeyBinding::new("cmd-4", SwitchWorkspace4, None),
+            #[cfg(target_os = "macos")]
+            KeyBinding::new("cmd-5", SwitchWorkspace5, None),
+            #[cfg(target_os = "macos")]
+            KeyBinding::new("cmd-6", SwitchWorkspace6, None),
+            #[cfg(target_os = "macos")]
+            KeyBinding::new("cmd-7", SwitchWorkspace7, None),
+            #[cfg(target_os = "macos")]
+            KeyBinding::new("cmd-8", SwitchWorkspace8, None),
+            #[cfg(target_os = "macos")]
+            KeyBinding::new("cmd-9", SwitchWorkspace9, None),
+            #[cfg(not(target_os = "macos"))]
+            KeyBinding::new("ctrl-1", SwitchWorkspace1, None),
+            #[cfg(not(target_os = "macos"))]
+            KeyBinding::new("ctrl-2", SwitchWorkspace2, None),
+            #[cfg(not(target_os = "macos"))]
+            KeyBinding::new("ctrl-3", SwitchWorkspace3, None),
+            #[cfg(not(target_os = "macos"))]
+            KeyBinding::new("ctrl-4", SwitchWorkspace4, None),
+            #[cfg(not(target_os = "macos"))]
+            KeyBinding::new("ctrl-5", SwitchWorkspace5, None),
+            #[cfg(not(target_os = "macos"))]
+            KeyBinding::new("ctrl-6", SwitchWorkspace6, None),
+            #[cfg(not(target_os = "macos"))]
+            KeyBinding::new("ctrl-7", SwitchWorkspace7, None),
+            #[cfg(not(target_os = "macos"))]
+            KeyBinding::new("ctrl-8", SwitchWorkspace8, None),
+            #[cfg(not(target_os = "macos"))]
+            KeyBinding::new("ctrl-9", SwitchWorkspace9, None),
             // File browser actions
             #[cfg(target_os = "macos")]
             KeyBinding::new("cmd-down", OpenSelected, None),
@@ -152,9 +194,36 @@ pub fn launch() {
             KeyBinding::new("cmd-k", ClearTerminal, Some("Terminal")),
             #[cfg(not(target_os = "macos"))]
             KeyBinding::new("ctrl-k", ClearTerminal, Some("Terminal")),
+            // Ask AI
+            #[cfg(target_os = "macos")]
+            KeyBinding::new("cmd-l", ToggleAsk, None),
+            #[cfg(not(target_os = "macos"))]
+            KeyBinding::new("ctrl-l", ToggleAsk, None),
+            // Go shortcuts
+            #[cfg(target_os = "macos")]
+            KeyBinding::new("cmd-shift-h", GoHome, None),
+            #[cfg(target_os = "macos")]
+            KeyBinding::new("cmd-shift-d", GoDesktop, None),
+            #[cfg(target_os = "macos")]
+            KeyBinding::new("cmd-shift-o", GoDocuments, None),
+            #[cfg(target_os = "macos")]
+            KeyBinding::new("alt-cmd-l", GoDownloads, None),
+            // Close window
+            #[cfg(target_os = "macos")]
+            KeyBinding::new("cmd-w", CloseWindow, None),
+            #[cfg(not(target_os = "macos"))]
+            KeyBinding::new("ctrl-w", CloseWindow, None),
         ]);
 
+        cx.set_menus(app_menus::app_menus());
+
         cx.on_action(|_: &Quit, cx| cx.quit());
+        #[cfg(target_os = "macos")]
+        cx.on_action(|_: &Hide, cx| cx.hide());
+        #[cfg(target_os = "macos")]
+        cx.on_action(|_: &HideOthers, cx| cx.hide_other_apps());
+        #[cfg(target_os = "macos")]
+        cx.on_action(|_: &ShowAll, cx| cx.unhide_other_apps());
 
         cx.on_window_closed(|cx| {
             if cx.windows().is_empty() {

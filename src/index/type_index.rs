@@ -292,6 +292,11 @@ pub struct TypeIndex {
     #[serde(default)]
     trash_bitmap: RoaringBitmap,
 
+    /// Bitmap for files under hidden directories (component starts with '.')
+    /// Used for O(1) hidden file filtering during search
+    #[serde(default)]
+    hidden_bitmap: RoaringBitmap,
+
     /// Per-extension bitmaps for O(1) extension lookups
     /// Key is lowercase extension without dot (e.g., "log", "dmg", "rs")
     #[serde(default)]
@@ -322,6 +327,7 @@ impl TypeIndex {
             extension_map: HashMap::new(),
             total_files: 0,
             trash_bitmap: RoaringBitmap::new(),
+            hidden_bitmap: RoaringBitmap::new(),
             extension_bitmaps: HashMap::new(),
             path_component_bitmaps: HashMap::new(),
             indexed_components,
@@ -346,6 +352,7 @@ impl TypeIndex {
             extension_map: HashMap::new(),
             total_files: 0,
             trash_bitmap: RoaringBitmap::new(),
+            hidden_bitmap: RoaringBitmap::new(),
             extension_bitmaps: HashMap::new(),
             path_component_bitmaps: HashMap::new(),
             indexed_components,
@@ -502,14 +509,20 @@ impl TypeIndex {
             self.trash_bitmap.insert(index);
         }
 
-        // Add to path component bitmaps — SELECTIVE indexing.
-        // Only index components in the allowlist (from cleanup profiles).
-        // This reduces 15K unique components (~73MB) to ~40 (~3MB).
-        if !self.indexed_components.is_empty() {
-            for component in path.split('/') {
-                if component.is_empty() || component == "." || component == ".." {
-                    continue;
-                }
+        // Scan path components for hidden detection and selective bitmap indexing.
+        let mut is_hidden = false;
+        for component in path.split('/') {
+            if component.is_empty() || component == "." || component == ".." {
+                continue;
+            }
+
+            // Hidden: starts with '.' and length > 1
+            if !is_hidden && component.len() > 1 && component.as_bytes()[0] == b'.' {
+                is_hidden = true;
+            }
+
+            // Selective path component bitmap indexing
+            if !self.indexed_components.is_empty() {
                 let component_lower = component.to_lowercase();
                 if self.indexed_components.contains(&component_lower) {
                     self.path_component_bitmaps
@@ -518,6 +531,10 @@ impl TypeIndex {
                         .insert(index);
                 }
             }
+        }
+
+        if is_hidden {
+            self.hidden_bitmap.insert(index);
         }
 
         if is_directory {
@@ -564,6 +581,7 @@ impl TypeIndex {
             bitmap.remove(index);
         }
         self.trash_bitmap.remove(index);
+        self.hidden_bitmap.remove(index);
     }
 
     /// Check if a file index is in trash
@@ -580,6 +598,12 @@ impl TypeIndex {
     /// Get count of files in trash
     pub fn trash_count(&self) -> u64 {
         self.trash_bitmap.len()
+    }
+
+    /// Check if a file index is under a hidden directory
+    #[inline]
+    pub fn is_hidden(&self, index: u32) -> bool {
+        self.hidden_bitmap.contains(index)
     }
 
     /// Get all file indices matching a specific extension
@@ -707,6 +731,7 @@ impl TypeIndex {
     pub fn clear(&mut self) {
         self.bitmaps.clear();
         self.trash_bitmap.clear();
+        self.hidden_bitmap.clear();
         self.total_files = 0;
     }
 

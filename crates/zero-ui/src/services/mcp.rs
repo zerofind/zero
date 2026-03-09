@@ -1,5 +1,6 @@
 use gpui::*;
 
+use zero::code::CodeIndex;
 use zero::prelude::IndexManager;
 use zero_mcp::{McpConfig, McpHandle, generate_api_key};
 
@@ -39,7 +40,14 @@ impl McpService {
             api_key: self.api_key.clone(),
         };
 
-        let handle = zero_mcp::start_server(config, manager);
+        // Create a CodeIndex for the MCP server
+        let code = CodeIndex::new().unwrap_or_else(|e| {
+            tracing::warn!(error = %e, "Failed to create CodeIndex for MCP, using fallback");
+            CodeIndex::with_dir(std::env::temp_dir().join("zero-code-mcp"))
+                .expect("fallback code index")
+        });
+
+        let handle = zero_mcp::start_server(config, manager, code);
         self.port = handle.port;
         self.handle = Some(handle);
         self.running = true;

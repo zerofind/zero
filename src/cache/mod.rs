@@ -69,6 +69,9 @@ pub mod storage_state;
 #[cfg(test)]
 mod storage_state_test;
 mod storages;
+pub mod usage;
+#[cfg(test)]
+mod usage_test;
 
 // Re-export main database types
 pub use db::{CacheDb, CacheError, CacheManager, ControlDb, StorageDb};
@@ -96,6 +99,9 @@ pub use control_state::{
 
 // Re-export etch-backed storage state
 pub use storage_state::{StorageState, StorageTx, cache_entry_to_file_entry, open_storage_store};
+
+// Re-export usage store
+pub use usage::UsageStore;
 
 // Re-export run types
 pub use runs::{

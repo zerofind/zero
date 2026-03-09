@@ -43,6 +43,7 @@
         "input.border": "#51576d",
         "caret": "#c6d0f5",
         "popover.background": "#414559",
+        "popover.border": "#ffffff1a",
         "popover.foreground": "#c6d0f5",
         "overlay": "#00000066",
         "sidebar.background": "#292c3cd8",

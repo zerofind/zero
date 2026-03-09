@@ -30,6 +30,7 @@ pub enum ViewMode {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SortField {
     Name,
+    Location,
     DateModified,
     Size,
     Kind,

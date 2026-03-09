@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use gpui_component::{
@@ -5,6 +7,7 @@ use gpui_component::{
     button::{Button, ButtonVariants as _},
     input::{Input, InputEvent, InputState},
     tab::TabBar,
+    text::TextView,
 };
 
 use zero_llm::{LlmConfig, StreamEvent};
@@ -12,7 +15,7 @@ use zero_llm::{LlmConfig, StreamEvent};
 use crate::services::{LlmEvent, LlmService};
 use crate::theme::{
     APP_ICON_MD, FONT_SIZE_BODY, FONT_SIZE_CAPTION, RADIUS, SPACE_LG, SPACE_MD, SPACE_SM, SPACE_XL,
-    TITLEBAR_HEIGHT,
+    SPACE_XS, TITLEBAR_HEIGHT,
 };
 
 use super::message::{AssistantMessage, ToolCall, UserBubble};
@@ -39,6 +42,7 @@ enum Role {
 struct Message {
     role: Role,
     text: String,
+    thinking: String,
     tools: Vec<ToolCall>,
 }
 
@@ -53,9 +57,13 @@ pub struct AskView {
     input: Entity<InputState>,
     llm: Entity<LlmService>,
     loading: bool,
+    scroll_handle: ScrollHandle,
 
     /// Text queued by Enter key (subscribe has no window access to clear input).
     pending_send: Option<String>,
+
+    /// Indices of messages with expanded thinking blocks.
+    expanded_thinking: HashSet<usize>,
 
     selected_provider: usize,
     key_input: Entity<InputState>,
@@ -110,7 +118,9 @@ impl AskView {
             input,
             llm,
             loading: false,
+            scroll_handle: ScrollHandle::new(),
             pending_send: None,
+            expanded_thinking: HashSet::new(),
             selected_provider: 0,
             key_input,
             setup_error: None,
@@ -156,11 +166,13 @@ impl AskView {
         self.messages.push(Message {
             role: Role::User,
             text: text.clone(),
+            thinking: String::new(),
             tools: Vec::new(),
         });
         self.messages.push(Message {
             role: Role::Assistant,
             text: String::new(),
+            thinking: String::new(),
             tools: Vec::new(),
         });
         self.loading = true;
@@ -185,6 +197,7 @@ impl AskView {
                     };
                     match event {
                         StreamEvent::TextDelta(t) => last.text.push_str(&t),
+                        StreamEvent::ThinkingDelta(t) => last.thinking.push_str(&t),
                         StreamEvent::ToolCallStart(name) => {
                             last.tools.push(ToolCall { name, done: false });
                         }
@@ -246,6 +259,13 @@ impl Render for AskView {
         let input = self.input.clone();
         let loading = self.loading;
 
+        let model_name = if ready {
+            let llm = self.llm.read(cx);
+            LlmConfig::model_display_name(llm.model(), llm.thinking()).to_string()
+        } else {
+            String::new()
+        };
+
         div()
             .id("ask-view")
             .size_full()
@@ -255,7 +275,6 @@ impl Render for AskView {
             .border_color(cx.theme().border)
             .bg(cx.theme().background)
             .child(self.render_header(has_messages, ready, cx))
-            .when(show_picker, |el| el.child(self.render_model_picker(cx)))
             .child(
                 div()
                     .flex_1()
@@ -266,13 +285,21 @@ impl Render for AskView {
                     } else if !has_messages {
                         self.render_empty_state(cx).into_any_element()
                     } else {
-                        self.render_messages(cx).into_any_element()
+                        self.render_messages(window, cx).into_any_element()
                     }),
             )
+            // Model picker dropdown (above prompt area)
+            .when(show_picker, |el| el.child(self.render_model_picker(cx)))
+            // Prompt area
             .when(ready && !show_setup, |el| {
                 el.child(ChatPrompt::render(
                     &input,
                     loading,
+                    &model_name,
+                    cx.listener(|this, _, _, cx| {
+                        this.show_model_picker = !this.show_model_picker;
+                        cx.notify();
+                    }),
                     cx.listener(|this, _, window, cx| this.send_message(window, cx)),
                     cx,
                 ))
@@ -290,12 +317,6 @@ impl AskView {
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let muted = cx.theme().muted_foreground;
-        let model_name = if ready {
-            let llm = self.llm.read(cx);
-            LlmConfig::model_display_name(llm.model()).to_string()
-        } else {
-            String::new()
-        };
 
         div()
             .flex()
@@ -311,38 +332,6 @@ impl AskView {
                     .text_color(muted)
                     .child("Ask"),
             )
-            .when(ready, |el| {
-                let picker_active = self.show_model_picker;
-                el.child(
-                    div()
-                        .id("model-selector")
-                        .flex()
-                        .flex_row()
-                        .items_center()
-                        .gap(px(3.0))
-                        .cursor_pointer()
-                        .rounded(RADIUS)
-                        .px(px(6.0))
-                        .py(px(2.0))
-                        .hover(|s| s.bg(cx.theme().secondary))
-                        .when(picker_active, |el| el.bg(cx.theme().secondary))
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.show_model_picker = !this.show_model_picker;
-                            cx.notify();
-                        }))
-                        .child(
-                            div()
-                                .text_size(FONT_SIZE_CAPTION)
-                                .text_color(muted)
-                                .child(SharedString::from(model_name)),
-                        )
-                        .child(
-                            Icon::new(IconName::ChevronDown)
-                                .with_size(px(12.0))
-                                .text_color(muted),
-                        ),
-                )
-            })
             .child(div().flex_1())
             .when(has_messages, |el| {
                 el.child(
@@ -383,9 +372,17 @@ impl AskView {
     fn render_model_picker(&self, cx: &App) -> impl IntoElement {
         let muted = cx.theme().muted_foreground;
         let llm = self.llm.read(cx);
-        let provider = llm.provider();
         let current_model = llm.model().to_string();
-        let models = LlmConfig::available_models(provider);
+        let current_thinking = llm.thinking();
+
+        let active_key = if current_thinking {
+            format!("{}:thinking", current_model)
+        } else {
+            current_model
+        };
+
+        // Show models from all providers that have keys
+        let providers = llm.config().providers_with_keys();
 
         div()
             .w_full()
@@ -394,51 +391,82 @@ impl AskView {
             .bg(cx.theme().background)
             .py(px(4.0))
             .px(SPACE_MD)
-            .child(div().flex().flex_col().children(models.iter().map(|m| {
-                let is_active = m.id == current_model;
-                let model_id = m.id.to_string();
-
+            .child(
                 div()
-                    .id(SharedString::from(format!("model-{}", m.id)))
                     .flex()
-                    .flex_row()
-                    .items_center()
-                    .gap(SPACE_SM)
-                    .px(px(6.0))
-                    .py(px(4.0))
-                    .rounded(RADIUS)
-                    .cursor_pointer()
-                    .hover(|s| s.bg(cx.theme().secondary))
-                    .when(is_active, |el| el.bg(cx.theme().secondary))
-                    .on_click({
-                        let llm = self.llm.clone();
-                        move |_, _, cx| {
-                            let model_id = model_id.clone();
-                            llm.update(cx, |llm, cx| llm.set_model(&model_id, cx));
-                        }
-                    })
-                    .child(
+                    .flex_col()
+                    .children(providers.into_iter().map(|provider| {
+                        let models = LlmConfig::available_models(provider);
+                        let label = match provider {
+                            "anthropic" => "Anthropic",
+                            "openai" => "OpenAI",
+                            _ => provider,
+                        };
+
                         div()
-                            .w(px(14.0))
-                            .text_size(FONT_SIZE_CAPTION)
-                            .text_color(if is_active {
-                                cx.theme().foreground
-                            } else {
-                                gpui::transparent_black()
-                            })
-                            .child(if is_active { "●" } else { "" }),
-                    )
-                    .child(
-                        div()
-                            .text_size(FONT_SIZE_CAPTION)
-                            .text_color(if is_active {
-                                cx.theme().foreground
-                            } else {
-                                muted
-                            })
-                            .child(m.name),
-                    )
-            })))
+                            .flex()
+                            .flex_col()
+                            // Provider header
+                            .child(
+                                div()
+                                    .px(px(6.0))
+                                    .py(px(4.0))
+                                    .text_size(px(10.0))
+                                    .text_color(muted.opacity(0.6))
+                                    .child(label),
+                            )
+                            // Model rows
+                            .children(models.iter().map(|m| {
+                                let picker_key = m.picker_key();
+                                let is_active = picker_key == active_key;
+                                let model_id = m.id.to_string();
+                                let thinking = m.thinking;
+
+                                div()
+                                    .id(SharedString::from(format!("model-{}", picker_key)))
+                                    .flex()
+                                    .flex_row()
+                                    .items_center()
+                                    .gap(SPACE_SM)
+                                    .px(px(6.0))
+                                    .py(px(4.0))
+                                    .rounded(RADIUS)
+                                    .cursor_pointer()
+                                    .hover(|s| s.bg(cx.theme().secondary))
+                                    .when(is_active, |el| el.bg(cx.theme().secondary))
+                                    .on_click({
+                                        let llm = self.llm.clone();
+                                        move |_, _, cx| {
+                                            let model_id = model_id.clone();
+                                            llm.update(cx, |llm, cx| {
+                                                llm.set_model(&model_id, thinking, cx);
+                                            });
+                                        }
+                                    })
+                                    .child(
+                                        div()
+                                            .w(px(14.0))
+                                            .text_size(FONT_SIZE_CAPTION)
+                                            .text_color(if is_active {
+                                                cx.theme().foreground
+                                            } else {
+                                                gpui::transparent_black()
+                                            })
+                                            .child(if is_active { "●" } else { "" }),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_size(FONT_SIZE_CAPTION)
+                                            .text_color(if is_active {
+                                                cx.theme().foreground
+                                            } else {
+                                                muted
+                                            })
+                                            .child(m.name),
+                                    )
+                            }))
+                    })),
+            )
     }
 
     fn render_setup(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -557,14 +585,41 @@ impl AskView {
             )
     }
 
-    fn render_messages(&self, cx: &App) -> impl IntoElement {
-        let muted = cx.theme().muted_foreground;
+    fn render_messages(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let loading = self.loading;
+        let msg_count = self.messages.len();
+
+        // Auto-scroll to bottom when streaming
+        if loading && msg_count > 0 {
+            self.scroll_handle.scroll_to_item(msg_count - 1);
+        }
+
+        let muted = cx.theme().muted_foreground;
+        let accent = cx.theme().primary.opacity(0.3);
+
+        // Pre-collect message data to avoid borrow conflicts
+        let message_data: Vec<_> = self
+            .messages
+            .iter()
+            .enumerate()
+            .map(|(idx, msg)| {
+                (
+                    idx,
+                    msg.role.clone(),
+                    msg.text.clone(),
+                    msg.thinking.clone(),
+                    msg.tools.clone(),
+                )
+            })
+            .collect();
+
+        let expanded_thinking = self.expanded_thinking.clone();
 
         div()
             .id("ask-messages")
             .size_full()
             .overflow_y_scroll()
+            .track_scroll(&self.scroll_handle)
             .px(SPACE_LG)
             .py(SPACE_MD)
             .child(
@@ -572,24 +627,103 @@ impl AskView {
                     .flex()
                     .flex_col()
                     .gap(SPACE_MD)
-                    .children(self.messages.iter().map(|msg| {
-                        match msg.role {
-                            Role::User => UserBubble::new(msg.text.clone()).into_any_element(),
+                    .children(message_data.into_iter().map(
+                        |(idx, role, text, thinking, tools)| match role {
+                            Role::User => UserBubble::new(text).into_any_element(),
                             Role::Assistant => {
-                                AssistantMessage::new(msg.text.clone(), msg.tools.clone())
+                                let is_last = idx == msg_count - 1;
+                                let has_thinking = !thinking.is_empty();
+                                let thinking_expanded = expanded_thinking.contains(&idx);
+
+                                let am = AssistantMessage::new(text, tools)
+                                    .index(idx)
+                                    .streaming(loading && is_last);
+
+                                div()
+                                    .flex()
+                                    .flex_col()
+                                    .gap(SPACE_SM)
+                                    // Thinking toggle + content
+                                    .when(has_thinking, |el| {
+                                        el.child(
+                                            div()
+                                                .flex()
+                                                .flex_col()
+                                                .gap(SPACE_XS)
+                                                // Toggle header
+                                                .child(
+                                                    div()
+                                                        .id(SharedString::from(format!(
+                                                            "thinking-toggle-{idx}"
+                                                        )))
+                                                        .flex()
+                                                        .flex_row()
+                                                        .items_center()
+                                                        .gap(SPACE_XS)
+                                                        .cursor_pointer()
+                                                        .on_click(cx.listener(
+                                                            move |this, _, _, cx| {
+                                                                if this
+                                                                    .expanded_thinking
+                                                                    .contains(&idx)
+                                                                {
+                                                                    this.expanded_thinking
+                                                                        .remove(&idx);
+                                                                } else {
+                                                                    this.expanded_thinking
+                                                                        .insert(idx);
+                                                                }
+                                                                cx.notify();
+                                                            },
+                                                        ))
+                                                        .child(
+                                                            Icon::new(if thinking_expanded {
+                                                                IconName::ChevronDown
+                                                            } else {
+                                                                IconName::ChevronRight
+                                                            })
+                                                            .with_size(px(10.0))
+                                                            .text_color(muted),
+                                                        )
+                                                        .child(
+                                                            div()
+                                                                .text_size(FONT_SIZE_CAPTION)
+                                                                .text_color(muted)
+                                                                .child("Thinking"),
+                                                        ),
+                                                )
+                                                // Expanded thinking content
+                                                .when(thinking_expanded, |el| {
+                                                    el.child(
+                                                        div()
+                                                            .ml(px(6.0))
+                                                            .pl(SPACE_MD)
+                                                            .border_l_1()
+                                                            .border_color(accent)
+                                                            .child(
+                                                                TextView::markdown(
+                                                                    ElementId::Name(
+                                                                        format!(
+                                                                            "thinking-md-{idx}"
+                                                                        )
+                                                                        .into(),
+                                                                    ),
+                                                                    thinking,
+                                                                    window,
+                                                                    cx,
+                                                                )
+                                                                .text_size(FONT_SIZE_CAPTION)
+                                                                .text_color(muted),
+                                                            ),
+                                                    )
+                                                }),
+                                        )
+                                    })
+                                    .child(am)
                                     .into_any_element()
                             }
-                        }
-                    }))
-                    .when(loading, |el| {
-                        el.child(
-                            div()
-                                .py(SPACE_SM)
-                                .text_size(FONT_SIZE_CAPTION)
-                                .text_color(muted)
-                                .child("Thinking..."),
-                        )
-                    }),
+                        },
+                    )),
             )
     }
 }

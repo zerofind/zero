@@ -1,9 +1,10 @@
 [workspace]
 members = ["crates/watcher", "crates/zero-ui", "crates/zero-cli", "crates/zero-mcp", "crates/zero-llm"]
+exclude = ["vendor"]
 resolver = "2"
 
 [workspace.package]
-version = "0.6.0"
+version = "0.7.0"
 license = "MIT"
 
 [workspace.dependencies]
@@ -85,7 +86,18 @@ trash = "5.2"
 # Roaring bitmaps for fast type filtering
 roaring = { version = "0.11", features = ["serde"] }
 
+# Glob pattern matching for search
+globset = "0.4"
+
 toml = "0.9.10"
+
+# Code structure parsing (code index)
+syn = { version = "2", features = ["full", "parsing", "visit", "extra-traits"] }
+quote = "1"
+proc-macro2 = { version = "1", features = ["span-locations"] }
+tree-sitter = "0.25"
+tree-sitter-go = "0.25"
+walkdir = "2"
 
 # Auto-update (HTTP client + archive extraction)
 ureq = "3"
@@ -113,6 +125,7 @@ resvg = { opt-level = 3 }
 rustybuzz = { opt-level = 3 }
 taffy = { opt-level = 3 }
 ttf-parser = { opt-level = 3 }
+
 
 [profile.release]
 lto = false

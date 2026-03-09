@@ -171,6 +171,11 @@ fn cmd_cleanup_dev(
 
     match delete_result {
         Ok(dr) => {
+            // Record telemetry
+            let categories: Vec<String> =
+                selected.iter().map(|i| i.category_name.clone()).collect();
+            zero::telemetry::record_cleanup(&categories, selected_bytes);
+
             #[derive(serde::Serialize)]
             struct CleanupData {
                 cleaned_bytes: u64,

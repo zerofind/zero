@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 use gpui::*;
@@ -11,6 +12,7 @@ use gpui_component::{
 
 use crate::models::ActiveView;
 use crate::platform::traffic_lights::TrafficLights;
+use crate::services::GitService;
 use crate::session::Settings;
 use crate::theme::{
     self, BOOKMARK_TILE_HEIGHT, ICON_MD, ICON_XS, PADDING_LG, PADDING_MD, RADIUS, RADIUS_SM,
@@ -32,6 +34,11 @@ pub enum SidebarEvent {
     GoForward,
     ToggleSidebar,
     OpenSearch,
+    SwitchWorkspace(usize),
+    CreateWorkspace,
+    #[allow(dead_code)]
+    RenameWorkspace(usize, String),
+    DeleteWorkspace(usize),
 }
 
 impl EventEmitter<SidebarEvent> for AppSidebar {}
@@ -44,12 +51,18 @@ pub struct AppSidebar {
     /// Regular bookmarks shown as rows in the BOOKMARKS section.
     bookmarks: Vec<PathBuf>,
     drives: Vec<DriveEntry>,
+    git: Entity<GitService>,
     /// When false, nav controls are shown in the sidebar header.
     toolbar_visible: bool,
     can_go_back: bool,
     can_go_forward: bool,
+    /// Workspace names for the dropdown.
+    workspace_names: Vec<String>,
+    /// Currently active workspace index.
+    active_workspace_idx: usize,
     #[allow(dead_code)]
     focus_handle: FocusHandle,
+    _subs: Vec<Subscription>,
 }
 
 struct DriveEntry {
@@ -61,14 +74,23 @@ struct DriveEntry {
 }
 
 impl AppSidebar {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         active_view: ActiveView,
         current_path: PathBuf,
         pinned_bookmarks: Vec<PathBuf>,
         bookmarks: Vec<PathBuf>,
+        workspace_names: Vec<String>,
+        active_workspace_idx: usize,
+        git: Entity<GitService>,
         cx: &mut Context<Self>,
     ) -> Self {
         let drives = Self::discover_drives();
+
+        // Re-render sidebar when git status changes.
+        let git_sub = cx.observe(&git, |_this, _git, cx| {
+            cx.notify();
+        });
 
         Self {
             active_view,
@@ -76,10 +98,14 @@ impl AppSidebar {
             pinned_bookmarks,
             bookmarks,
             drives,
+            git,
             toolbar_visible: false,
             can_go_back: false,
             can_go_forward: false,
+            workspace_names,
+            active_workspace_idx,
             focus_handle: cx.focus_handle(),
+            _subs: vec![git_sub],
         }
     }
 
@@ -151,6 +177,166 @@ impl AppSidebar {
             self.can_go_forward = can_forward;
             cx.notify();
         }
+    }
+
+    /// Full workspace switch: update names, active index, and bookmarks.
+    pub fn set_workspace(
+        &mut self,
+        names: Vec<String>,
+        active_idx: usize,
+        pinned: Vec<PathBuf>,
+        regular: Vec<PathBuf>,
+        cx: &mut Context<Self>,
+    ) {
+        self.workspace_names = names;
+        self.active_workspace_idx = active_idx;
+        self.pinned_bookmarks = pinned;
+        self.bookmarks = regular;
+        cx.notify();
+    }
+
+    /// Update workspace names only (for rename).
+    pub fn set_workspace_names(&mut self, names: Vec<String>, cx: &mut Context<Self>) {
+        self.workspace_names = names;
+        cx.notify();
+    }
+
+    /// Swap bookmarks (used on workspace switch from app).
+    #[allow(dead_code)]
+    pub fn set_bookmarks(
+        &mut self,
+        pinned: Vec<PathBuf>,
+        regular: Vec<PathBuf>,
+        cx: &mut Context<Self>,
+    ) {
+        self.pinned_bookmarks = pinned;
+        self.bookmarks = regular;
+        cx.notify();
+    }
+
+    /// Build unique short labels for workspace icons.
+    /// Uses first char uppercase; appends index on collision.
+    fn workspace_labels(names: &[String]) -> Vec<String> {
+        let firsts: Vec<String> = names
+            .iter()
+            .map(|n| n.chars().next().unwrap_or('?').to_uppercase().collect())
+            .collect();
+
+        // Count how many times each letter appears
+        let mut counts = std::collections::HashMap::<&str, usize>::new();
+        for f in &firsts {
+            *counts.entry(f.as_str()).or_default() += 1;
+        }
+
+        // For duplicates, append a running number
+        let mut seen = std::collections::HashMap::<String, usize>::new();
+        firsts
+            .iter()
+            .map(|f| {
+                if counts.get(f.as_str()).copied().unwrap_or(0) > 1 {
+                    let n = seen.entry(f.clone()).or_insert(0);
+                    *n += 1;
+                    format!("{f}{n}")
+                } else {
+                    f.clone()
+                }
+            })
+            .collect()
+    }
+
+    /// Arc-style bottom workspace bar: small letter icons, active highlight, + button.
+    fn render_workspace_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let muted = cx.theme().muted_foreground;
+        let fg = cx.theme().foreground;
+        let active_idx = self.active_workspace_idx;
+        let workspace_count = self.workspace_names.len();
+        let active_bg = theme::surface_active(cx);
+        let labels = Self::workspace_labels(&self.workspace_names);
+
+        let items: Vec<_> = self
+            .workspace_names
+            .iter()
+            .enumerate()
+            .map(|(i, _name)| {
+                let is_active = i == active_idx;
+                let label = labels[i].clone();
+
+                let (text_col, bg) = if is_active {
+                    (fg, active_bg)
+                } else {
+                    (muted.opacity(0.5), gpui::transparent_black())
+                };
+
+                let sidebar = cx.entity().clone();
+                let ws_count = workspace_count;
+
+                div()
+                    .id(SharedString::from(format!("ws-{i}")))
+                    .cursor_pointer()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .size(px(26.0))
+                    .rounded(RADIUS_SM)
+                    .bg(bg)
+                    .text_size(px(10.0))
+                    .font_weight(FontWeight::BOLD)
+                    .text_color(text_col)
+                    .hover(|s| s.bg(active_bg))
+                    .on_click(cx.listener(move |_, _, _, cx| {
+                        if !is_active {
+                            cx.emit(SidebarEvent::SwitchWorkspace(i));
+                        }
+                    }))
+                    .child(SharedString::from(label))
+                    .context_menu({
+                        let sidebar = sidebar.clone();
+                        move |menu, _window, _cx| {
+                            let mut m = menu;
+                            if ws_count > 1 {
+                                let sb = sidebar.clone();
+                                m = m.item(PopupMenuItem::new("Delete Workspace").on_click(
+                                    move |_, _, cx| {
+                                        sb.update(cx, |_, cx| {
+                                            cx.emit(SidebarEvent::DeleteWorkspace(i));
+                                        });
+                                    },
+                                ));
+                            }
+                            m
+                        }
+                    })
+            })
+            .collect();
+
+        h_flex()
+            .id("workspace-bar")
+            .w_full()
+            .items_center()
+            .gap(px(4.0))
+            .px(PADDING_MD)
+            .pt(px(6.0))
+            .pb(px(8.0))
+            .border_t_1()
+            .border_color(cx.theme().border.opacity(0.15))
+            .children(items)
+            .child(div().flex_1())
+            .child(
+                div()
+                    .id("ws-add")
+                    .cursor_pointer()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .size(px(26.0))
+                    .rounded(RADIUS_SM)
+                    .text_color(muted.opacity(0.35))
+                    .hover(|s| s.bg(active_bg).text_color(muted))
+                    .on_click(cx.listener(|_, _, _, cx| {
+                        cx.emit(SidebarEvent::CreateWorkspace);
+                    }))
+                    .child(Icon::new(IconName::Plus).with_size(ICON_XS)),
+            )
     }
 
     fn discover_drives() -> Vec<DriveEntry> {
@@ -307,20 +493,27 @@ impl AppSidebar {
             )
     }
 
-    fn render_settings_row(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let is_active = self.active_view == ActiveView::Settings;
-
-        SidebarRow::new("nav-settings", "Settings", IconName::Settings)
-            .active(is_active)
-            .on_click(cx.listener(move |_, _, _, cx| {
-                cx.emit(SidebarEvent::Navigate(ActiveView::Settings));
-            }))
+    /// Collect the set of bookmark paths that are in dirty git repos.
+    fn dirty_bookmarks(&self, cx: &App) -> HashSet<PathBuf> {
+        let git = self.git.read(cx);
+        self.pinned_bookmarks
+            .iter()
+            .chain(self.bookmarks.iter())
+            .filter(|p| git.status(p).is_some_and(|s| s.dirty))
+            .cloned()
+            .collect()
     }
 
     fn render_pinned_bookmarks(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        if self.pinned_bookmarks.is_empty() {
+            return div();
+        }
+
         let muted = cx.theme().muted_foreground;
+        let warning = cx.theme().warning;
         let sidebar = cx.entity().clone();
         let active_bm = self.active_bookmark_path();
+        let dirty = self.dirty_bookmarks(cx);
 
         let items: Vec<_> = self
             .pinned_bookmarks
@@ -340,10 +533,13 @@ impl AppSidebar {
                 };
 
                 let is_active = active_bm == Some(path);
+                let is_dirty = dirty.contains(path);
                 let is_system = Settings::is_system_bookmark(path);
                 let p = path.clone();
 
-                let icon_color = if is_active {
+                let icon_color = if is_dirty {
+                    warning
+                } else if is_active {
                     cx.theme().foreground
                 } else {
                     muted
@@ -379,48 +575,38 @@ impl AppSidebar {
                         let sb = sidebar_ref.clone();
 
                         let mut m = menu
-                            .item(
-                                PopupMenuItem::new("Open")
-                                    .icon(IconName::FolderOpen)
-                                    .on_click({
-                                        let path = ctx_open.clone();
-                                        let sb = sb.clone();
-                                        move |_, _, cx| {
-                                            sb.update(cx, |_, cx| {
-                                                cx.emit(SidebarEvent::OpenPath(path.clone()));
-                                            });
-                                        }
-                                    }),
-                            )
+                            .item(PopupMenuItem::new("Open").on_click({
+                                let path = ctx_open.clone();
+                                let sb = sb.clone();
+                                move |_, _, cx| {
+                                    sb.update(cx, |_, cx| {
+                                        cx.emit(SidebarEvent::OpenPath(path.clone()));
+                                    });
+                                }
+                            }))
                             .separator()
-                            .item(
-                                PopupMenuItem::new("Unpin from Quick Access")
-                                    .icon(IconName::StarOff)
-                                    .on_click({
-                                        let path = ctx_unpin.clone();
-                                        let sb = sb.clone();
-                                        move |_, _, cx| {
-                                            sb.update(cx, |_, cx| {
-                                                cx.emit(SidebarEvent::UnpinBookmark(path.clone()));
-                                            });
-                                        }
-                                    }),
-                            );
+                            .item(PopupMenuItem::new("Unpin from Quick Access").on_click({
+                                let path = ctx_unpin.clone();
+                                let sb = sb.clone();
+                                move |_, _, cx| {
+                                    sb.update(cx, |_, cx| {
+                                        cx.emit(SidebarEvent::UnpinBookmark(path.clone()));
+                                    });
+                                }
+                            }));
 
                         if !is_system {
-                            m = m.separator().item(
-                                PopupMenuItem::new("Remove Bookmark")
-                                    .icon(IconName::Delete)
-                                    .on_click({
-                                        let path = ctx_remove.clone();
-                                        let sb = sb;
-                                        move |_, _, cx| {
-                                            sb.update(cx, |_, cx| {
-                                                cx.emit(SidebarEvent::RemoveBookmark(path.clone()));
-                                            });
-                                        }
-                                    }),
-                            );
+                            m = m
+                                .separator()
+                                .item(PopupMenuItem::new("Remove Bookmark").on_click({
+                                    let path = ctx_remove.clone();
+                                    let sb = sb;
+                                    move |_, _, cx| {
+                                        sb.update(cx, |_, cx| {
+                                            cx.emit(SidebarEvent::RemoveBookmark(path.clone()));
+                                        });
+                                    }
+                                }));
                         }
 
                         m
@@ -428,7 +614,7 @@ impl AppSidebar {
             })
             .collect();
 
-        h_flex().gap_2().children(items)
+        div().flex().flex_row().gap_2().children(items)
     }
 
     fn render_regular_bookmarks(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -436,8 +622,10 @@ impl AppSidebar {
             return div();
         }
 
+        let warning = cx.theme().warning;
         let sidebar = cx.entity().clone();
         let active_bm = self.active_bookmark_path();
+        let dirty = self.dirty_bookmarks(cx);
 
         let items: Vec<_> = self
             .bookmarks
@@ -451,6 +639,7 @@ impl AppSidebar {
 
                 let icon = bookmark_icon(&name);
                 let is_active = active_bm == Some(path);
+                let is_dirty = dirty.contains(path);
                 let is_system = Settings::is_system_bookmark(path);
                 let p = path.clone();
                 let ctx_open = path.clone();
@@ -458,65 +647,59 @@ impl AppSidebar {
                 let ctx_remove = path.clone();
                 let sidebar_ref = sidebar.clone();
 
+                let mut row = SidebarRow::new(
+                    SharedString::from(format!("reg-bm-row-{i}")),
+                    SharedString::from(name),
+                    icon,
+                )
+                .active(is_active)
+                .on_click(cx.listener(move |_, _, _, cx| {
+                    cx.emit(SidebarEvent::OpenPath(p.clone()));
+                }));
+
+                if is_dirty {
+                    row = row.color_override(warning);
+                }
+
                 div()
                     .id(SharedString::from(format!("reg-bm-{i}")))
-                    .child(
-                        SidebarRow::new(
-                            SharedString::from(format!("reg-bm-row-{i}")),
-                            SharedString::from(name),
-                            icon,
-                        )
-                        .active(is_active)
-                        .on_click(cx.listener(move |_, _, _, cx| {
-                            cx.emit(SidebarEvent::OpenPath(p.clone()));
-                        })),
-                    )
+                    .child(row)
                     .context_menu(move |menu, _window, _cx| {
                         let sb = sidebar_ref.clone();
 
                         let mut m = menu
-                            .item(
-                                PopupMenuItem::new("Open")
-                                    .icon(IconName::FolderOpen)
-                                    .on_click({
-                                        let path = ctx_open.clone();
-                                        let sb = sb.clone();
-                                        move |_, _, cx| {
-                                            sb.update(cx, |_, cx| {
-                                                cx.emit(SidebarEvent::OpenPath(path.clone()));
-                                            });
-                                        }
-                                    }),
-                            )
+                            .item(PopupMenuItem::new("Open").on_click({
+                                let path = ctx_open.clone();
+                                let sb = sb.clone();
+                                move |_, _, cx| {
+                                    sb.update(cx, |_, cx| {
+                                        cx.emit(SidebarEvent::OpenPath(path.clone()));
+                                    });
+                                }
+                            }))
                             .separator()
-                            .item(
-                                PopupMenuItem::new("Pin to Quick Access")
-                                    .icon(IconName::Star)
-                                    .on_click({
-                                        let path = ctx_pin.clone();
-                                        let sb = sb.clone();
-                                        move |_, _, cx| {
-                                            sb.update(cx, |_, cx| {
-                                                cx.emit(SidebarEvent::PinBookmark(path.clone()));
-                                            });
-                                        }
-                                    }),
-                            );
+                            .item(PopupMenuItem::new("Pin to Quick Access").on_click({
+                                let path = ctx_pin.clone();
+                                let sb = sb.clone();
+                                move |_, _, cx| {
+                                    sb.update(cx, |_, cx| {
+                                        cx.emit(SidebarEvent::PinBookmark(path.clone()));
+                                    });
+                                }
+                            }));
 
                         if !is_system {
-                            m = m.separator().item(
-                                PopupMenuItem::new("Remove Bookmark")
-                                    .icon(IconName::Delete)
-                                    .on_click({
-                                        let path = ctx_remove.clone();
-                                        let sb = sb;
-                                        move |_, _, cx| {
-                                            sb.update(cx, |_, cx| {
-                                                cx.emit(SidebarEvent::RemoveBookmark(path.clone()));
-                                            });
-                                        }
-                                    }),
-                            );
+                            m = m
+                                .separator()
+                                .item(PopupMenuItem::new("Remove Bookmark").on_click({
+                                    let path = ctx_remove.clone();
+                                    let sb = sb;
+                                    move |_, _, cx| {
+                                        sb.update(cx, |_, cx| {
+                                            cx.emit(SidebarEvent::RemoveBookmark(path.clone()));
+                                        });
+                                    }
+                                }));
                         }
 
                         m
@@ -624,46 +807,36 @@ impl AppSidebar {
                         let sb = sidebar_ref.clone();
 
                         let mut m = menu
-                            .item(
-                                PopupMenuItem::new("Find Duplicates")
-                                    .icon(IconName::Copy)
-                                    .on_click({
-                                        let path = ctx_dedup.clone();
-                                        let sb = sb.clone();
-                                        move |_, _, cx| {
-                                            sb.update(cx, |_, cx| {
-                                                cx.emit(SidebarEvent::FindDuplicates(path.clone()));
-                                            });
-                                        }
-                                    }),
-                            )
+                            .item(PopupMenuItem::new("Find Duplicates").on_click({
+                                let path = ctx_dedup.clone();
+                                let sb = sb.clone();
+                                move |_, _, cx| {
+                                    sb.update(cx, |_, cx| {
+                                        cx.emit(SidebarEvent::FindDuplicates(path.clone()));
+                                    });
+                                }
+                            }))
                             .separator()
-                            .item(
-                                PopupMenuItem::new("Index for Search")
-                                    .icon(IconName::Search)
-                                    .on_click({
-                                        let path = ctx_index.clone();
-                                        let sb = sb.clone();
-                                        move |_, _, cx| {
-                                            sb.update(cx, |_, cx| {
-                                                cx.emit(SidebarEvent::IndexLocation(path.clone()));
-                                            });
-                                        }
-                                    }),
-                            );
+                            .item(PopupMenuItem::new("Index for Search").on_click({
+                                let path = ctx_index.clone();
+                                let sb = sb.clone();
+                                move |_, _, cx| {
+                                    sb.update(cx, |_, cx| {
+                                        cx.emit(SidebarEvent::IndexLocation(path.clone()));
+                                    });
+                                }
+                            }));
 
                         if is_external {
-                            m = m.separator().item(
-                                PopupMenuItem::new("Eject").icon(IconName::Minus).on_click({
-                                    let path = ctx_eject.clone();
-                                    let sb = sb;
-                                    move |_, _, cx| {
-                                        sb.update(cx, |_, cx| {
-                                            cx.emit(SidebarEvent::EjectDrive(path.clone()));
-                                        });
-                                    }
-                                }),
-                            );
+                            m = m.separator().item(PopupMenuItem::new("Eject").on_click({
+                                let path = ctx_eject.clone();
+                                let sb = sb;
+                                move |_, _, cx| {
+                                    sb.update(cx, |_, cx| {
+                                        cx.emit(SidebarEvent::EjectDrive(path.clone()));
+                                    });
+                                }
+                            }));
                         }
 
                         m
@@ -706,7 +879,6 @@ impl Render for AppSidebar {
             .bg(theme::sidebar_bg(cx))
             .pt(top_padding)
             .px(PADDING_MD)
-            .pb(PADDING_LG)
             // Custom traffic lights — positioned where native ones used to be
             .child(
                 div()
@@ -722,19 +894,21 @@ impl Render for AppSidebar {
                 .child(self.render_path_bar(cx));
         }
 
-        root.child(
+        root = root.child(
             v_flex()
                 .id("sidebar-scroll")
                 .flex_1()
                 .min_h_0()
                 .gap_4()
                 .overflow_y_scroll()
+                .pb(PADDING_LG)
                 .child(self.render_pinned_bookmarks(cx))
                 .child(self.render_regular_bookmarks(cx))
                 .child(self.render_drives(cx))
                 .child(self.render_tools(cx)),
-        )
-        // Settings pinned at bottom
-        .child(self.render_settings_row(cx))
+        );
+
+        // Bottom workspace bar (Arc-style)
+        root.child(self.render_workspace_bar(cx))
     }
 }

@@ -129,7 +129,14 @@ Zero is organized into focused modules that follow strict separation of concerns
 - **Cleanup** (`src/cleanup/`) - Category-based storage cleanup (36 categories across 8 groups)
 - **Storage** (`src/storage/`) - Unified abstraction for local + cloud (S3, B2, GCS, Dropbox, WebDAV via `opendal`)
 
-### Content (Documents and Data) 
+### Code Intelligence
+
+- **Code** (`src/code/`) - Structural code indexing (functions, types, traits) from Rust (syn) and Go (tree-sitter)
+  - `parsers/` - Language-specific AST parsers with `LanguageParser` trait
+  - `scanner.rs` - Project discovery and file scanning
+  - `persistence.rs` - Compressed .cidx snapshots in `~/.zero/code/`
+
+### Content (Documents and Data)
 - **Todo** (`src/todo/`) - Local task management with file-based storage
   - Context-based workflow: `open` a file, then all commands work within it
   - Lists as groupings within a file (inbox, bugs, features, etc.)
@@ -141,11 +148,35 @@ Zero is organized into focused modules that follow strict separation of concerns
 - **Service** (`src/service/`) - JSON-RPC mode for XPC daemon communication
 - **Automation** (`src/automation/`) - Trigger-based sync (USB mount, file changes)
 - **Watcher** (`crates/watcher/`) - File events (`notify`) + USB events (DiskArbitration on macOS)
+- **LLM** (`crates/zero-llm/`) - LLM agent with streaming, tool calling, multi-provider support
+- **MCP** (`crates/zero-mcp/`) - MCP server exposing search + code intelligence over HTTP
+- **UI** (`crates/zero-ui/`) - GPUI desktop app: file browser, sidebar, ask view, settings
+- **CLI** (`crates/zero-cli/`) - Command-line interface (20+ subcommands)
 
 ### Configuration
 
 - **Profiles** (`profiles/file_types.toml`) - File type definitions used by TypeIndex and cleanup
 - **Templates** (`src/templates/`) - Backup templates (mac-essentials, macos-developer)
+
+### Product Domains
+
+Maps code paths to user-facing product domains. Used by `/zero:changelog` and `/zero:features` to translate implementation changes into user language. Domain names match FEATURES.md section headings.
+
+| Code path | Product domain |
+|---|---|
+| `src/index/`, `src/scanner/` | Search |
+| `src/code/`, `parsers/` | Code Intelligence |
+| `crates/zero-llm/`, `crates/zero-mcp/`, `views/ask/` | AI Assistant |
+| `crates/zero-ui/` (sidebar, file_browser, workspace) | File Management |
+| `src/sync/`, `src/transfer/`, `src/differ/`, `src/templates/` | Sync & Backup |
+| `src/storage/` | Cloud Storage |
+| `src/cleanup/`, `src/dedup/` | Cleanup & Dedup |
+| `src/automation/`, `crates/watcher/` | Automation |
+| `src/hasher/`, `src/ffi/`, `src/service/` | (internal — attribute to the feature it supports) |
+| `src/cache/` | (internal — attribute to the feature it supports) |
+| `src/telemetry/` | Privacy |
+| `crates/zero-cli/` | CLI |
+| `src/todo/` | File Management (todo) |
 
 ## Key Patterns
 

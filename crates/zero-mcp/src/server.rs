@@ -1,4 +1,5 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
@@ -7,20 +8,22 @@ use rmcp::{ServerHandler, tool, tool_handler, tool_router};
 use schemars::JsonSchema;
 use serde::Deserialize;
 
-use zero::prelude::{IndexManager, SearchResult};
+use zero::prelude::{CodeIndex, CodeSearchOpts, ElementKind, IndexManager, Language, SearchResult};
 
 // -- MCP Server --------------------------------------------------------------
 
 #[derive(Clone)]
 pub(crate) struct ZeroMcpServer {
-    index: std::sync::Arc<IndexManager>,
+    index: Arc<IndexManager>,
+    code: Arc<Mutex<CodeIndex>>,
     tool_router: ToolRouter<Self>,
 }
 
 impl ZeroMcpServer {
-    pub fn new(manager: IndexManager) -> Self {
+    pub fn new(manager: IndexManager, code: CodeIndex) -> Self {
         Self {
-            index: std::sync::Arc::new(manager),
+            index: Arc::new(manager),
+            code: Arc::new(Mutex::new(code)),
             tool_router: Self::tool_router(),
         }
     }
@@ -64,21 +67,17 @@ fn format_time(unix_ts: u64) -> String {
     if unix_ts == 0 {
         return "unknown".to_string();
     }
-    // Simple ISO-ish format without pulling in chrono
     let secs = unix_ts;
     let days = secs / 86400;
     let remaining = secs % 86400;
     let hours = remaining / 3600;
     let mins = (remaining % 3600) / 60;
 
-    // Days since Unix epoch → approximate date
-    // Good enough for display; exact calendar math not critical here
     let (year, month, day) = days_to_ymd(days);
     format!("{year:04}-{month:02}-{day:02} {hours:02}:{mins:02}")
 }
 
 fn days_to_ymd(days: u64) -> (u64, u64, u64) {
-    // Algorithm from http://howardhinnant.github.io/date_algorithms.html
     let z = days + 719468;
     let era = z / 146097;
     let doe = z - era * 146097;
@@ -90,6 +89,13 @@ fn days_to_ymd(days: u64) -> (u64, u64, u64) {
     let m = if mp < 10 { mp + 3 } else { mp - 9 };
     let y = if m <= 2 { y + 1 } else { y };
     (y, m, d)
+}
+
+fn short_project_name(path: &str) -> String {
+    Path::new(path)
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| path.to_string())
 }
 
 // -- Tool parameter types ----------------------------------------------------
@@ -120,6 +126,26 @@ pub struct ListDirectoryParams {
 pub struct FileInfoParams {
     /// Absolute path to the file
     pub path: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct CodeSearchParams {
+    /// Symbol name or pattern to search for. Omit to list indexed projects or project symbols.
+    pub query: Option<String>,
+    /// Scope search to a specific project path.
+    pub project: Option<String>,
+    /// Filter by element kind: function, struct, trait, enum, method, const, type_alias, macro.
+    pub kind: Option<String>,
+    /// Filter by language: rust, go.
+    pub language: Option<String>,
+    /// Max results (default: 30, max: 200).
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct CodeOverviewParams {
+    /// Absolute path to the project root.
+    pub project: String,
 }
 
 // -- Tool implementations ----------------------------------------------------
@@ -234,6 +260,194 @@ impl ZeroMcpServer {
         );
         Ok(CallToolResult::success(vec![Content::text(text)]))
     }
+
+    #[tool(
+        description = "Search code symbols (functions, types, traits) across all indexed code projects. With a query: finds matching symbols. With project but no query: lists all symbols in that project. With neither: lists all indexed projects."
+    )]
+    async fn code_search(
+        &self,
+        Parameters(params): Parameters<CodeSearchParams>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let limit = params.limit.unwrap_or(30).min(200);
+        let kind_filter = params.kind.as_deref().and_then(ElementKind::from_str_loose);
+        let lang_filter =
+            params
+                .language
+                .as_deref()
+                .and_then(|l| match l.to_lowercase().as_str() {
+                    "rust" | "rs" => Some(Language::Rust),
+                    "go" => Some(Language::Go),
+                    _ => None,
+                });
+
+        let mut code = self
+            .code
+            .lock()
+            .map_err(|e| rmcp::ErrorData::internal_error(e.to_string(), None))?;
+
+        // No query and no project: list indexed projects
+        if params.query.is_none() && params.project.is_none() {
+            let projects = code.indexed_projects();
+            if projects.is_empty() {
+                return Ok(CallToolResult::success(vec![Content::text(
+                    "No indexed code projects.\n\nUse the CLI to index: zero code index <path>",
+                )]));
+            }
+
+            let mut text = String::from("Indexed code projects:\n\n");
+            for p in &projects {
+                let langs: Vec<&str> = p.languages.iter().map(|l| l.as_str()).collect();
+                text.push_str(&format!(
+                    "{}    {}    {} symbols    {} files    {} LOC\n",
+                    p.path.display(),
+                    langs.join(", "),
+                    p.symbol_count,
+                    p.file_count,
+                    p.lines_of_code,
+                ));
+            }
+            return Ok(CallToolResult::success(vec![Content::text(text)]));
+        }
+
+        // Project specified but no query: list project symbols
+        if let Some(project) = &params.project
+            && params.query.is_none()
+        {
+            let project_path = PathBuf::from(project);
+            let opts = CodeSearchOpts {
+                kind: kind_filter,
+                language: lang_filter,
+                limit,
+                ..Default::default()
+            };
+
+            let results = code
+                .project_symbols(&project_path, &opts)
+                .map_err(|e| rmcp::ErrorData::internal_error(e.to_string(), None))?;
+
+            if results.is_empty() {
+                return Ok(CallToolResult::success(vec![Content::text(format!(
+                    "No symbols found in {}",
+                    project
+                ))]));
+            }
+
+            let mut text = format!("{} — {} public symbols\n\n", project, results.len());
+            let mut current_file = String::new();
+            for r in &results {
+                let e = &r.element;
+                if e.file_path != current_file {
+                    current_file = e.file_path.clone();
+                    text.push_str(&format!("// {}\n", current_file));
+                }
+                text.push_str(&format!("{}\n", e.signature));
+            }
+
+            return Ok(CallToolResult::success(vec![Content::text(text)]));
+        }
+
+        // Query specified: search
+        let query = params.query.as_deref().unwrap_or("");
+        let opts = CodeSearchOpts {
+            kind: kind_filter,
+            language: lang_filter,
+            project: params.project.map(PathBuf::from),
+            limit,
+        };
+
+        let results = code
+            .search(query, &opts)
+            .map_err(|e| rmcp::ErrorData::internal_error(e.to_string(), None))?;
+
+        if results.is_empty() {
+            return Ok(CallToolResult::success(vec![Content::text(format!(
+                "No symbols matching \"{}\"",
+                query
+            ))]));
+        }
+
+        let mut text = format!(
+            "Found {} symbols matching \"{}\":\n\n",
+            results.len(),
+            query
+        );
+        for r in &results {
+            let e = &r.element;
+            text.push_str(&format!("{}\n", e.signature));
+            text.push_str(&format!(
+                "  {}:{}  [{}]  {}  {}\n",
+                e.file_path,
+                e.line_number,
+                short_project_name(&r.project_path),
+                e.language,
+                e.kind,
+            ));
+            if let Some(doc) = &e.doc
+                && let Some(first_line) = doc.lines().next()
+            {
+                text.push_str(&format!("  /// {}\n", first_line));
+            }
+            text.push('\n');
+        }
+
+        Ok(CallToolResult::success(vec![Content::text(text)]))
+    }
+
+    #[tool(
+        description = "Get a concise overview of a code project: languages, file count, lines of code, module structure, key public types."
+    )]
+    async fn code_overview(
+        &self,
+        Parameters(params): Parameters<CodeOverviewParams>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let mut code = self
+            .code
+            .lock()
+            .map_err(|e| rmcp::ErrorData::internal_error(e.to_string(), None))?;
+
+        let project_path = PathBuf::from(&params.project);
+        let overview = code
+            .overview(&project_path)
+            .map_err(|e| rmcp::ErrorData::internal_error(e.to_string(), None))?;
+
+        let overview = match overview {
+            Some(o) => o,
+            None => {
+                return Ok(CallToolResult::success(vec![Content::text(format!(
+                    "Project not indexed: {}\n\nUse the CLI to index: zero code index {}",
+                    params.project, params.project
+                ))]));
+            }
+        };
+
+        let langs: Vec<&str> = overview.languages.iter().map(|l| l.as_str()).collect();
+
+        let mut text = format!(
+            "Project: {}\nLanguages: {}\nFiles: {} source files\nLines: {} LOC\nSymbols: {} public\n",
+            overview.path,
+            langs.join(", "),
+            overview.file_count,
+            overview.lines_of_code,
+            overview.symbol_count,
+        );
+
+        if !overview.modules.is_empty() {
+            text.push_str("\nModules:\n");
+            for (module, types) in &overview.modules {
+                if types.is_empty() {
+                    text.push_str(&format!("  {}\n", module));
+                } else {
+                    text.push_str(&format!("  {} — ({})\n", module, types.join(", ")));
+                }
+            }
+        }
+
+        if !overview.key_types.is_empty() {
+            text.push_str(&format!("\nKey types: {}\n", overview.key_types.join(", ")));
+        }
+
+        Ok(CallToolResult::success(vec![Content::text(text)]))
+    }
 }
 
 // -- ServerHandler -----------------------------------------------------------
@@ -242,10 +456,11 @@ impl ZeroMcpServer {
 impl ServerHandler for ZeroMcpServer {
     fn get_info(&self) -> ServerInfo {
         ServerInfo::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(
-            "Zero file search MCP server — search files across locally indexed \
+            "Zero MCP server — search files and code across locally indexed \
                  directories. All operations are read-only and local. Use search_files for \
                  name/path queries, search_by_type for category filters, list_directory to \
-                 browse folders, and file_info for metadata.",
+                 browse folders, file_info for metadata, code_search for code symbols \
+                 (functions, types, traits), and code_overview for project summaries.",
         )
     }
 }

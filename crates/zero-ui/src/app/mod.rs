@@ -5,6 +5,7 @@ pub mod routing;
 pub mod split;
 pub mod titlebar;
 pub mod views;
+pub mod workspace;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -20,8 +21,12 @@ use gpui_component::{
 use zero::scanner::CrawlProgress;
 
 use crate::actions::{
-    GoBack, GoForward, GoUp, OpenCommandPalette, OpenSettings, PasteFiles, ToggleAsk,
-    ToggleSidebar, ToggleSplitView, ToggleTerminal, ToggleToolbar, ToggleViewMode,
+    About, CheckForUpdates, CloseWindow, GoApplications, GoBack, GoDesktop, GoDocuments,
+    GoDownloads, GoForward, GoHome, GoUp, Minimize, OpenAutomations, OpenCleanup,
+    OpenCommandPalette, OpenDuplicates, OpenSecureErase, OpenSettings, PasteFiles,
+    SwitchWorkspace1, SwitchWorkspace2, SwitchWorkspace3, SwitchWorkspace4, SwitchWorkspace5,
+    SwitchWorkspace6, SwitchWorkspace7, SwitchWorkspace8, SwitchWorkspace9, ToggleAsk,
+    ToggleSidebar, ToggleSplitView, ToggleTerminal, ToggleToolbar, ToggleViewMode, Zoom,
 };
 use crate::models::{ActiveView, FileClipboard, PaneId, SplitPane, ViewMode};
 use crate::permissions;
@@ -118,6 +123,10 @@ pub struct ZeroApp {
     // Sidebar
     pub sidebar: Option<Entity<AppSidebar>>,
 
+    // Workspaces
+    pub workspace_snapshots: Vec<Option<crate::workspace::WorkspaceSnapshot>>,
+    pub active_workspace_idx: usize,
+
     pub focus_handle: FocusHandle,
     pub focus_redirect_registered: bool,
     pub _subs: Vec<Subscription>,
@@ -127,18 +136,22 @@ impl ZeroApp {
     pub fn new(cx: &mut Context<Self>) -> Self {
         let settings = Settings::load();
 
-        let start_path = settings
+        let active_ws = settings.active_ws();
+        let start_path = active_ws
             .last_path
             .clone()
-            .or_else(|| settings.sidebar_bookmarks.first().cloned())
+            .or_else(|| active_ws.pinned_bookmarks.first().cloned())
             .or_else(dirs::home_dir)
             .unwrap_or_else(|| PathBuf::from("/"));
 
-        let view_mode = if settings.view_mode == "grid" {
+        let view_mode = if active_ws.view_mode == "grid" {
             ViewMode::Grid
         } else {
             ViewMode::List
         };
+
+        let workspace_count = settings.workspaces.len();
+        let active_workspace_idx = settings.active_workspace;
 
         let has_fda = permissions::has_full_disk_access();
 
@@ -193,6 +206,8 @@ impl ZeroApp {
             fda_onboarding: None,
             onboarding: None,
             sidebar: None,
+            workspace_snapshots: vec![None; workspace_count],
+            active_workspace_idx,
             focus_handle: cx.focus_handle(),
             focus_redirect_registered: false,
             _subs: subs,
@@ -392,6 +407,20 @@ impl ZeroApp {
             .ok();
         })
         .detach();
+    }
+
+    /// Re-check git dirty state for sidebar bookmarks (throttled to 5s).
+    fn refresh_sidebar_git(&mut self, cx: &mut Context<Self>) {
+        let settings = crate::session::Settings::load();
+        let ws = settings.active_ws();
+        let mut paths = ws.pinned_bookmarks.clone();
+        paths.extend(ws.regular_bookmarks.iter().cloned());
+        if paths.is_empty() {
+            return;
+        }
+        self.services.git.update(cx, |svc, cx| {
+            svc.refresh_if_stale(paths, std::time::Duration::from_secs(5), cx);
+        });
     }
 
     fn render_content(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
@@ -617,6 +646,7 @@ impl Render for ZeroApp {
         if !self.focus_redirect_registered {
             let sub = cx.on_focus(&self.focus_handle, window, |this, window, cx| {
                 this.focus_content(window, cx);
+                this.refresh_sidebar_git(cx);
             });
             self._subs.push(sub);
             self.focus_redirect_registered = true;
@@ -626,6 +656,68 @@ impl Render for ZeroApp {
             .id("app-root")
             .text_size(FONT_SIZE_BODY)
             .track_focus(&self.focus_handle)
+            .on_action(cx.listener(|_, _: &About, window, cx| {
+                let version = env!("CARGO_PKG_VERSION");
+                let debug = if cfg!(debug_assertions) { " (debug)" } else { "" };
+                let message = format!("Zero {version}{debug}");
+                let detail = format!(
+                    "A privacy-first Finder & Spotlight replacement\n\n\
+                     Platform: {} {}\n\
+                     Rust edition: 2024",
+                    std::env::consts::OS,
+                    std::env::consts::ARCH,
+                );
+                let prompt =
+                    window.prompt(PromptLevel::Info, &message, Some(&detail), &["Copy", "OK"], cx);
+                cx.spawn(async move |_, cx| {
+                    if let Ok(0) = prompt.await {
+                        let text = format!("{message}\n{detail}");
+                        cx.update(|cx| {
+                            cx.write_to_clipboard(ClipboardItem::new_string(text));
+                        })
+                        .ok();
+                    }
+                })
+                .detach();
+            }))
+            .on_action(cx.listener(|_, _: &CheckForUpdates, _, cx| {
+                cx.spawn(async move |_, cx| {
+                    let status = smol::unblock(zero::updater::check_latest).await;
+                    let (msg, detail, level) = match &status {
+                        Ok(zero::updater::UpdateStatus::UpToDate) => {
+                            let v = env!("CARGO_PKG_VERSION");
+                            (format!("You're up to date! (v{v})"), None, PromptLevel::Info)
+                        }
+                        Ok(zero::updater::UpdateStatus::Available { version }) => (
+                            format!("Update available: v{version}"),
+                            Some("Run `zero update` in your terminal to install.".to_string()),
+                            PromptLevel::Info,
+                        ),
+                        Err(e) => (
+                            "Update check failed".to_string(),
+                            Some(e.to_string()),
+                            PromptLevel::Warning,
+                        ),
+                    };
+                    cx.update(|cx| {
+                        if let Some(window) = cx.active_window() {
+                            window
+                                .update(cx, |_, window, cx| {
+                                    let _ = window.prompt(
+                                        level,
+                                        &msg,
+                                        detail.as_deref(),
+                                        &["OK"],
+                                        cx,
+                                    );
+                                })
+                                .ok();
+                        }
+                    })
+                    .ok();
+                })
+                .detach();
+            }))
             .on_action(cx.listener(|this, _: &ToggleToolbar, _, cx| {
                 // Can't hide toolbar when sidebar is already hidden
                 if !this.sidebar_open && this.toolbar_visible {
@@ -701,9 +793,9 @@ impl Render for ZeroApp {
                     ViewMode::List => ViewMode::Grid,
                     ViewMode::Grid => ViewMode::List,
                 };
-                // Persist view mode
+                // Persist view mode to active workspace
                 let mut settings = Settings::load();
-                settings.view_mode = match this.view_mode {
+                settings.active_ws_mut().view_mode = match this.view_mode {
                     ViewMode::List => "list".to_string(),
                     ViewMode::Grid => "grid".to_string(),
                 };
@@ -712,6 +804,80 @@ impl Render for ZeroApp {
                 this.file_grid = None;
                 this.file_browser = None;
                 cx.notify();
+            }))
+            .on_action(cx.listener(|this, _: &SwitchWorkspace1, window, cx| {
+                this.switch_workspace(0, window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &SwitchWorkspace2, window, cx| {
+                this.switch_workspace(1, window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &SwitchWorkspace3, window, cx| {
+                this.switch_workspace(2, window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &SwitchWorkspace4, window, cx| {
+                this.switch_workspace(3, window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &SwitchWorkspace5, window, cx| {
+                this.switch_workspace(4, window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &SwitchWorkspace6, window, cx| {
+                this.switch_workspace(5, window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &SwitchWorkspace7, window, cx| {
+                this.switch_workspace(6, window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &SwitchWorkspace8, window, cx| {
+                this.switch_workspace(7, window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &SwitchWorkspace9, window, cx| {
+                this.switch_workspace(8, window, cx);
+            }))
+            // Go shortcuts
+            .on_action(cx.listener(|this, _: &GoHome, window, cx| {
+                if let Some(home) = dirs::home_dir() {
+                    this.navigate_to(home, window, cx);
+                }
+            }))
+            .on_action(cx.listener(|this, _: &GoDesktop, window, cx| {
+                if let Some(p) = dirs::desktop_dir() {
+                    this.navigate_to(p, window, cx);
+                }
+            }))
+            .on_action(cx.listener(|this, _: &GoDocuments, window, cx| {
+                if let Some(p) = dirs::document_dir() {
+                    this.navigate_to(p, window, cx);
+                }
+            }))
+            .on_action(cx.listener(|this, _: &GoDownloads, window, cx| {
+                if let Some(p) = dirs::download_dir() {
+                    this.navigate_to(p, window, cx);
+                }
+            }))
+            .on_action(cx.listener(|this, _: &GoApplications, window, cx| {
+                this.navigate_to("/Applications".into(), window, cx);
+            }))
+            // Tool views
+            .on_action(cx.listener(|this, _: &OpenCleanup, window, cx| {
+                this.push_view(ActiveView::Cleanup, window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &OpenDuplicates, window, cx| {
+                this.push_view(ActiveView::Dedup, window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &OpenSecureErase, window, cx| {
+                this.push_view(ActiveView::SecureErase, window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &OpenAutomations, window, cx| {
+                this.push_view(ActiveView::Automations, window, cx);
+            }))
+            // Window actions
+            .on_action(cx.listener(|_, _: &CloseWindow, window, _| {
+                window.remove_window();
+            }))
+            .on_action(cx.listener(|_, _: &Minimize, window, _| {
+                window.minimize_window();
+            }))
+            .on_action(cx.listener(|_, _: &Zoom, window, _| {
+                window.zoom_window();
             }))
             .size_full()
             .bg(theme::content_bg(cx))
@@ -755,7 +921,7 @@ impl Render for ZeroApp {
                                         el.child(
                                             div()
                                                 .id("ask-resize-handle")
-                                                .w(px(4.0))
+                                                .w(px(1.0))
                                                 .h_full()
                                                 .cursor_col_resize()
                                                 .bg(cx.theme().border)

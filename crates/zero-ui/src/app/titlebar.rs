@@ -51,6 +51,16 @@ impl ZeroApp {
                 (name, IconName::LayoutDashboard, None)
             }
             ActiveView::FileBrowser(_) => {
+                // Check if we're showing search results
+                if let Some(query) = self
+                    .file_browser
+                    .as_ref()
+                    .and_then(|b| b.read(cx).search_results_query().map(String::from))
+                {
+                    let label = format!("\u{201c}{query}\u{201d}");
+                    return (label, IconName::Search, None);
+                }
+
                 let folder_name = self
                     .current_path
                     .file_name()

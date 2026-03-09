@@ -11,13 +11,14 @@ use rmcp::transport::streamable_http_server::session::local::LocalSessionManager
 use rmcp::transport::streamable_http_server::tower::StreamableHttpService;
 use tokio_util::sync::CancellationToken;
 
-use zero::prelude::IndexManager;
+use zero::prelude::{CodeIndex, IndexManager};
 
 use crate::server::ZeroMcpServer;
 
 /// Build the axum router with MCP streaming HTTP service + Bearer auth.
 pub(crate) fn build_router(
     manager: IndexManager,
+    code: CodeIndex,
     api_key: String,
     cancel: CancellationToken,
 ) -> Router {
@@ -31,8 +32,31 @@ pub(crate) fn build_router(
         ..Default::default()
     };
 
+    // Wrap CodeIndex in Arc so the closure can clone it for each session
+    let code = Arc::new(std::sync::Mutex::new(code));
+
     let mcp_service = StreamableHttpService::new(
-        move || Ok(ZeroMcpServer::new(manager.clone())),
+        move || {
+            // Clone the IndexManager (it supports Clone)
+            let mgr = manager.clone();
+            // Create a new CodeIndex for each session by loading from disk
+            let ci = match zero::code::CodeIndex::new() {
+                Ok(ci) => ci,
+                Err(_) => {
+                    // Fallback: clone the shared one
+                    let guard = code.lock().expect("code lock poisoned");
+                    // We can't clone CodeIndex, so create a fresh one
+                    drop(guard);
+                    zero::code::CodeIndex::new().unwrap_or_else(|_| {
+                        zero::code::CodeIndex::with_dir(
+                            std::env::temp_dir().join("zero-code-fallback"),
+                        )
+                        .expect("fallback code index")
+                    })
+                }
+            };
+            Ok(ZeroMcpServer::new(mgr, ci))
+        },
         session_manager,
         config,
     );

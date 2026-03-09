@@ -53,8 +53,16 @@ pub struct SearchOptions {
     pub include_files: bool,
     /// Case-sensitive search
     pub case_sensitive: bool,
-    /// Filter by extension (e.g., "pdf", "rs")
+    /// Filter by extension (e.g., "pdf", "rs") — single extension backward compat
     pub extension_filter: Option<String>,
+    /// Filter by multiple extensions (OR logic, lowercase, no dot)
+    pub extensions_filter: Vec<String>,
+    /// Minimum file size in bytes
+    pub min_size: Option<u64>,
+    /// Maximum file size in bytes
+    pub max_size: Option<u64>,
+    /// Exclude files under hidden directories
+    pub exclude_hidden: bool,
     /// Include files in Trash (default: true for backward compatibility)
     pub include_trash: bool,
 }
@@ -67,7 +75,11 @@ impl Default for SearchOptions {
             include_files: true,
             case_sensitive: false,
             extension_filter: None,
-            include_trash: true, // Default true for backward compatibility
+            extensions_filter: Vec::new(),
+            min_size: None,
+            max_size: None,
+            exclude_hidden: false,
+            include_trash: true,
         }
     }
 }
@@ -122,6 +134,12 @@ pub enum SortBy {
     Relevance,
     /// Sort by modification time, most recent first
     RecentFirst,
+    /// Sort by file size, largest first
+    SizeDesc,
+    /// Sort by file size, smallest first
+    SizeAsc,
+    /// Sort by name, alphabetical
+    NameAsc,
     /// No explicit sort (bitmap iteration order)
     None,
 }
@@ -144,6 +162,8 @@ pub struct SearchQuery {
     pub type_filter: Option<FileTypeCategory>,
     /// Filter by file extension (lowercase, no dot)
     pub extension: Option<String>,
+    /// Filter by multiple extensions (OR logic, lowercase, no dot)
+    pub extensions: Vec<String>,
     /// Sort order
     pub sort: SortBy,
     /// Include directories in results
@@ -152,6 +172,12 @@ pub struct SearchQuery {
     pub include_files: bool,
     /// Include files in Trash
     pub include_trash: bool,
+    /// Minimum file size in bytes
+    pub min_size: Option<u64>,
+    /// Maximum file size in bytes
+    pub max_size: Option<u64>,
+    /// Exclude files under hidden directories
+    pub exclude_hidden: bool,
     /// Maximum number of results
     pub limit: usize,
 }
@@ -221,6 +247,30 @@ impl SearchQuery {
     /// Add an extension filter
     pub fn with_extension(mut self, ext: &str) -> Self {
         self.extension = Some(ext.to_lowercase());
+        self
+    }
+
+    /// Add multiple extension filters (OR logic)
+    pub fn with_extensions(mut self, exts: Vec<String>) -> Self {
+        self.extensions = exts.into_iter().map(|e| e.to_lowercase()).collect();
+        self
+    }
+
+    /// Set minimum file size filter
+    pub fn with_min_size(mut self, size: u64) -> Self {
+        self.min_size = Some(size);
+        self
+    }
+
+    /// Set maximum file size filter
+    pub fn with_max_size(mut self, size: u64) -> Self {
+        self.max_size = Some(size);
+        self
+    }
+
+    /// Exclude files under hidden directories
+    pub fn exclude_hidden(mut self) -> Self {
+        self.exclude_hidden = true;
         self
     }
 
@@ -964,6 +1014,11 @@ impl SearchIndex {
     /// Unified search — dispatches to optimized internal paths based on query shape.
     #[instrument(skip(self), fields(query = %q.text, limit = q.limit))]
     pub fn query(&self, q: SearchQuery) -> Vec<SearchResult> {
+        // Glob pattern detection: if query contains * or ?, use glob matching
+        if !q.text.is_empty() && (q.text.contains('*') || q.text.contains('?')) {
+            return self.search_glob(&q);
+        }
+
         match (q.text.is_empty(), &q.type_filter, &q.sort) {
             (_, _, SortBy::RecentFirst) => {
                 if q.text.is_empty() {
@@ -974,12 +1029,60 @@ impl SearchIndex {
             }
             (true, Some(cat), _) => self.bitmap_search(*cat, q.limit, q.include_trash),
             (false, Some(cat), _) => self.text_with_bitmap(&q.text, *cat, q.limit, q.include_trash),
-            (true, None, _) if q.extension.is_none() => self.list_all(q.limit),
+            (true, None, _) if q.extension.is_none() && q.extensions.is_empty() => {
+                self.list_all(q.limit)
+            }
             _ => {
                 let opts = self.query_to_options(&q);
                 self.search_with_options(&q.text, opts)
             }
         }
+    }
+
+    /// Glob pattern search — matches filenames against a glob pattern
+    fn search_glob(&self, q: &SearchQuery) -> Vec<SearchResult> {
+        let glob = match globset::Glob::new(&q.text) {
+            Ok(g) => g.compile_matcher(),
+            Err(_) => return Vec::new(),
+        };
+
+        let now = super::scoring::now_secs();
+        let query_lower = q.text.to_lowercase();
+        let opts = self.query_to_options(q);
+        let type_bitmap = q
+            .type_filter
+            .and_then(|cat| self.type_index.get_indices(cat));
+        let limit2 = q.limit.saturating_mul(8);
+        let mut results = Vec::new();
+
+        for (idx, node) in self.slab.iter().enumerate() {
+            if !self.matches_compact_filters(node, idx, &opts) {
+                continue;
+            }
+            if let Some(bitmap) = type_bitmap
+                && !bitmap.contains(idx as u32)
+            {
+                continue;
+            }
+            let name = node.name(&self.path_arena);
+            if !glob.is_match(name) {
+                continue;
+            }
+            let path = node.path(&self.path_arena);
+            let ctx = super::scoring::NodeContext::new(path, node.mtime);
+            let score = super::scoring::score_result(&ctx, &query_lower, now);
+            results.push(SearchResult {
+                node: node.to_file_node(&self.path_arena),
+                score,
+            });
+            if results.len() >= limit2 {
+                break;
+            }
+        }
+
+        results.sort_by_key(|a| std::cmp::Reverse(a.score));
+        results.truncate(q.limit);
+        results
     }
 
     /// Type-only search via bitmap
@@ -1024,8 +1127,9 @@ impl SearchIndex {
         };
 
         let query_lower = text.to_lowercase();
+        let now = super::scoring::now_secs();
         let mut results = Vec::new();
-        let limit2 = limit.saturating_mul(2);
+        let limit2 = limit.saturating_mul(8);
 
         // Search main compact name index
         for entry in &self.name_index.entries {
@@ -1033,8 +1137,6 @@ impl SearchIndex {
             if !name.contains(&query_lower) {
                 continue;
             }
-
-            let score = Self::calculate_score_static(name, &query_lower);
 
             for &idx in self.name_index.entry_indices(entry) {
                 if !type_bitmap.contains(idx) {
@@ -1044,6 +1146,9 @@ impl SearchIndex {
                     continue;
                 }
                 if let Some(node) = self.slab.get(idx as usize) {
+                    let path = node.path(&self.path_arena);
+                    let ctx = super::scoring::NodeContext::new(path, node.mtime);
+                    let score = super::scoring::score_result(&ctx, &query_lower, now);
                     results.push(SearchResult {
                         node: node.to_file_node(&self.path_arena),
                         score,
@@ -1063,7 +1168,6 @@ impl SearchIndex {
             if !name.contains(&query_lower) {
                 continue;
             }
-            let score = Self::calculate_score_static(name, &query_lower);
             for &idx in indices {
                 if !type_bitmap.contains(idx) {
                     continue;
@@ -1072,6 +1176,9 @@ impl SearchIndex {
                     continue;
                 }
                 if let Some(node) = self.slab.get(idx as usize) {
+                    let path = node.path(&self.path_arena);
+                    let ctx = super::scoring::NodeContext::new(path, node.mtime);
+                    let score = super::scoring::score_result(&ctx, &query_lower, now);
                     results.push(SearchResult {
                         node: node.to_file_node(&self.path_arena),
                         score,
@@ -1097,6 +1204,10 @@ impl SearchIndex {
         opts.include_files = q.include_files;
         opts.include_trash = q.include_trash;
         opts.extension_filter = q.extension.clone();
+        opts.extensions_filter = q.extensions.clone();
+        opts.min_size = q.min_size;
+        opts.max_size = q.max_size;
+        opts.exclude_hidden = q.exclude_hidden;
         opts
     }
 
@@ -1206,8 +1317,9 @@ impl SearchIndex {
         };
 
         let query_lower = query.to_lowercase();
+        let now = super::scoring::now_secs();
         let mut results = Vec::new();
-        let limit2 = limit.saturating_mul(2);
+        let limit2 = limit.saturating_mul(8);
 
         // Search through compact name index
         for entry in &self.name_index.entries {
@@ -1215,7 +1327,6 @@ impl SearchIndex {
             if !name.contains(&query_lower) {
                 continue;
             }
-            let score = Self::calculate_score_static(name, &query_lower);
             for &idx in self.name_index.entry_indices(entry) {
                 if !type_bitmap.contains(idx) {
                     continue;
@@ -1224,6 +1335,9 @@ impl SearchIndex {
                     continue;
                 }
                 if let Some(node) = self.slab.get(idx as usize) {
+                    let path = node.path(&self.path_arena);
+                    let ctx = super::scoring::NodeContext::new(path, node.mtime);
+                    let score = super::scoring::score_result(&ctx, &query_lower, now);
                     results.push(SearchResult {
                         node: node.to_file_node(&self.path_arena),
                         score,
@@ -1243,7 +1357,6 @@ impl SearchIndex {
             if !name.contains(&query_lower) {
                 continue;
             }
-            let score = Self::calculate_score_static(name, &query_lower);
             for &idx in indices {
                 if !type_bitmap.contains(idx) {
                     continue;
@@ -1252,6 +1365,9 @@ impl SearchIndex {
                     continue;
                 }
                 if let Some(node) = self.slab.get(idx as usize) {
+                    let path = node.path(&self.path_arena);
+                    let ctx = super::scoring::NodeContext::new(path, node.mtime);
+                    let score = super::scoring::score_result(&ctx, &query_lower, now);
                     results.push(SearchResult {
                         node: node.to_file_node(&self.path_arena),
                         score,
@@ -1344,6 +1460,7 @@ impl SearchIndex {
         }
 
         let query_lower = query.to_lowercase();
+        let now = super::scoring::now_secs();
         let type_bitmap = type_filter.and_then(|cat| self.type_index.get_indices(cat));
         let mut results = Vec::new();
 
@@ -1363,7 +1480,9 @@ impl SearchIndex {
                     if !name.to_lowercase().contains(&query_lower) {
                         continue;
                     }
-                    let score = Self::calculate_score_static(&name.to_lowercase(), &query_lower);
+                    let path = node.path(&self.path_arena);
+                    let ctx = super::scoring::NodeContext::new(path, node.mtime);
+                    let score = super::scoring::score_result(&ctx, &query_lower, now);
                     results.push(SearchResult {
                         node: node.to_file_node(&self.path_arena),
                         score,
@@ -1403,8 +1522,9 @@ impl SearchIndex {
             query_lower.clone()
         };
 
+        let now = super::scoring::now_secs();
         let mut results = Vec::new();
-        let limit2 = options.limit.saturating_mul(2);
+        let limit2 = options.limit.saturating_mul(8);
 
         // Search main compact name index
         for entry in &self.name_index.entries {
@@ -1418,6 +1538,7 @@ impl SearchIndex {
                 &options,
                 &mut results,
                 limit2,
+                now,
             );
             if results.len() >= limit2 {
                 break;
@@ -1435,6 +1556,7 @@ impl SearchIndex {
                     &options,
                     &mut results,
                     limit2,
+                    now,
                 );
                 if results.len() >= limit2 {
                     break;
@@ -1457,6 +1579,7 @@ impl SearchIndex {
         options: &SearchOptions,
         results: &mut Vec<SearchResult>,
         limit2: usize,
+        now: u64,
     ) {
         if !query.is_empty() {
             let name_cmp = if options.case_sensitive {
@@ -1477,30 +1600,18 @@ impl SearchIndex {
             }
         }
 
-        let score = if query.is_empty() {
-            100u32.saturating_sub(name.len() as u32)
-        } else {
-            let name_cmp = if options.case_sensitive {
-                if let Some(&idx) = indices.first() {
-                    if let Some(node) = self.slab.get(idx as usize) {
-                        node.name(&self.path_arena).to_string()
-                    } else {
-                        name.to_string()
-                    }
-                } else {
-                    name.to_string()
-                }
-            } else {
-                name.to_string()
-            };
-            Self::calculate_score_static(&name_cmp, query_cmp)
-        };
-
         for &idx in indices {
             if let Some(node) = self.slab.get(idx as usize) {
                 if !self.matches_compact_filters(node, idx as usize, options) {
                     continue;
                 }
+                let score = if query.is_empty() {
+                    100u32.saturating_sub(name.len() as u32)
+                } else {
+                    let path = node.path(&self.path_arena);
+                    let ctx = super::scoring::NodeContext::new(path, node.mtime);
+                    super::scoring::score_result(&ctx, query_cmp, now)
+                };
                 results.push(SearchResult {
                     node: node.to_file_node(&self.path_arena),
                     score,
@@ -1522,6 +1633,9 @@ impl SearchIndex {
         if !options.include_trash && self.type_index.is_in_trash(slab_index as u32) {
             return false;
         }
+        if options.exclude_hidden && self.type_index.is_hidden(slab_index as u32) {
+            return false;
+        }
         match node.node_type {
             NodeType::File => {
                 if !options.include_files {
@@ -1539,30 +1653,43 @@ impl SearchIndex {
                 }
             }
         }
+        // Multi-extension filter (OR logic)
+        if !options.extensions_filter.is_empty() {
+            match node.extension(&self.path_arena) {
+                Some(ext) => {
+                    if !options
+                        .extensions_filter
+                        .iter()
+                        .any(|f| ext.eq_ignore_ascii_case(f))
+                    {
+                        return false;
+                    }
+                }
+                None => return false,
+            }
+        }
+        // Single extension filter (backward compat)
         if let Some(ref ext_filter) = options.extension_filter {
             if let Some(ext) = node.extension(&self.path_arena) {
-                if ext.to_lowercase() != *ext_filter {
+                if !ext.eq_ignore_ascii_case(ext_filter) {
                     return false;
                 }
             } else {
                 return false;
             }
         }
-        true
-    }
-
-    /// Calculate relevance score (static, no &self needed)
-    fn calculate_score_static(name: &str, query: &str) -> u32 {
-        let mut score = 0u32;
-        if name == query {
-            score += 1000;
-        } else if name.starts_with(query) {
-            score += 500;
-        } else {
-            score += 100;
+        // Size filters
+        if let Some(min) = options.min_size
+            && node.size < min
+        {
+            return false;
         }
-        score += 100u32.saturating_sub(name.len() as u32);
-        score
+        if let Some(max) = options.max_size
+            && node.size > max
+        {
+            return false;
+        }
+        true
     }
 
     /// Get a node by its slab index (materializes to FileNode)
@@ -1752,14 +1879,15 @@ mod tests {
     fn test_multiple_files_same_name() {
         let mut index = SearchIndex::new();
 
-        // Same filename in different directories
+        // Same filename in different directories at similar depth
         index.insert(FileNode::file("project1/config.json".into(), 100, 0));
         index.insert(FileNode::file("project2/config.json".into(), 200, 0));
 
         let results = index.search("config", 10);
         assert_eq!(results.len(), 2);
 
-        // Both should have same score
-        assert_eq!(results[0].score, results[1].score);
+        // Both should be found (scores may differ due to per-node context scoring)
+        assert!(results[0].score > 0);
+        assert!(results[1].score > 0);
     }
 }

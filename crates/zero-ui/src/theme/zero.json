@@ -53,6 +53,7 @@
         "caret": "#ededed",
 
         "popover.background": "#1e1e1e",
+        "popover.border": "#ffffff1a",
         "popover.foreground": "#ededed",
         "overlay": "#00000066",
 
@@ -218,6 +219,7 @@
         "caret": "#191919",
 
         "popover.background": "#ffffff",
+        "popover.border": "#0000001a",
         "popover.foreground": "#191919",
         "overlay": "#0000001a",
 

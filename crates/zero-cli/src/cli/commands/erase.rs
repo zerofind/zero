@@ -311,6 +311,9 @@ pub fn cmd_erase(out: &Outputter, args: &EraseArgs) -> anyhow::Result<()> {
         out.newline();
     }
 
+    // Record telemetry for erase attempt
+    let level_name = level.name().to_string();
+
     // Build options
     let options = EraseOptions::new(level)
         .with_verify(verify)
@@ -549,6 +552,7 @@ pub fn cmd_erase(out: &Outputter, args: &EraseArgs) -> anyhow::Result<()> {
                 },
                 "warnings": erase_result.warnings,
             });
+            zero::telemetry::record_erase(&level_name);
             cmd_success!(out, "erase", duration_ms, data, {
                 out.newline();
                 out.success(&format!("Secure erase of '{}' complete!", target.name));
@@ -990,6 +994,7 @@ fn cmd_erase_device(
                 },
                 "warnings": erase_result.warnings,
             });
+            zero::telemetry::record_erase(level.name());
             cmd_success!(out, "erase", duration_ms, data, {
                 out.newline();
                 out.success(&format!(

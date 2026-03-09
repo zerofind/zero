@@ -7,7 +7,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use zero::index::{
-    FileTypeCategory, IndexManager, IndexWatcher, SearchIndex, SearchQuery, WatcherConfig,
+    FileTypeCategory, IndexManager, IndexWatcher, SearchIndex, SearchQuery, SortBy, WatcherConfig,
     hash_path, persistence,
 };
 use zero::output::*;
@@ -103,9 +103,53 @@ pub struct SearchOptions<'a> {
     pub count_only: bool,
     pub files_only: bool,
     pub dirs_only: bool,
-    pub extension: Option<&'a str>,
+    pub extensions: &'a [String],
     pub type_filter: Option<FileTypeCategory>,
     pub recent: Option<usize>,
+    pub sort: Option<&'a str>,
+    pub min_size: Option<&'a str>,
+    pub max_size: Option<&'a str>,
+    pub exclude_hidden: bool,
+    pub open: bool,
+    pub reveal: bool,
+}
+
+/// Parse a human-readable size string like "1KB", "10MB", "1GB" to bytes
+fn parse_size(s: &str) -> anyhow::Result<u64> {
+    let s = s.trim();
+    let (num_str, unit) = if let Some(pos) = s.find(|c: char| c.is_ascii_alphabetic()) {
+        (&s[..pos], s[pos..].to_uppercase())
+    } else {
+        (s, String::new())
+    };
+
+    let num: f64 = num_str
+        .trim()
+        .parse()
+        .map_err(|_| anyhow::anyhow!("Invalid size: {}", s))?;
+
+    let multiplier: u64 = match unit.as_str() {
+        "" | "B" => 1,
+        "KB" | "K" => 1024,
+        "MB" | "M" => 1024 * 1024,
+        "GB" | "G" => 1024 * 1024 * 1024,
+        "TB" | "T" => 1024 * 1024 * 1024 * 1024,
+        _ => anyhow::bail!("Unknown size unit: {}. Use B, KB, MB, GB, TB", unit),
+    };
+
+    Ok((num * multiplier as f64) as u64)
+}
+
+/// Parse sort string to SortBy
+fn parse_sort(s: &str) -> SortBy {
+    match s.to_lowercase().as_str() {
+        "recent" | "date" | "mtime" => SortBy::RecentFirst,
+        "size" | "size-desc" | "largest" => SortBy::SizeDesc,
+        "size-asc" | "smallest" => SortBy::SizeAsc,
+        "name" | "alpha" => SortBy::NameAsc,
+        "relevance" | "score" => SortBy::Relevance,
+        _ => SortBy::Relevance,
+    }
 }
 
 /// Search for files matching a query
@@ -118,11 +162,27 @@ pub fn cmd_search(out: &Outputter, opts: &SearchOptions<'_>) -> anyhow::Result<(
         count_only,
         files_only,
         dirs_only,
-        extension,
+        extensions,
         type_filter,
         recent,
+        sort,
+        min_size,
+        max_size,
+        exclude_hidden,
+        open,
+        reveal,
     } = *opts;
     let total_start = Instant::now();
+
+    // Parse size filters
+    let min_size_bytes = match min_size {
+        Some(s) => Some(parse_size(s)?),
+        None => None,
+    };
+    let max_size_bytes = match max_size {
+        Some(s) => Some(parse_size(s)?),
+        None => None,
+    };
 
     // Load index
     let load_start = Instant::now();
@@ -159,7 +219,6 @@ pub fn cmd_search(out: &Outputter, opts: &SearchOptions<'_>) -> anyhow::Result<(
     // Resolve path filter to absolute path for prefix matching
     let path_prefix: Option<String> = path_filter.map(|p| {
         let path_str = p.to_string_lossy();
-        // Expand ~ to home directory
         let expanded = if let Some(rest) = path_str.strip_prefix("~/") {
             if let Some(home) = dirs::home_dir() {
                 home.join(rest)
@@ -173,30 +232,24 @@ pub fn cmd_search(out: &Outputter, opts: &SearchOptions<'_>) -> anyhow::Result<(
         } else {
             std::env::current_dir().unwrap_or_default().join(p)
         };
-        // Canonicalize to resolve . and ..
         let canonical = expanded.canonicalize().unwrap_or(expanded);
         let mut prefix = canonical.to_string_lossy().to_string();
-        // Ensure prefix ends with / for proper matching
         if !prefix.ends_with('/') {
             prefix.push('/');
         }
         prefix
     });
 
-    // Check if stdout is piped - use unlimited results for piping to other commands
     let is_piped = !std::io::stdout().is_terminal();
 
-    // Handle -n 0 as unlimited, --count implies unlimited, piped output uses unlimited
     let effective_limit = if limit == 0 || count_only || is_piped {
         usize::MAX
     } else {
         limit
     };
 
-    // When path filter is present, we need to fetch more results before filtering
-    // since the path filter is applied after the search
     let search_limit = if path_prefix.is_some() && effective_limit != usize::MAX {
-        effective_limit.saturating_mul(100).max(10000) // Fetch 100x more, min 10k
+        effective_limit.saturating_mul(100).max(10000)
     } else {
         effective_limit
     };
@@ -204,7 +257,7 @@ pub fn cmd_search(out: &Outputter, opts: &SearchOptions<'_>) -> anyhow::Result<(
     // Build unified search query
     let results = if query_str.is_empty()
         && type_filter.is_none()
-        && extension.is_none()
+        && extensions.is_empty()
         && recent.is_none()
         && path_filter.is_none()
     {
@@ -218,19 +271,34 @@ pub fn cmd_search(out: &Outputter, opts: &SearchOptions<'_>) -> anyhow::Result<(
         } else if path_filter.is_some()
             && query_str.is_empty()
             && type_filter.is_none()
-            && extension.is_none()
+            && extensions.is_empty()
         {
             SearchQuery::all(search_limit)
         } else {
             let mut q = SearchQuery::text(query_str, search_limit).with_type_opt(type_filter);
-            if let Some(ext) = extension {
-                q = q.with_extension(ext);
+            // Handle extensions: single or multi
+            if extensions.len() == 1 {
+                q = q.with_extension(&extensions[0]);
+            } else if extensions.len() > 1 {
+                q = q.with_extensions(extensions.to_vec());
             }
             if files_only {
                 q = q.files_only();
             }
             if dirs_only {
                 q = q.dirs_only();
+            }
+            if exclude_hidden {
+                q = q.exclude_hidden();
+            }
+            if let Some(min) = min_size_bytes {
+                q = q.with_min_size(min);
+            }
+            if let Some(max) = max_size_bytes {
+                q = q.with_max_size(max);
+            }
+            if let Some(s) = sort {
+                q = q.sort(parse_sort(s));
             }
             q
         };
@@ -250,12 +318,31 @@ pub fn cmd_search(out: &Outputter, opts: &SearchOptions<'_>) -> anyhow::Result<(
         results
     };
 
-    // If count_only, just show the count and return
+    // Handle --open / --reveal for the first result
+    if (open || reveal) && !results.is_empty() {
+        let first_path = &results[0].node.path;
+        if reveal {
+            let _ = std::process::Command::new("open")
+                .arg("-R")
+                .arg(first_path)
+                .spawn();
+        } else {
+            let _ = std::process::Command::new("open").arg(first_path).spawn();
+        }
+        if !count_only && !is_piped {
+            out.info(&format!(
+                "{} {}",
+                if reveal { "Revealing" } else { "Opening" },
+                first_path
+            ));
+        }
+    }
+
     if count_only {
         let total_duration = total_start.elapsed();
         let search_duration = search_start.elapsed();
 
-        let display_query = build_display_query(query_str, type_filter, extension, &path_prefix);
+        let display_query = build_display_query(query_str, type_filter, extensions, &path_prefix);
 
         out.header(&format!(
             "Count: {} files matching '{}' (search: {:.2}ms, load: {:.0}ms)",
@@ -270,57 +357,48 @@ pub fn cmd_search(out: &Outputter, opts: &SearchOptions<'_>) -> anyhow::Result<(
     let search_duration = search_start.elapsed();
     let total_duration = total_start.elapsed();
 
-    // Output results
-    let display_query = build_display_query(query_str, type_filter, extension, &path_prefix);
-
-    // is_piped already computed above
+    let display_query = build_display_query(query_str, type_filter, extensions, &path_prefix);
 
     if results.is_empty() {
         if !is_piped {
             out.info(&format!("No results for '{}'", display_query));
         }
+    } else if is_piped {
+        for result in &results {
+            if result.node.is_file() {
+                println!("{}\t{}", result.node.path, result.node.size);
+            }
+        }
     } else {
-        if is_piped {
-            // Pipe-friendly output: path\tsize (one per line, no headers/decorations)
-            // This allows efficient piping to `zero dupes` without filesystem stat calls
-            for result in &results {
-                if result.node.is_file() {
-                    println!("{}\t{}", result.node.path, result.node.size);
-                }
-            }
-        } else {
-            // Human-readable output with headers and formatting
-            out.header(&format!(
-                "Found {} results for '{}' (search: {:.2}ms, load: {:.0}ms, total: {:.1}ms)",
-                results.len(),
-                display_query,
-                search_duration.as_secs_f64() * 1000.0,
-                load_duration.as_secs_f64() * 1000.0,
-                total_duration.as_secs_f64() * 1000.0
+        out.header(&format!(
+            "Found {} results for '{}' (search: {:.2}ms, load: {:.0}ms, total: {:.1}ms)",
+            results.len(),
+            display_query,
+            search_duration.as_secs_f64() * 1000.0,
+            load_duration.as_secs_f64() * 1000.0,
+            total_duration.as_secs_f64() * 1000.0
+        ));
+
+        for result in &results {
+            let type_indicator = if result.node.is_directory() {
+                "📁"
+            } else {
+                "📄"
+            };
+
+            let size_str = if result.node.is_file() {
+                format_size(result.node.size)
+            } else {
+                String::new()
+            };
+
+            out.indented(&format!(
+                "{} {} {}",
+                type_indicator, result.node.path, size_str
             ));
-
-            for result in &results {
-                let type_indicator = if result.node.is_directory() {
-                    "📁"
-                } else {
-                    "📄"
-                };
-
-                let size_str = if result.node.is_file() {
-                    format_size(result.node.size)
-                } else {
-                    String::new()
-                };
-
-                out.indented(&format!(
-                    "{} {} {}",
-                    type_indicator, result.node.path, size_str
-                ));
-            }
         }
     }
 
-    // Show index stats (only for human-readable output)
     if !is_piped {
         out.newline();
         out.info(&format!(
@@ -330,6 +408,8 @@ pub fn cmd_search(out: &Outputter, opts: &SearchOptions<'_>) -> anyhow::Result<(
         ));
     }
 
+    zero::telemetry::record_search(index.file_count() as u64);
+
     Ok(())
 }
 
@@ -337,7 +417,7 @@ pub fn cmd_search(out: &Outputter, opts: &SearchOptions<'_>) -> anyhow::Result<(
 fn build_display_query(
     query_str: &str,
     type_filter: Option<FileTypeCategory>,
-    extension: Option<&str>,
+    extensions: &[String],
     path_prefix: &Option<String>,
 ) -> String {
     let mut parts = Vec::new();
@@ -350,8 +430,8 @@ fn build_display_query(
         parts.push(format!("type:{:?}", t).to_lowercase());
     }
 
-    if let Some(ext) = extension {
-        parts.push(format!("ext:{}", ext));
+    if !extensions.is_empty() {
+        parts.push(format!("ext:{}", extensions.join(",")));
     }
 
     if let Some(prefix) = path_prefix {
@@ -504,6 +584,8 @@ pub fn cmd_search_watch(
     out.newline();
     out.info("Press Ctrl+C to stop watching");
     out.newline();
+
+    zero::telemetry::record_search_watch();
 
     // Track stats for change detection
     let mut last_processed = 0u64;

@@ -2847,8 +2847,6 @@ dependencies = [
 [[package]]
 name = "gpui-component"
 version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d021d46b4088d3d93a57ccdf443da85695a77272108caca2f6fe5369f584966a"
 dependencies = [
  "aho-corasick",
  "anyhow",
@@ -2887,7 +2885,7 @@ dependencies = [
  "tree-sitter-diff",
  "tree-sitter-elixir",
  "tree-sitter-embedded-template",
- "tree-sitter-go",
+ "tree-sitter-go 0.23.4",
  "tree-sitter-graphql",
  "tree-sitter-html",
  "tree-sitter-java",
@@ -2915,8 +2913,6 @@ dependencies = [
 [[package]]
 name = "gpui-component-assets"
 version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "afc6e4c6551a1a12d4e8b69c3e8eba3cef43331c8c87898a0d4d040c78c6865e"
 dependencies = [
  "anyhow",
  "gpui",
@@ -2926,8 +2922,6 @@ dependencies = [
 [[package]]
 name = "gpui-component-macros"
 version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "86fbc2d84bf91717b171320e6adc600d91ccb3ed259448f3b006787633c1c615"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -8056,6 +8050,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tree-sitter-go"
+version = "0.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c8560a4d2f835cc0d4d2c2e03cbd0dde2f6114b43bc491164238d333e28b16ea"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
 name = "tree-sitter-graphql"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10024,7 +10028,7 @@ checksum = "6df3dc4292935e51816d896edcd52aa30bc297907c26167fec31e2b0c6a32524"
 
 [[package]]
 name = "zero"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "blake3",
@@ -10034,6 +10038,7 @@ dependencies = [
  "dirs 6.0.0",
  "etchdb",
  "flate2",
+ "globset",
  "hex",
  "indicatif",
  "jwalk",
@@ -10041,6 +10046,8 @@ dependencies = [
  "memmap2",
  "opendal",
  "postcard",
+ "proc-macro2",
+ "quote",
  "rand 0.9.2",
  "rand_chacha 0.9.0",
  "rayon",
@@ -10048,6 +10055,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "syn 2.0.117",
  "tar",
  "tempfile",
  "thiserror 2.0.18",
@@ -10056,7 +10064,10 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "trash",
+ "tree-sitter",
+ "tree-sitter-go 0.25.0",
  "ureq",
+ "walkdir",
  "xxhash-rust",
  "zero-watcher",
  "zstd",
@@ -10064,7 +10075,7 @@ dependencies = [
 
 [[package]]
 name = "zero-cli"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -10082,7 +10093,7 @@ dependencies = [
 
 [[package]]
 name = "zero-llm"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "dirs 6.0.0",
@@ -10102,7 +10113,7 @@ dependencies = [
 
 [[package]]
 name = "zero-mcp"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -10121,7 +10132,7 @@ dependencies = [
 
 [[package]]
 name = "zero-ui"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "alacritty_terminal",
  "anyhow",
@@ -10149,7 +10160,7 @@ dependencies = [
 
 [[package]]
 name = "zero-watcher"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "chrono",

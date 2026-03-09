@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "snake_case")]
 pub enum FileColumn {
     Name,
+    Location,
     DateModified,
     Size,
     Kind,
@@ -20,6 +21,7 @@ impl FileColumn {
     pub fn label(&self) -> &'static str {
         match self {
             Self::Name => "Name",
+            Self::Location => "Location",
             Self::DateModified => "Date Modified",
             Self::Size => "Size",
             Self::Kind => "Kind",
@@ -32,6 +34,7 @@ impl FileColumn {
     pub fn default_width(&self) -> Pixels {
         match self {
             Self::Name => px(260.0),
+            Self::Location => px(200.0),
             Self::DateModified => px(140.0),
             Self::Size => px(80.0),
             Self::Kind => px(100.0),
@@ -49,7 +52,7 @@ impl FileColumn {
     pub fn sortable(&self) -> bool {
         matches!(
             self,
-            Self::Name | Self::DateModified | Self::Size | Self::Kind
+            Self::Name | Self::Location | Self::DateModified | Self::Size | Self::Kind
         )
     }
 

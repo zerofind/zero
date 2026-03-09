@@ -1,6 +1,6 @@
 use tokio_util::sync::CancellationToken;
 
-use zero::prelude::IndexManager;
+use zero::prelude::{CodeIndex, IndexManager};
 
 use crate::auth;
 use crate::http;
@@ -26,7 +26,7 @@ pub struct McpHandle {
 }
 
 /// Start the MCP HTTP server on a dedicated thread with its own tokio runtime.
-pub fn start_server(config: McpConfig, manager: IndexManager) -> McpHandle {
+pub fn start_server(config: McpConfig, manager: IndexManager, code: CodeIndex) -> McpHandle {
     let cancel = CancellationToken::new();
     let cancel_clone = cancel.clone();
     let port = config.port;
@@ -41,7 +41,8 @@ pub fn start_server(config: McpConfig, manager: IndexManager) -> McpHandle {
                 .expect("failed to create MCP tokio runtime");
 
             rt.block_on(async move {
-                let router = http::build_router(manager, config.api_key, cancel_clone.clone());
+                let router =
+                    http::build_router(manager, code, config.api_key, cancel_clone.clone());
 
                 let addr = std::net::SocketAddr::from(([127, 0, 0, 1], config.port));
                 let listener = match tokio::net::TcpListener::bind(addr).await {

@@ -1,6 +1,5 @@
 use gpui::*;
 use gpui_component::{
-    IconName,
     menu::{PopupMenu, PopupMenuItem},
     table::TableState,
 };
@@ -31,66 +30,43 @@ pub fn build_context_menu(
     let mut m = menu;
 
     // Primary action
-    m = m
-        .action_row("Open", IconName::FolderOpen, Box::new(OpenSelected))
-        .separator();
+    m = m.action_row("Open", Box::new(OpenSelected));
 
     // New → submenu
     let new_sub = PopupMenu::build(window, cx, |menu, _w, _cx| {
-        menu.action_row("New Folder", IconName::Folder, Box::new(NewFolder))
-            .action_row("New Todo", IconName::File, Box::new(NewTodoFile))
+        menu.action_row("New Folder", Box::new(NewFolder))
+            .action_row("New Todo", Box::new(NewTodoFile))
     });
-    m = m
-        .item(PopupMenuItem::submenu("New", new_sub).icon(IconName::Plus))
-        .separator();
+    m = m.item(PopupMenuItem::submenu("New", new_sub)).separator();
 
-    // Clipboard — copy actions, then move actions
+    // Clipboard
     m = m
-        .action_row("Copy", IconName::Copy, Box::new(CopyFiles))
-        .action_row("Copy Path", IconName::Copy, Box::new(CopyPath))
-        .action_row("Cut", IconName::Minus, Box::new(CutFiles))
-        .action_row("Paste", IconName::Plus, Box::new(PasteFiles))
+        .action_row("Cut", Box::new(CutFiles))
+        .action_row("Copy", Box::new(CopyFiles))
+        .action_row("Copy Path", Box::new(CopyPath))
+        .action_row("Paste", Box::new(PasteFiles))
         .separator();
 
     // Edit
-    m = m.action_row("Rename", IconName::Replace, Box::new(Rename));
+    m = m.action_row("Rename", Box::new(Rename));
 
-    // Pane submenu (split view only)
+    // Pane actions (split view only)
     if split_active {
-        m = m.separator();
-        let pane_sub = PopupMenu::build(window, cx, |menu, _w, _cx| {
-            menu.action_row(
-                "Move to Other Pane",
-                IconName::ArrowRight,
-                Box::new(MoveToOtherPane),
-            )
-            .action_row(
-                "Copy to Other Pane",
-                IconName::Copy,
-                Box::new(CopyToOtherPane),
-            )
-        });
-        m = m.item(PopupMenuItem::submenu("Pane", pane_sub).icon(IconName::PanelRight));
+        m = m
+            .action_row("Move to Other Pane", Box::new(MoveToOtherPane))
+            .action_row("Copy to Other Pane", Box::new(CopyToOtherPane));
     }
 
-    // Actions submenu (dirs only)
+    // Directory actions
     if is_dir {
         m = m.separator();
-        let actions_sub = PopupMenu::build(window, cx, |menu, _w, _cx| {
-            menu.action_row("Add to Bookmarks", IconName::Star, Box::new(AddToBookmarks))
-                .action_row(
-                    "Find Duplicates",
-                    IconName::Search,
-                    Box::new(FindDuplicatesHere),
-                )
-        });
-        m = m.item(PopupMenuItem::submenu("Actions", actions_sub).icon(IconName::Settings));
+        m = m
+            .action_row("Add to Bookmarks", Box::new(AddToBookmarks))
+            .action_row("Find Duplicates", Box::new(FindDuplicatesHere));
     }
 
     // Destructive — always last
-    m = m
-        .separator()
-        .action_row("Trash", IconName::Delete, Box::new(MoveToTrash));
+    m = m.separator().action_row("Trash", Box::new(MoveToTrash));
 
     m
 }

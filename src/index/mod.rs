@@ -68,6 +68,7 @@ pub(crate) mod arena;
 mod manager;
 mod node;
 pub mod persistence;
+pub(crate) mod scoring;
 mod search;
 pub mod type_index;
 mod watcher;
@@ -85,5 +86,7 @@ pub use watcher::{IndexWatcher, WatcherConfig, WatcherError, WatcherStats};
 mod arena_test;
 #[cfg(test)]
 mod persistence_test;
+#[cfg(test)]
+mod scoring_test;
 #[cfg(test)]
 mod tests;

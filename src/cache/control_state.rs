@@ -26,6 +26,7 @@ const AUTOMATIONS: u8 = 1;
 const RUNS: u8 = 2;
 const INDEXED_ROOTS: u8 = 3;
 const ERASE_JOBS: u8 = 4;
+const FILE_USAGE: u8 = 5;
 
 // ==================== IndexedRoot ====================
 
@@ -104,6 +105,8 @@ pub struct ControlState {
     pub runs: BTreeMap<i64, Run>,
     pub indexed_roots: BTreeMap<String, IndexedRoot>,
     pub erase_jobs: BTreeMap<i64, EraseJob>,
+    #[serde(default)]
+    pub usage_store: super::usage::UsageStore,
 
     next_storage_id: i64,
     next_automation_id: i64,
@@ -590,6 +593,18 @@ impl ControlState {
             .filter(|j| j.progress.completed_stages.len() < j.settings.total_passes)
             .collect()
     }
+
+    // ==================== Usage Store Operations ====================
+
+    /// Record a file open event for frequency tracking
+    pub fn record_file_open(&mut self, path: &str, now: u64) {
+        self.usage_store.record_open(path, now);
+    }
+
+    /// Get frequency bonus for a file path (0–150)
+    pub fn frequency_bonus(&self, path: &str, now: u64) -> u32 {
+        self.usage_store.frequency_bonus(path, now)
+    }
 }
 
 // ==================== Etch Integration ====================
@@ -676,6 +691,16 @@ impl Replayable for ControlState {
                             self.next_erase_job_id = id;
                         }
                     }
+                    FILE_USAGE => {
+                        let store: super::usage::UsageStore =
+                            postcard::from_bytes(value).map_err(|e| {
+                                etchdb::Error::WalCorrupted {
+                                    offset: 0,
+                                    reason: format!("bad usage: {e}"),
+                                }
+                            })?;
+                        self.usage_store = store;
+                    }
                     _ => {}
                 },
                 Op::Delete { collection, key } => match *collection {
@@ -698,6 +723,9 @@ impl Replayable for ControlState {
                     ERASE_JOBS => {
                         let id = i64_from_bytes(key)?;
                         self.erase_jobs.remove(&id);
+                    }
+                    FILE_USAGE => {
+                        self.usage_store = super::usage::UsageStore::new();
                     }
                     _ => {}
                 },
@@ -806,6 +834,16 @@ impl<'a> ControlTx<'a> {
         self.overlay.ops.push(Op::Delete {
             collection: ERASE_JOBS,
             key: id.to_bytes(),
+        });
+    }
+
+    /// Put usage store (entire store as single key)
+    pub fn put_usage_store(&mut self, store: &super::usage::UsageStore) {
+        let value = postcard::to_allocvec(store).expect("UsageStore serialization");
+        self.overlay.ops.push(Op::Put {
+            collection: FILE_USAGE,
+            key: b"usage".to_vec(),
+            value,
         });
     }
 }

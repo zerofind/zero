@@ -7,8 +7,25 @@ use crate::theme::{
 };
 use crate::ui::format_number;
 
-use super::items::{DEFAULT_ACTIONS, PaletteItem};
+use super::items::{PaletteAction, PaletteItem};
 use super::view::{PaletteEvent, PaletteMode, PaletteView};
+
+/// Resolve an icon color for a palette action based on its type path,
+/// matching the colours already used by `FileIcon` in the file browser.
+fn action_icon_color(action: &PaletteAction, cx: &App) -> Hsla {
+    let t = cx.theme();
+    match action.path {
+        "type://images" => t.magenta,
+        "type://videos" => t.red,
+        "type://audio" => t.green,
+        "type://documents" => t.muted_foreground,
+        "type://archives" => t.yellow,
+        "type://directories" => t.blue,
+        "type://code" | "type://rust" | "type://swift" | "type://typescript"
+        | "type://javascript" | "type://python" | "type://go" => t.yellow,
+        _ => t.muted_foreground,
+    }
+}
 
 impl Render for PaletteView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -234,7 +251,7 @@ impl PaletteView {
                             false,
                         )
                         .category("Application")
-                        .action_label("Launch \u{21b5}")
+                        .action_label("Run")
                         .selected(selected),
                     )
             })
@@ -296,7 +313,7 @@ impl PaletteView {
                             None,
                             true,
                         )
-                        .action_label("Open \u{21b5}")
+                        .action_label("Run")
                         .selected(selected),
                     ),
             ]
@@ -329,7 +346,7 @@ impl PaletteView {
                             false,
                         )
                         .category("Application")
-                        .action_label("Launch \u{21b5}")
+                        .action_label("Run")
                         .selected(selected),
                     )
             })
@@ -363,7 +380,7 @@ impl PaletteView {
                             true,
                         )
                         .category("Bookmark")
-                        .action_label("Open \u{21b5}")
+                        .action_label("Run")
                         .selected(selected),
                     )
             })
@@ -397,7 +414,7 @@ impl PaletteView {
                         } else {
                             "Storage"
                         })
-                        .action_label("Open \u{21b5}")
+                        .action_label("Run")
                         .selected(selected),
                     )
             })
@@ -417,8 +434,7 @@ impl PaletteView {
             .map(|(fi, &(_, action))| {
                 let item_idx = idx_offset + fi;
                 let selected = self.selected_idx == item_idx;
-                let is_type_search = action.path.starts_with("type://") || action.path == "apps://";
-                let label = Self::action_label_for_action(action);
+                let icon_color = action_icon_color(action, cx);
                 h_flex()
                     .id(SharedString::from(format!("faction-{fi}")))
                     .w_full()
@@ -436,7 +452,7 @@ impl PaletteView {
                     .child(
                         Icon::new((action.icon)())
                             .with_size(ICON_XS)
-                            .text_color(muted),
+                            .text_color(icon_color),
                     )
                     .child(div().flex_1().text_size(FONT_SIZE_BODY).child(action.name))
                     .child(
@@ -444,19 +460,7 @@ impl PaletteView {
                             .flex_shrink_0()
                             .gap_2()
                             .items_center()
-                            .child(
-                                div()
-                                    .text_size(FONT_SIZE_CAPTION)
-                                    .text_color(muted)
-                                    .child(action.category),
-                            )
-                            .when(selected, |el| {
-                                el.child(Self::action_pill(
-                                    if is_type_search { "Search >" } else { label },
-                                    muted,
-                                    cx,
-                                ))
-                            }),
+                            .when(selected, |el| el.child(Self::action_pill("Run", muted, cx))),
                     )
             })
             .collect();
@@ -601,7 +605,7 @@ impl PaletteView {
                             true,
                         )
                         .category("Bookmark")
-                        .action_label("Open \u{21b5}")
+                        .action_label("Run")
                         .selected(selected),
                     )
             })
@@ -634,20 +638,20 @@ impl PaletteView {
                         } else {
                             "Storage"
                         })
-                        .action_label("Open \u{21b5}")
+                        .action_label("Run")
                         .selected(selected),
                     )
             })
             .collect();
 
-        let action_rows: Vec<_> = DEFAULT_ACTIONS
+        let visible = Self::visible_default_actions();
+        let action_rows: Vec<_> = visible
             .iter()
             .enumerate()
             .map(|(ai, action)| {
                 let item_idx = bookmark_count + storage_count + ai;
                 let selected = self.selected_idx == item_idx;
-                let is_type_search = action.path.starts_with("type://") || action.path == "apps://";
-                let label = Self::action_label_for_action(action);
+                let icon_color = action_icon_color(action, cx);
 
                 h_flex()
                     .id(SharedString::from(format!("action-{ai}")))
@@ -666,7 +670,7 @@ impl PaletteView {
                     .child(
                         Icon::new((action.icon)())
                             .with_size(ICON_XS)
-                            .text_color(muted),
+                            .text_color(icon_color),
                     )
                     .child(div().flex_1().text_size(FONT_SIZE_BODY).child(action.name))
                     .child(
@@ -674,12 +678,6 @@ impl PaletteView {
                             .flex_shrink_0()
                             .gap_2()
                             .items_center()
-                            .child(
-                                div()
-                                    .text_size(FONT_SIZE_CAPTION)
-                                    .text_color(muted)
-                                    .child(action.category),
-                            )
                             .when_some(action.shortcut, |el, sc| {
                                 el.child(
                                     div()
@@ -692,13 +690,7 @@ impl PaletteView {
                                         .child(sc),
                                 )
                             })
-                            .when(selected, |el| {
-                                el.child(Self::action_pill(
-                                    if is_type_search { "Search >" } else { label },
-                                    muted,
-                                    cx,
-                                ))
-                            }),
+                            .when(selected, |el| el.child(Self::action_pill("Run", muted, cx))),
                     )
             })
             .collect();

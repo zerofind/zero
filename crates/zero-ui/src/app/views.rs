@@ -31,15 +31,29 @@ impl ZeroApp {
         }
 
         let settings = crate::session::Settings::load();
-        let pinned = settings.sidebar_bookmarks;
-        let regular = settings.sidebar_regular_bookmarks;
+        let ws = settings.active_ws();
+        let pinned = ws.pinned_bookmarks.clone();
+        let regular = ws.regular_bookmarks.clone();
+        let workspace_names: Vec<String> =
+            settings.workspaces.iter().map(|w| w.name.clone()).collect();
+        let active_ws_idx = settings.active_workspace;
         let active = self.active_view.clone();
         let path = self.current_path.clone();
         let toolbar_visible = self.toolbar_visible;
         let can_back = self.can_go_back();
         let can_forward = self.can_go_forward();
+        let git = self.services.git.clone();
         let view = cx.new(|cx| {
-            let mut sidebar = AppSidebar::new(active, path, pinned, regular, cx);
+            let mut sidebar = AppSidebar::new(
+                active,
+                path,
+                pinned.clone(),
+                regular.clone(),
+                workspace_names,
+                active_ws_idx,
+                git,
+                cx,
+            );
             sidebar.set_toolbar_state(toolbar_visible, can_back, can_forward, cx);
             sidebar
         });
@@ -47,6 +61,16 @@ impl ZeroApp {
         let sub = cx.subscribe_in(&view, window, Self::on_sidebar_event);
         self._subs.push(sub);
         self.sidebar = Some(view.clone());
+
+        // Initial git status check for all bookmarks.
+        let mut all_paths = pinned;
+        all_paths.extend(regular);
+        if !all_paths.is_empty() {
+            self.services.git.update(cx, |svc, cx| {
+                svc.refresh(all_paths, cx);
+            });
+        }
+
         view
     }
 

@@ -271,6 +271,15 @@ fn cmd_sync_local(
         }
     }
 
+    // Record telemetry
+    zero::telemetry::record_sync(
+        result.files_transferred as u64,
+        result.bytes_transferred,
+        delete_orphans,
+        use_checksum,
+        None, // local sync
+    );
+
     if has_errors {
         anyhow::bail!("Sync completed with {} errors", result.errors);
     }
@@ -371,6 +380,20 @@ fn cmd_sync_storage(
                 out.kv("Files unchanged", stats.files_unchanged);
             }
             out.kv("Duration", format_duration(duration));
+
+            // Record telemetry (extract scheme from cloud URLs)
+            let backend = [source, dest]
+                .iter()
+                .find_map(|u| u.split_once("://").map(|(s, _)| s))
+                .filter(|s| *s != "file");
+            zero::telemetry::record_sync(
+                stats.files_copied as u64,
+                stats.bytes_copied,
+                delete_orphans,
+                _use_checksum,
+                backend,
+            );
+
             Ok(())
         }
         Err(e) => {

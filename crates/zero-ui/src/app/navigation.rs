@@ -25,13 +25,18 @@ impl ZeroApp {
     }
 
     /// Sync UI state from the current stack entry.
-    fn apply_current_view(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn apply_current_view(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let view = self.nav_stack[self.nav_idx].clone();
         self.active_view = view.clone();
 
         match &view {
             ActiveView::FileBrowser(path) => {
                 self.current_path = path.clone();
+                // Persist last_path to active workspace
+                let mut settings = crate::session::Settings::load();
+                settings.active_ws_mut().last_path = Some(path.clone());
+                settings.save();
+
                 if let Some(browser) = &self.file_browser {
                     let p = path.clone();
                     browser.update(cx, |v, cx| v.navigate(p, cx));

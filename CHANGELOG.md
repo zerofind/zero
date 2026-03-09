@@ -1,5 +1,38 @@
 # Changelog
 
+## v0.7.0
+
+New:
+- code: structural code search — find functions, types, traits by name across all your projects (Rust and Go)
+- code: project overview — languages, file count, LOC, module structure, key public types at a glance
+- ai: AI can search code structure across projects, not just file names
+- ai: see the assistant's reasoning process in real-time (thinking mode)
+- ai: markdown rendering with syntax highlighting, copy button, and tool call cards in chat
+- app: multiple workspaces with Cmd+1-9 switching, each with independent bookmarks and navigation
+- app: git status badges on sidebar bookmarks showing modified/added/untracked counts
+- app: search results show a Location column so you can see where each file lives
+- app: toolbar shows the search query instead of folder name when viewing search results
+- search: smarter ranking — recent, frequently opened, and shallow-path files surface first
+- search: sort results by size or name in addition to relevance and recency
+- search: filter by size range with --min-size and --max-size (human-readable units like 1MB, 500KB)
+- search: filter by multiple extensions at once (--ext pdf,txt,doc)
+- search: exclude hidden files and directories with --exclude-hidden
+- search: open first result or reveal in Finder directly from CLI (--open, --reveal)
+- ai: configurable thinking budget to control how much reasoning the assistant uses
+- ai: latest models — Claude Sonnet 4.6, Opus 4.6, Haiku 4.5, GPT-5, GPT-5 Mini, GPT-5 Nano
+- cli: zero code index/search/overview/list/remove/symbols commands
+- cli: zero telemetry show/on/off/reset-id commands
+- privacy: opt-in anonymous usage stats with 7-day reporting and 24-hour grace period
+
+Fix:
+- app: bookmarks now persist per workspace instead of globally
+- cli: improved search output formatting
+
+## v0.6.1
+
+- llm-kit: vendored llm-kit crates into crates/llm-kit, removing external path dependency on tell-rs
+- build: removed gpui-component patch.crates-io override, using published 0.5.1 directly
+
 ## v0.6.0
 
 New:

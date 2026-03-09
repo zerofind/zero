@@ -122,12 +122,16 @@ impl FileBrowserView {
                 // Don't overwrite entries if a search/type view was applied
                 // before the background directory load finished.
                 if view.display_mode.is_none() {
+                    let has_git = git_info.is_some();
                     view.table_state.update(cx, |state, cx| {
                         let delegate = state.delegate_mut();
                         delegate.entries = entries;
                         delegate.git_info = git_info;
                         cx.notify();
                     });
+                    if has_git {
+                        cx.emit(super::actions::FileBrowserEvent::GitStateChanged);
+                    }
                 }
                 cx.notify();
             })
@@ -141,6 +145,14 @@ impl FileBrowserView {
     #[allow(dead_code)]
     pub fn path(&self) -> &PathBuf {
         &self.path
+    }
+
+    /// Returns the search query if currently showing global search results.
+    pub fn search_results_query(&self) -> Option<&str> {
+        match &self.display_mode {
+            Some(DisplayMode::SearchResults { query }) => Some(query),
+            _ => None,
+        }
     }
 
     fn render_summary_bar(&self, cx: &mut Context<Self>) -> StatusBar {

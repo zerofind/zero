@@ -41,7 +41,7 @@ fn resolve_api_key(env_var: &'static str, config_key: Option<&str>) -> Result<St
 }
 
 fn build_anthropic(config: &LlmConfig) -> Result<Arc<dyn LanguageModel>, LlmError> {
-    let api_key = resolve_api_key("ANTHROPIC_API_KEY", config.api_key.as_deref())?;
+    let api_key = resolve_api_key("ANTHROPIC_API_KEY", config.anthropic_api_key.as_deref())?;
 
     info!(provider = "anthropic", model = %config.model, "Building model");
 
@@ -53,7 +53,7 @@ fn build_anthropic(config: &LlmConfig) -> Result<Arc<dyn LanguageModel>, LlmErro
 }
 
 fn build_openai_compatible(config: &LlmConfig) -> Result<Arc<dyn LanguageModel>, LlmError> {
-    let api_key = resolve_api_key("OPENAI_API_KEY", config.api_key.as_deref())?;
+    let api_key = resolve_api_key("OPENAI_API_KEY", config.openai_api_key.as_deref())?;
 
     let base_url = config
         .base_url

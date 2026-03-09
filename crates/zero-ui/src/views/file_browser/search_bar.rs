@@ -43,6 +43,21 @@ impl FileBrowserView {
             let delegate = state.delegate_mut();
             delegate.entries = entries;
             delegate.selected.clear();
+            // Auto-insert Location column after Name for search results
+            if !delegate
+                .visible_columns
+                .contains(&super::columns::FileColumn::Location)
+            {
+                let insert_at = delegate
+                    .visible_columns
+                    .iter()
+                    .position(|c| *c != super::columns::FileColumn::Name)
+                    .unwrap_or(1);
+                delegate
+                    .visible_columns
+                    .insert(insert_at, super::columns::FileColumn::Location);
+                delegate.rebuild_columns();
+            }
             cx.notify();
         });
 
@@ -94,6 +109,15 @@ impl FileBrowserView {
                 });
             }
             Some(DisplayMode::SearchResults { .. }) => {
+                // Remove auto-inserted Location column
+                self.table_state.update(cx, |state, cx| {
+                    let delegate = state.delegate_mut();
+                    delegate
+                        .visible_columns
+                        .retain(|c| *c != super::columns::FileColumn::Location);
+                    delegate.rebuild_columns();
+                    cx.notify();
+                });
                 // Reload directory to restore normal view
                 self.reload(cx);
             }

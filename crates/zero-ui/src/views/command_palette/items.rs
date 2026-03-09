@@ -14,8 +14,10 @@ pub(super) struct PaletteAction {
     pub name: &'static str,
     pub icon: fn() -> IconName,
     pub path: &'static str,
-    pub category: &'static str,
     pub shortcut: Option<&'static str>,
+    /// Whether this action appears in the empty-state default view.
+    /// Actions with `false` are still searchable when the user types.
+    pub default_visible: bool,
 }
 
 pub(super) const DEFAULT_ACTIONS: &[PaletteAction] = &[
@@ -24,161 +26,161 @@ pub(super) const DEFAULT_ACTIONS: &[PaletteAction] = &[
         name: "Applications",
         icon: || IconName::LayoutDashboard,
         path: "apps://",
-        category: "Search",
         shortcut: None,
+        default_visible: true,
     },
     PaletteAction {
         name: "Todos",
         icon: || IconName::Check,
         path: "action://todo",
-        category: "View",
         shortcut: None,
+        default_visible: true,
     },
-    // Media
+    // Media — use File icon; color comes from the render layer
     PaletteAction {
         name: "Images",
-        icon: || IconName::Eye,
+        icon: || IconName::File,
         path: "type://images",
-        category: "Search",
         shortcut: None,
+        default_visible: true,
     },
     PaletteAction {
         name: "Videos",
-        icon: || IconName::Eye,
+        icon: || IconName::File,
         path: "type://videos",
-        category: "Search",
         shortcut: None,
+        default_visible: true,
     },
     PaletteAction {
         name: "Audio",
-        icon: || IconName::Search,
+        icon: || IconName::File,
         path: "type://audio",
-        category: "Search",
         shortcut: None,
+        default_visible: true,
     },
     // Files
     PaletteAction {
         name: "Documents",
         icon: || IconName::File,
         path: "type://documents",
-        category: "Search",
         shortcut: None,
+        default_visible: true,
     },
     PaletteAction {
         name: "Archives",
         icon: || IconName::File,
         path: "type://archives",
-        category: "Search",
         shortcut: None,
+        default_visible: true,
     },
     PaletteAction {
         name: "Folders",
         icon: || IconName::Folder,
         path: "type://directories",
-        category: "Search",
         shortcut: None,
+        default_visible: true,
     },
-    // Code languages
+    // Code — parent category visible; individual languages searchable only
     PaletteAction {
         name: "Code",
-        icon: || IconName::Search,
+        icon: || IconName::File,
         path: "type://code",
-        category: "Search",
         shortcut: None,
+        default_visible: true,
     },
     PaletteAction {
         name: "Rust",
-        icon: || IconName::Search,
+        icon: || IconName::File,
         path: "type://rust",
-        category: "Search",
         shortcut: None,
+        default_visible: false,
     },
     PaletteAction {
         name: "Swift",
-        icon: || IconName::Search,
+        icon: || IconName::File,
         path: "type://swift",
-        category: "Search",
         shortcut: None,
+        default_visible: false,
     },
     PaletteAction {
         name: "TypeScript",
-        icon: || IconName::Search,
+        icon: || IconName::File,
         path: "type://typescript",
-        category: "Search",
         shortcut: None,
+        default_visible: false,
     },
     PaletteAction {
         name: "JavaScript",
-        icon: || IconName::Search,
+        icon: || IconName::File,
         path: "type://javascript",
-        category: "Search",
         shortcut: None,
+        default_visible: false,
     },
     PaletteAction {
         name: "Python",
-        icon: || IconName::Search,
+        icon: || IconName::File,
         path: "type://python",
-        category: "Search",
         shortcut: None,
+        default_visible: false,
     },
     PaletteAction {
         name: "Go",
-        icon: || IconName::Search,
+        icon: || IconName::File,
         path: "type://go",
-        category: "Search",
         shortcut: None,
+        default_visible: false,
     },
-    // -- Tools -----------------------------------------------------------
+    // -- Tools (accessible via sidebar; searchable but not in defaults) --
     PaletteAction {
         name: "Find Duplicates",
         icon: || IconName::File,
         path: "action://dedup",
-        category: "View",
         shortcut: None,
+        default_visible: false,
     },
     PaletteAction {
         name: "Cleanup",
         icon: || IconName::Delete,
         path: "action://cleanup",
-        category: "View",
         shortcut: None,
+        default_visible: false,
     },
     // -- View ------------------------------------------------------------
     PaletteAction {
         name: "Toggle Split View",
         icon: || IconName::LayoutDashboard,
         path: "action://toggle_split_view",
-        category: "View",
         shortcut: Some("\u{2318}T"),
+        default_visible: true,
     },
     PaletteAction {
         name: "Toggle Sidebar",
         icon: || IconName::PanelLeft,
         path: "action://toggle_sidebar",
-        category: "View",
         shortcut: Some("\u{2318}B"),
+        default_visible: true,
     },
     PaletteAction {
         name: "New Folder",
         icon: || IconName::Folder,
         path: "action://new_folder",
-        category: "Files",
         shortcut: Some("\u{21e7}\u{2318}N"),
+        default_visible: true,
     },
     // -- Settings --------------------------------------------------------
     PaletteAction {
         name: "Settings",
         icon: || IconName::Settings,
         path: "action://settings",
-        category: "View",
         shortcut: Some("\u{2318},"),
+        default_visible: true,
     },
     PaletteAction {
         name: "Automations",
         icon: || IconName::Settings,
         path: "action://automations",
-        category: "View",
         shortcut: None,
+        default_visible: true,
     },
 ];
 
@@ -361,7 +363,7 @@ impl RenderOnce for PaletteItem {
                                 .bg(cx.theme().muted)
                                 .text_size(FONT_SIZE_CAPTION)
                                 .text_color(muted)
-                                .child("Search >"),
+                                .child("Run"),
                         )
                     })
                     .when(
