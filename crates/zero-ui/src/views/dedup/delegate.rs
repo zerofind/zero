@@ -190,9 +190,9 @@ impl DedupDelegate {
     }
 
     pub fn reveal_item(&self, row_ix: usize) {
-        if let Some(DedupRow::File { path, .. }) = self.rows.get(row_ix) {
+        if let Some(DedupRow::File { path: _path, .. }) = self.rows.get(row_ix) {
             #[cfg(target_os = "macos")]
-            crate::platform::open::reveal_in_finder(path);
+            crate::platform::open::reveal_in_finder(_path);
         }
     }
 }

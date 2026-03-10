@@ -685,6 +685,7 @@ impl SearchService {
     }
 
     /// Start a background USB watcher that refreshes the storage cache on mount/unmount.
+    #[cfg(target_os = "macos")]
     fn start_usb_watcher(&mut self, cx: &mut Context<Self>) {
         if self.usb_watcher_active {
             return;
@@ -741,5 +742,10 @@ impl SearchService {
             }
         })
         .detach();
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    fn start_usb_watcher(&mut self, _cx: &mut Context<Self>) {
+        // USB watcher is macOS-only (DiskArbitration framework)
     }
 }

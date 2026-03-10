@@ -703,13 +703,13 @@ impl Render for ZeroApp {
                         if let Some(window) = cx.active_window() {
                             window
                                 .update(cx, |_, window, cx| {
-                                    let _ = window.prompt(
+                                    drop(window.prompt(
                                         level,
                                         &msg,
                                         detail.as_deref(),
                                         &["OK"],
                                         cx,
-                                    );
+                                    ));
                                 })
                                 .ok();
                         }

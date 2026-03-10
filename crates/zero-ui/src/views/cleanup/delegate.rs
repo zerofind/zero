@@ -137,19 +137,19 @@ impl CleanupDetailDelegate {
 
     pub fn open_focused(&self) {
         let Some(idx) = self.anchor else { return };
-        let Some(row) = self.rows.get(idx) else {
+        let Some(_row) = self.rows.get(idx) else {
             return;
         };
         #[cfg(target_os = "macos")]
-        crate::platform::open::open_path(&row.path);
+        crate::platform::open::open_path(&_row.path);
     }
 
     pub fn reveal_item(&self, idx: usize) {
-        let Some(row) = self.rows.get(idx) else {
+        let Some(_row) = self.rows.get(idx) else {
             return;
         };
         #[cfg(target_os = "macos")]
-        crate::platform::open::reveal_in_finder(&row.path);
+        crate::platform::open::reveal_in_finder(&_row.path);
     }
 
     /// Remove rows whose paths are in `deleted`, returning bytes removed.

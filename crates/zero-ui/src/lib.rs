@@ -18,13 +18,14 @@ use gpui_component::Root;
 
 use actions::{
     ClearTerminal, CloseWindow, CopyFiles, CopyPath, CutFiles, DuplicateFiles, FindInBrowser,
-    GoBack, GoDesktop, GoDocuments, GoDownloads, GoForward, GoHome, GoUp, Hide, HideOthers,
-    MoveToTrash, NewFolder, OpenCommandPalette, OpenSelected, OpenSettings, PasteFiles, QuickLook,
-    Quit, Refresh, Rename, SelectAll, ShowAll, SwitchWorkspace1, SwitchWorkspace2,
-    SwitchWorkspace3, SwitchWorkspace4, SwitchWorkspace5, SwitchWorkspace6, SwitchWorkspace7,
-    SwitchWorkspace8, SwitchWorkspace9, ToggleAsk, ToggleSidebar, ToggleSplitView, ToggleTerminal,
-    ToggleToolbar, ToggleViewMode,
+    GoBack, GoForward, GoUp, MoveToTrash, NewFolder, OpenCommandPalette, OpenSelected,
+    OpenSettings, PasteFiles, QuickLook, Quit, Refresh, Rename, SelectAll, SwitchWorkspace1,
+    SwitchWorkspace2, SwitchWorkspace3, SwitchWorkspace4, SwitchWorkspace5, SwitchWorkspace6,
+    SwitchWorkspace7, SwitchWorkspace8, SwitchWorkspace9, ToggleAsk, ToggleSidebar,
+    ToggleSplitView, ToggleTerminal, ToggleToolbar, ToggleViewMode,
 };
+#[cfg(target_os = "macos")]
+use actions::{GoDesktop, GoDocuments, GoDownloads, GoHome, Hide, HideOthers, ShowAll};
 use app::ZeroApp;
 
 /// Launch the GPUI-based file manager window.

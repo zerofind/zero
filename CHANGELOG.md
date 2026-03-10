@@ -26,6 +26,8 @@ New:
 
 Fix:
 - app: bookmarks now persist per workspace instead of globally
+- app: cross-platform compilation — UI builds on Linux and Windows, not just macOS
+- app: cleanup and dedup views work correctly on non-macOS platforms
 - cli: improved search output formatting
 
 ## v0.6.1
