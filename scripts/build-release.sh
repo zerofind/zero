@@ -53,8 +53,8 @@ package_artifact() {
     cp LICENSE README.md "${DIST_DIR}/${artifact_name}/" 2>/dev/null || true
 
     # Include macOS app icon for bundle creation during install
-    if [[ "$os_arch" == macos-* ]] && [ -f "resources/AppIcon.icns" ]; then
-        cp "resources/AppIcon.icns" "${DIST_DIR}/${artifact_name}/"
+    if [[ "$os_arch" == macos-* ]] && [ -f "assets/AppIcon.icns" ]; then
+        cp "assets/AppIcon.icns" "${DIST_DIR}/${artifact_name}/"
     fi
 
     cd "${DIST_DIR}"

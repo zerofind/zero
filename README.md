@@ -1,48 +1,70 @@
 # Zero
 
-> **Privacy-first Finder & Spotlight replacement. What Apple should have built.**
+The file manager your Mac is missing. Files, search, AI, code intelligence, cloud transfer, sync, cleanup, and automation. Made in Rust. [alpha]
 
-Spotlight sends your searches to Apple, indexes your drives without asking, and often can't find what you're looking for. Finder copy fails? Start over. No resume. No way to see what happened. No verification it worked.
+![Zero](assets/screenshot.png)
 
-**Zero is different.** Fast search that stays on your machine. Copies that survive disconnect. Verification that proves it worked. Open source core you can audit.
 
-![Zero Demo](assets/demo.gif)
+## Your native apps are spying on you
 
-## Download
+**Spotlight** — you search for a file on your own computer, and that query gets sent to Apple, Microsoft Bing, and unnamed third parties. Along with your location, the apps you use, your interests, and what you click. Enabled by default since 2014.
 
-**[Download Zero for macOS →](https://zero.app/download)**
+**Siri** — recordings sent to Apple servers, including accidental activations. A whistleblower revealed contractors listened to intimate conversations, medical details, and business calls. Apple admitted it. Paid $95M to settle the lawsuit in January 2025.
 
-Or install the CLI:
+**iCloud** — in February 2025, the UK government secretly ordered Apple to backdoor iCloud under the Investigatory Powers Act. Apple complied by removing end-to-end encryption for all UK users. UK intelligence now has full access to every UK citizen's iCloud data — photos, documents, backups, everything.
+
+Your native apps are broken too. Spotlight can't find your own files. Finder copy fails? Start over — no resume, no verification, no idea if your backup is complete or corrupted. No git status. No cloud transfers. No way to find duplicates. No way to clean up build artifacts eating your disk. No secure erase.
+
+
+## Install
 
 ```bash
-cargo install zero
+curl -sSfL https://zero-coral-tau.vercel.app | bash
 ```
 
----
 
-## Features
+## Finder, done right
 
-| What | Why it matters |
-|------|----------------|
-| **Instant search** | 1.7M files in 83ms. Local-only. Nothing sent to Apple. |
-| **Cmd+K command palette** | Files, actions, locations — keyboard-first. |
-| **Resumable sync** | Survives disconnect, sleep, crashes. Picks up where it left off. |
-| **Checksum verification** | If Zero says it copied, it actually did. |
-| **Split pane** | Finally. No more juggling Finder windows. |
-| **Inline editing** | Edit .md, .yaml, .json, .env without opening another app. |
-| **Duplicate detection** | Find duplicates across drives in seconds. |
-| **Cloud storage** | S3, B2, Dropbox, WebDAV. Same commands, same guarantees. |
-| **Todo CLI** | Track tasks in `.todo` files. Lists, tags, due dates. Local-first. |
-| **Open source** | Rust core. MIT licensed. Trust, verified. |
+Permissions, owner, git status — visible in every row. Workspaces that remember your bookmarks. Cmd+K to jump to any file or action.
 
-### Coming Soon
+- Split pane — drag between folders without juggling windows.
+- Configurable columns, inline rename, multiple selection. 6 native themes.
 
-- E2EE encrypted index
-- E2EE transfers (send files to friends, zero-knowledge)
-- Automations UI (USB triggers, scheduled backups)
-- Batch operations (convert images, resize)
 
----
+## Fast search. Smart results.
+
+Searches 1.7 million files in 83 milliseconds. Results ranked by frequency and recency — files you use surface first.
+
+- Filter by type (images, videos, code, documents), extension, language, size, path, or recency.
+
+
+## Never restart a copy again
+
+Zero resumes from the exact byte — survives sleep, crashes, and disconnects. Every file checksum-verified.
+
+- Mirror, verify, exclude, dry run, permission preservation. Backup templates included.
+- Cloud storage: S3, Backblaze B2, Google Cloud Storage, Dropbox, WebDAV.
+
+
+## Agentic Mode
+
+The agent has your full file index. Ask it to find, move, rename, or clean up — shows every step.
+
+- Claude Sonnet 4.6, Opus 4.6, GPT-5, and more. Bring your own key.
+- MCP server — any external AI tool or IDE can query Zero's search and code intelligence.
+
+
+## More
+
+- **Code intelligence** — search for a function and get its definition, not every file that mentions it. Structural search across every project on your machine.
+- **Git integration** — modified, staged, untracked visible in the file browser. Folders show change counts.
+- **Text editor** — built-in editor with syntax highlighting for 28 languages.
+- **Data tables** — open a CSV and see a real table. Sortable columns, auto-detected delimiters.
+- **Cleanup** — node_modules, build caches, system logs, old downloads — 36 categories. Shows size before you touch anything. Reversible with Put Back.
+- **Deduplication** — scans folders and drives for identical files. Batch deletion with verification.
+- **Automation** — auto-sync when a USB drive connects or source files change. Daemon mode.
+- **Disk** — volumes, capacity, filesystem details. Secure erase with multiple strength levels.
+
 
 ## Performance
 
@@ -53,82 +75,28 @@ cargo install zero
 | Recent files query | 0.19ms |
 | Sync (local SSD) | 874 MB/s |
 | Sync + verify | 653 MB/s |
-| Resume (vs rsync) | 3x faster |
+| Resume vs rsync | 3x faster |
 
----
 
-## CLI Quick Start
+## Coming Soon
 
-```bash
-# Search (private, fast)
-zero search --index ~/                   # Build index once (~30s for 1.7M files)
-zero search vacation --type images       # Find vacation photos
-zero search --recent 100 --type images   # 100 most recent images
+- Encrypted search index
+- P2P file sharing — zero-knowledge, no server middleman
+- Automations UI
+- Cleanup profiles — community-maintained rules for OS artifacts, dev environments, app traces
+- Cross-platform (Linux, Windows)
 
-# Sync (resumable, verified)
-zero ~/Photos /Volumes/Backup            # Incremental sync with resume
-zero ~/Photos s3://bucket/backup         # Same command, cloud storage
-zero verify ~/Photos /Volumes/Backup     # Prove backup is identical
-
-# Cleanup
-zero dupes ~/Photos                      # Find duplicates
-zero dupes ~/Photos --delete             # Remove duplicates (keeps shortest path)
-
-# Todos (local task tracking)
-zero todo                                # Show all tasks grouped by list
-zero todo add "Fix bug" bugs             # Add task to bugs list
-zero todo toggle 1 2 3                   # Toggle status (open ↔ done)
-zero todo open SECURITY.todo             # Switch to different todo file
-
-# System
-zero drives                              # List drives with hardware info
-zero erase /Volumes/USB                  # Secure wipe with verification
-```
-
-Enable tab completion:
-
-```bash
-zero completions --install
-```
-
----
-
-## Why Zero?
-
-**Privacy:** Your searches stay on your machine. No telemetry. No cloud index. Nothing sent to Apple or us.
-
-**Reliability:** Copies that resume from any failure. Checksums that prove your backup worked. Real progress with file count, speed, ETA.
-
-**Speed:** 1.7M files in 83ms. Not a typo.
-
-**Trust:** Open source Rust core. MIT licensed. Audit it yourself.
-
----
 
 ## Documentation
 
-- [COMMANDS.md](docs/COMMANDS.md) — Full CLI reference
-- [ARCHITECTURE.md](ARCHITECTURE.md) — How it works
+- [FEATURES.md](FEATURES.md) — Complete feature list
+- [COMMANDS.md](COMMANDS.md) — Full CLI reference
 
----
-
-## Contact
-
-Built by [Your Name](https://yoursite.com).
-
-- Twitter: [@yourhandle](https://twitter.com/yourhandle)
-- Email: hello@zero.app
-
-Questions, feedback, or just want to say hi — reach out.
-
-Like Zero? [Sponsor on GitHub](https://github.com/sponsors/yourhandle) or [get the Mac app](https://zero.app/download).
-
----
 
 ## License
 
-MIT — use it, fork it, audit it.
+MIT / Apache-2.0
 
 ---
 
-**Your files. No one else's business.**
+Built by [Jimmi Andersen](https://github.com/aejimmi) — building [Tell](https://tell.rs). Founded Logpoint (acquired).

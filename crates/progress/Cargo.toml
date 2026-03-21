@@ -1,0 +1,14 @@
+[package]
+name = "progress"
+version.workspace = true
+edition = "2024"
+description = "Atomic progress tracking and display for Zero"
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+foundation = { path = "../foundation" }
+
+[dev-dependencies]

@@ -1,119 +1,107 @@
 [workspace]
-members = ["crates/watcher", "crates/zero-ui", "crates/zero-cli", "crates/zero-mcp", "crates/zero-llm"]
+members = [
+    "crates/foundation",
+    "crates/scanner",
+    "crates/hasher",
+    "crates/differ",
+    "crates/transfer",
+    "crates/delete",
+    "crates/disk",
+    "crates/apps",
+    "crates/cache",
+    "crates/search",
+    "crates/code",
+    "crates/storage",
+    "crates/profiles",
+    "crates/progress",
+    "crates/telemetry",
+    "crates/todo",
+    "crates/templates",
+    "crates/updater",
+    "crates/dedup",
+    "crates/cleanup",
+    "crates/sync",
+    "crates/automation",
+    "crates/service",
+    "crates/watcher",
+    "crates/llm",
+    "crates/mcp",
+    "crates/ui",
+    "crates/cli",
+]
 exclude = ["vendor"]
 resolver = "2"
 
 [workspace.package]
 version = "0.7.0"
+edition = "2024"
+rust-version = "1.94.0"
 license = "MIT"
+
+[workspace.lints.clippy]
+correctness = { level = "deny", priority = -1 }
+perf = { level = "deny", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+# -- Restriction cherry-picks (never enable the whole group) --
+undocumented_unsafe_blocks = "deny"
+multiple_unsafe_ops_per_block = "warn"
+unwrap_used = "deny"
+indexing_slicing = "warn"
+panic = "deny"
+dbg_macro = "deny"
+# -- Pedantic overrides (too noisy for this codebase) --
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+# File utility does pervasive size conversions (u64 → f64 for display, usize ↔ u32 for indices)
+cast_possible_truncation = "allow"
+cast_precision_loss = "allow"
+cast_sign_loss = "allow"
+cast_possible_wrap = "allow"
+# Tests use `use super::*` per project convention
+wildcard_imports = "allow"
+# Builder patterns, not worth annotating every method
+return_self_not_must_use = "allow"
+# CLAUDE.md enforces 30-line functions; clippy's 100 is redundant
+too_many_lines = "allow"
+# Sometimes arms are intentionally separate for readability
+match_same_arms = "allow"
+# Common pattern for unused bindings
+used_underscore_binding = "allow"
+# Too many false positives on domain terms
+doc_markdown = "allow"
+# Config structs legitimately need multiple bools
+struct_excessive_bools = "allow"
+# Style preference — items after statements is common in Rust
+items_after_statements = "allow"
+# src/dst, idx/len — legitimate in a file sync tool
+similar_names = "allow"
+
+[workspace.lints.rust]
+unsafe_code = "warn"
 
 [workspace.dependencies]
 zero-watcher = { path = "crates/watcher" }
+divan = "0.1"
 
-[package]
-name = "zero"
-version.workspace = true
-edition = "2024"
-rust-version = "1.92"
-description = "A resilient file synchronization and deduplication tool"
-license.workspace = true
-
-[lib]
-crate-type = ["lib"]
-
-[dependencies]
-# Parallel directory walking
-jwalk = "0.8"
-
-# Fast hashing
-blake3 = "1.5"
-xxhash-rust = { version = "0.8", features = ["xxh3"] }
-sha2 = "0.10"
-hex = "0.4"
-memmap2 = "0.9"
-
-# Parallelism
-rayon = "1.10"
-
-# Async runtime (service mode + cloud storage)
-tokio = { version = "1.41", features = ["rt", "rt-multi-thread", "macros", "sync", "time"] }
-
-# Directories
-dirs = "6.0"
-
-# CLI
-clap = { version = "4.5", features = ["derive"] }
-clap_complete = "4.5"
-
-# Progress bars
-indicatif = "0.18"
-
-# Error handling
-thiserror = "2.0"
-anyhow = "1.0"
-
-# Serialization (for state files)
+# Shared across many crates
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-postcard = { version = "1.0", features = ["alloc"] }
-
-# Embedded database with WAL (cache, todo, transfer state)
-etchdb = { version = "0.3.2", features = ["compression"] }
-
-# Compression for index snapshots
-zstd = "0.13"
-
-# Cloud storage (optional)
-opendal = { version = "0.51", optional = true, features = ["services-s3", "services-b2", "services-gcs", "services-dropbox", "services-webdav", "services-sftp"] }
-
-# Logging
+thiserror = "2.0"
+anyhow = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "tracing-log"] }
-
-# Watcher (for watch subcommand - dev/testing)
-zero-watcher = { workspace = true }
-
-# Random number generation (for secure erase)
-rand = "0.9"
-rand_chacha = "0.9"
-
-# Signal handling (for graceful shutdown in service mode)
-ctrlc = "3.4"
-
-# Trash (move files to system trash instead of permanent delete)
-trash = "5.2"
-
-# Roaring bitmaps for fast type filtering
-roaring = { version = "0.11", features = ["serde"] }
-
-# Glob pattern matching for search
-globset = "0.4"
-
-toml = "0.9.10"
-
-# Code structure parsing (code index)
-syn = { version = "2", features = ["full", "parsing", "visit", "extra-traits"] }
-quote = "1"
-proc-macro2 = { version = "1", features = ["span-locations"] }
-tree-sitter = "0.25"
-tree-sitter-go = "0.25"
-walkdir = "2"
-
-# Auto-update (HTTP client + archive extraction)
-ureq = "3"
-flate2 = "1"
-tar = "0.4"
-
-# Unix-specific (for secure erase platform code)
-[target.'cfg(unix)'.dependencies]
-libc = "0.2"
-
-[features]
-default = []
-opendal = ["dep:opendal"]
-
-[dev-dependencies]
+tokio = { version = "1.41", features = ["rt", "rt-multi-thread", "macros", "sync", "time"] }
+clap = { version = "4.5", features = ["derive"] }
+rayon = "1.10"
+dirs = "6.0"
 tempfile = "3.13"
+postcard = { version = "1.0", features = ["alloc"] }
+etchdb = { version = "0.3.2", features = ["compression"] }
+zstd = "0.13"
+indicatif = "0.18"
+crossfire = "3.1"
 
 [profile.dev]
 codegen-units = 16
@@ -126,8 +114,14 @@ rustybuzz = { opt-level = 3 }
 taffy = { opt-level = 3 }
 ttf-parser = { opt-level = 3 }
 
-
-[profile.release]
+[profile.bench]
 lto = false
 codegen-units = 1
-strip = true
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = "symbols"
+overflow-checks = true
+# Do NOT set panic = "abort" — catch_unwind is used at Rayon thread boundaries

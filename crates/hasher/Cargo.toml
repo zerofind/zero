@@ -1,0 +1,26 @@
+[package]
+name = "hasher"
+version.workspace = true
+edition = "2024"
+description = "File hashing (blake3, xxh3) for Zero"
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+progress = { path = "../progress" }
+blake3 = "1.5"
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+hex = "0.4"
+memmap2 = "0.9"
+clap = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+divan = { workspace = true }
+
+[[bench]]
+name = "hash_bench"
+harness = false

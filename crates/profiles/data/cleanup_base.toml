@@ -1,0 +1,184 @@
+# Cross-Platform Cleanup Categories
+# These work identically on all operating systems
+
+# =============================================================================
+# Developer - Build caches and dependencies
+# =============================================================================
+
+[node_modules]
+name = "node_modules"
+patterns = ["**/node_modules"]
+sibling = "package.json"
+aggregate = "directory"
+group = "developer"
+description = "Node.js dependency folders"
+warning = "Run 'npm install' to restore dependencies"
+
+[rust_target]
+name = "Rust Build Cache"
+patterns = ["**/target"]
+sibling = "Cargo.toml"
+aggregate = "directory"
+group = "developer"
+description = "Rust compilation artifacts (can be regenerated with cargo build)"
+
+[python_cache]
+name = "Python Cache"
+patterns = ["**/__pycache__", "**/*.pyc", "**/*.pyo"]
+group = "developer"
+description = "Python bytecode cache files"
+
+[go_cache]
+name = "Go Cache"
+group = "developer"
+description = "Go module cache and build cache"
+warning = "Run 'go mod download' to restore dependencies"
+patterns.macos = ["~/Library/Caches/go-build", "~/go/pkg/mod"]
+patterns.linux = ["~/.cache/go-build", "~/go/pkg/mod"]
+patterns.windows = ["~/AppData/Local/go-build", "~/go/pkg/mod"]
+
+[gradle_cache]
+name = "Gradle Cache"
+patterns = ["~/.gradle/caches", "~/.gradle/wrapper/dists", "~/.gradle/daemon"]
+group = "developer"
+description = "Gradle build cache and wrapper distributions"
+warning = "Gradle will re-download dependencies on next build"
+
+[maven_cache]
+name = "Maven Cache"
+patterns = ["~/.m2/repository"]
+group = "developer"
+description = "Maven local repository"
+warning = "Run 'mvn dependency:resolve' to restore dependencies"
+
+[composer_cache]
+name = "Composer Cache"
+group = "developer"
+description = "PHP Composer cache"
+warning = "Run 'composer install' to restore dependencies"
+patterns.macos = ["~/.composer/cache", "~/Library/Caches/composer"]
+patterns.linux = ["~/.composer/cache", "~/.cache/composer"]
+patterns.windows = ["~/AppData/Local/Composer"]
+
+[dotnet_cache]
+name = ".NET Cache"
+patterns = ["~/.nuget/packages", "~/.dotnet"]
+group = "developer"
+description = "NuGet packages cache"
+warning = "Run 'dotnet restore' to restore packages"
+
+# --- New developer categories ---
+
+[nextjs_cache]
+name = "Next.js Build Cache"
+patterns = ["**/.next"]
+sibling = "package.json"
+aggregate = "directory"
+group = "developer"
+description = "Next.js build output and cache"
+warning = "Run 'next build' to regenerate"
+
+[python_venv]
+name = "Python Virtual Env"
+patterns = ["**/.venv", "**/venv"]
+sibling = "pyproject.toml"
+aggregate = "directory"
+group = "developer"
+description = "Python virtual environments"
+warning = "Run 'python -m venv .venv && pip install -r requirements.txt' to restore"
+
+[tox_cache]
+name = "Tox Environments"
+patterns = ["**/.tox"]
+sibling = "tox.ini"
+aggregate = "directory"
+group = "developer"
+description = "Tox test environments"
+warning = "Run 'tox' to recreate"
+
+[flutter_build]
+name = "Flutter Build Cache"
+patterns = ["**/build"]
+sibling = "pubspec.yaml"
+aggregate = "directory"
+group = "developer"
+description = "Flutter/Dart build artifacts"
+warning = "Run 'flutter build' to regenerate"
+
+[zig_cache]
+name = "Zig Build Cache"
+patterns = ["**/zig-cache", "**/zig-out"]
+sibling = "build.zig"
+aggregate = "directory"
+group = "developer"
+description = "Zig build artifacts"
+
+[cmake_build]
+name = "CMake Build"
+patterns = ["**/build"]
+sibling = "CMakeLists.txt"
+aggregate = "directory"
+group = "developer"
+description = "CMake build directories"
+
+[elixir_build]
+name = "Elixir Build"
+patterns = ["**/_build", "**/deps"]
+sibling = "mix.exs"
+aggregate = "directory"
+group = "developer"
+description = "Elixir/Mix build artifacts and dependencies"
+warning = "Run 'mix deps.get && mix compile' to restore"
+
+[ruby_vendor]
+name = "Ruby Bundled Gems"
+patterns = ["**/vendor/bundle"]
+sibling = "Gemfile"
+aggregate = "directory"
+group = "developer"
+description = "Ruby vendored gem dependencies"
+warning = "Run 'bundle install' to restore"
+
+[cocoapods_proj]
+name = "CocoaPods"
+patterns = ["**/Pods"]
+sibling = "Podfile"
+aggregate = "directory"
+group = "developer"
+description = "CocoaPods project dependencies"
+warning = "Run 'pod install' to restore"
+
+[parcel_cache]
+name = "Parcel Cache"
+patterns = ["**/.parcel-cache"]
+sibling = "package.json"
+aggregate = "directory"
+group = "developer"
+description = "Parcel bundler cache"
+
+[turbo_cache]
+name = "Turborepo Cache"
+patterns = ["**/.turbo"]
+sibling = "turbo.json"
+aggregate = "directory"
+group = "developer"
+description = "Turborepo local cache"
+
+# =============================================================================
+# System - Generic system files
+# =============================================================================
+
+[thumbnail_cache]
+name = "Thumbnail Cache"
+group = "system"
+description = "Cached image thumbnails"
+patterns.macos = ["~/Library/Caches/com.apple.QuickLook.thumbnailcache"]
+patterns.linux = ["~/.cache/thumbnails"]
+patterns.windows = ["~/AppData/Local/Microsoft/Windows/Explorer/thumbcache_*"]
+
+[log_files]
+name = "Log Files"
+patterns = ["**/*.log"]
+group = "system"
+description = "Application and system log files"
+min_age = "7d"

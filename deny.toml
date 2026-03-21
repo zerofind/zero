@@ -1,0 +1,87 @@
+# cargo-deny configuration for Zero
+# https://embarkstudios.github.io/cargo-deny/
+#
+# Run: cargo deny check
+# CI:  cargo deny check advisories licenses bans sources
+
+[graph]
+targets = [
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+]
+
+# -- Advisories: check RustSec advisory database ---
+
+[advisories]
+ignore = [
+    # All from gpui/zed transitive deps — we can't fix these upstream
+    { id = "RUSTSEC-2025-0052", reason = "async-std unmaintained — gpui dep" },
+    { id = "RUSTSEC-2024-0384", reason = "instant unmaintained — gpui dep" },
+    { id = "RUSTSEC-2024-0436", reason = "paste unmaintained — gpui dep" },
+    { id = "RUSTSEC-2025-0134", reason = "rustls-pemfile unmaintained — gpui dep (zed-reqwest)" },
+    { id = "RUSTSEC-2026-0049", reason = "rustls-webpki CRL bug — gpui dep (zed-reqwest → rustls)" },
+]
+
+# -- Licenses: allowlist of acceptable licenses ---
+
+[licenses]
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "ISC",
+    "MIT-0",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+    "0BSD",
+    "NCSA",
+    "CDLA-Permissive-2.0",
+]
+confidence-threshold = 0.8
+
+[licenses.private]
+ignore = true
+
+# Our own crates that haven't set license.workspace = true yet
+[[licenses.clarify]]
+crate = "llm"
+expression = "MIT"
+license-files = [{ path = "../../LICENSE-MIT", hash = 0 }]
+
+[[licenses.clarify]]
+crate = "mcp"
+expression = "MIT"
+license-files = [{ path = "../../LICENSE-MIT", hash = 0 }]
+
+[[licenses.clarify]]
+crate = "ui"
+expression = "MIT"
+license-files = [{ path = "../../LICENSE-MIT", hash = 0 }]
+
+# -- Bans: detect duplicate or denied dependencies ---
+
+[bans]
+multiple-versions = "warn"
+wildcards = "allow"
+highlight = "all"
+workspace-default-features = "allow"
+external-default-features = "allow"
+
+# -- Sources: only allow crates from approved registries ---
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "warn"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = [
+    "https://github.com/modelcontextprotocol/rust-sdk",
+    "https://github.com/zed-industries/alacritty",
+]

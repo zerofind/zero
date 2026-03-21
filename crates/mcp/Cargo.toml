@@ -1,0 +1,29 @@
+[package]
+name = "mcp"
+version.workspace = true
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+search = { path = "../search" }
+code = { path = "../code" }
+foundation = { path = "../foundation" }
+rmcp = { git = "https://github.com/modelcontextprotocol/rust-sdk", features = [
+    "server",
+    "macros",
+    "transport-streamable-http-server",
+    "transport-streamable-http-server-session",
+] }
+axum = "0.8"
+tokio = { workspace = true }
+tokio-util = "0.7"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+schemars = "1.0"
+tracing = { workspace = true }
+anyhow = { workspace = true }
+rand = "0.9"

@@ -1,0 +1,12 @@
+[package]
+name = "templates"
+version.workspace = true
+edition = "2024"
+description = "Backup templates for Zero"
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+dirs = { workspace = true }

@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.8.0
+
+- app: reorganized into 28 independent crates for faster builds and modular composition
+- app: each domain (search, sync, cache, code, etc.) is now a standalone reusable crate
+- app: cloud storage dependencies fully isolated — apps that don't need cloud don't pull in opendal
+- app: code intelligence dependencies (syn, tree-sitter) isolated from search and sync paths
+- sync: lockless crossfire channels replace std/tokio mpsc — cleaner sync-to-async bridging, lower latency
+- privacy: dual MIT/Apache-2.0 licensing with cargo-deny auditing
+- cli: renamed from zero-cli to cli (binary still called zero)
+- ai: renamed from zero-llm/zero-mcp to llm/mcp for cleaner imports
+
 ## v0.7.0
 
 New:

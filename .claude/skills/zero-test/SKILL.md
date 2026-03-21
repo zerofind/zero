@@ -15,7 +15,7 @@ Analyze test gaps and write tests for Zero. Understands the `*_test.rs` co-locat
 
 - **Empty** — analyze `git diff` changed files, identify missing tests, write them
 - **`<module>`** (e.g. `hasher`, `index`, `cache`, `todo`, `transfer`) — audit and fill test gaps for that module tree
-- **`<file_path>`** (e.g. `src/index/manager.rs`) — write tests for a specific file
+- **`<file_path>`** (e.g. `crates/search/src/manager.rs`) — write tests for a specific file
 - **`gaps`** — comprehensive gap report across all modules (report only, no writes)
 
 ## Test File Rules (Non-Negotiable)
@@ -23,9 +23,9 @@ Analyze test gaps and write tests for Zero. Understands the `*_test.rs` co-locat
 ### Placement
 
 - Tests live in `*_test.rs` files co-located with source. **NEVER** inline `#[cfg(test)]` blocks.
-- Test file for `src/foo/bar.rs` is `src/foo/bar_test.rs`.
-- Test file for `src/foo/mod.rs` is `src/foo/mod_test.rs`.
-- Test file for `crates/zero-ui/src/theme/mod.rs` is `crates/zero-ui/src/theme/mod_test.rs`.
+- Test file for `crates/foo/src/bar.rs` is `crates/foo/src/bar_test.rs`.
+- Test file for `crates/foo/src/lib.rs` — tests go in `crates/foo/src/mod_test.rs` or named test files.
+- Test file for `crates/ui/src/theme/mod.rs` is `crates/ui/src/theme/mod_test.rs`.
 
 ### Module Declaration
 
@@ -199,19 +199,13 @@ For each gap:
 
 ```bash
 # Must compile
-cargo check -p zero 2>&1 | head -30
+cargo check -p <crate_name> 2>&1 | head -30
 
 # Tests must pass
-cargo test <module>:: 2>&1
+cargo test -p <crate_name> 2>&1
 
 # No clippy warnings
-cargo clippy -p zero --lib -- -D warnings 2>&1 | tail -10
-```
-
-If a crate test:
-```bash
-cargo test -p zero-ui 2>&1
-cargo clippy -p zero-ui -- -D warnings 2>&1 | tail -10
+cargo clippy -p <crate_name> --lib -- -D warnings 2>&1 | tail -10
 ```
 
 ### Step 6: Report
@@ -237,12 +231,12 @@ cargo clippy -p zero-ui -- -D warnings 2>&1 | tail -10
 ## Module Reference
 
 ### Well-Tested (use as patterns)
-- `src/todo/` — comprehensive builder/CRUD/search coverage
-- `src/transfer/` — filesystem + chunked copy + resume
-- `src/hasher/` — algorithm identity + hash roundtrip
-- `src/dedup/` — duplicate finding + streaming
-- `src/disk/erase/` — wipe patterns + state machines
-- `src/code/` — 73 tests across parsers (Rust, Go), formatting, element types, scanner, persistence, and CodeIndex integration
+- `crates/todo/` — comprehensive builder/CRUD/search coverage
+- `crates/transfer/` — filesystem + chunked copy + resume
+- `crates/hasher/` — algorithm identity + hash roundtrip
+- `crates/dedup/` — duplicate finding + streaming
+- `crates/disk/` — wipe patterns + state machines
+- `crates/code/` — 73 tests across parsers (Rust, Go), formatting, element types, scanner, persistence, and CodeIndex integration
 
 This list is approximate. Always verify by globbing for `*_test.rs` files and reading them — don't rely on this snapshot.
 

@@ -25,6 +25,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo fmt --check
 
+  deny:
+    name: Supply Chain
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+
   clippy:
     name: Clippy
     runs-on: ubuntu-latest

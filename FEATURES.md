@@ -157,6 +157,7 @@ Unmarked = shipped. `(partial)` = partially implemented. `(planned)` = not yet s
 - JSON output — --json flag on all commands.
 - Self-update — check for and install updates from CDN.
 - Pipe-friendly — zero search "*.rs" --json | jq.
+- Modular crates — 28 independent crates, each usable standalone for custom tools.
 
 
 ## Privacy
@@ -166,4 +167,4 @@ Unmarked = shipped. `(partial)` = partially implemented. `(planned)` = not yet s
 - Telemetry controls — zero telemetry show (inspect payload), off, on, reset-id.
 - 24-hour grace period — no data sent until you've had time to review.
 - Local-first — all data stays on your machine or your chosen storage backend.
-- Open source — MIT-licensed Rust core, audit it yourself.
+- Open source — MIT/Apache-2.0 dual-licensed, audit it yourself.

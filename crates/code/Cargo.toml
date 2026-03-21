@@ -1,0 +1,27 @@
+[package]
+name = "code"
+version.workspace = true
+edition = "2024"
+description = "Code intelligence and AST parsing for Zero"
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+foundation = { path = "../foundation" }
+syn = { version = "2", features = ["full", "parsing", "visit", "extra-traits"] }
+quote = "1"
+proc-macro2 = { version = "1", features = ["span-locations"] }
+tree-sitter = "0.25"
+tree-sitter-go = "0.25"
+walkdir = "2"
+zstd = { workspace = true }
+postcard = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

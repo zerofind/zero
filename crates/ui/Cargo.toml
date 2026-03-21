@@ -1,0 +1,61 @@
+[package]
+name = "ui"
+version.workspace = true
+edition = "2024"
+
+[lints]
+workspace = true
+
+[lib]
+name = "ui"
+path = "src/lib.rs"
+
+[[bin]]
+name = "Zero"
+path = "src/main.rs"
+
+[[bin]]
+name = "design-system"
+path = "src/bin/design_system.rs"
+
+[dependencies]
+foundation = { path = "../foundation" }
+search = { path = "../search" }
+code = { path = "../code" }
+dedup = { path = "../dedup" }
+scanner = { path = "../scanner" }
+cache = { path = "../cache" }
+disk = { path = "../disk" }
+profiles = { path = "../profiles" }
+todo = { path = "../todo" }
+progress = { path = "../progress" }
+delete = { path = "../delete" }
+cleanup = { path = "../cleanup" }
+hasher = { path = "../hasher" }
+crossfire = { workspace = true, features = ["tokio"] }
+updater = { path = "../updater" }
+zero-watcher = { path = "../watcher" }
+gpui = "0.2.2"
+gpui-component = { path = "../../vendor/gpui-component/crates/ui", features = ["tree-sitter-languages"] }
+gpui-component-assets = { path = "../../vendor/gpui-component/crates/assets" }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+dirs = { workspace = true }
+csv = "1"
+tokio = { workspace = true }
+natord = "1"
+git2 = { version = "0.20", default-features = false }
+alacritty_terminal = { git = "https://github.com/zed-industries/alacritty", rev = "9d9640d4" }
+futures = "0.3"
+parking_lot = "0.12"
+smol = "2"
+mcp = { path = "../mcp" }
+llm = { path = "../llm" }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-foundation = { version = "0.3", features = ["NSFileManager", "NSURL", "NSString", "NSError"] }

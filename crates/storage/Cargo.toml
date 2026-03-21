@@ -1,0 +1,24 @@
+[package]
+name = "storage"
+version.workspace = true
+edition = "2024"
+description = "Storage backends (local and cloud) for Zero"
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+tokio = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+tracing = { workspace = true }
+anyhow = { workspace = true }
+opendal = { version = "0.51", optional = true, features = ["services-s3", "services-b2", "services-gcs", "services-dropbox", "services-webdav", "services-sftp"] }
+
+[features]
+default = []
+cloud = ["dep:opendal"]
+
+[dev-dependencies]
+tempfile = { workspace = true }

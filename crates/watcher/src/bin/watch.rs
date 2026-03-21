@@ -192,15 +192,15 @@ fn watch_usb(filter: Vec<String>, serial: Vec<String>, json: bool) -> Result<()>
                     event
                         .volume_name
                         .as_ref()
-                        .map(|n| format!(" ({})", n))
+                        .map(|n| format!(" ({n})"))
                         .unwrap_or_default()
                 );
 
                 if let Some(ref serial) = event.device_serial {
-                    println!("   Serial: {}", serial);
+                    println!("   Serial: {serial}");
                 }
                 if let Some(ref fs) = event.file_system {
-                    println!("   FS: {}", fs);
+                    println!("   FS: {fs}");
                 }
             }
         }
@@ -262,7 +262,7 @@ fn watch_all(paths: Vec<PathBuf>, debounce_ms: u64, json: bool) -> Result<()> {
                     event
                         .volume_name
                         .as_ref()
-                        .map(|n| format!(" ({})", n))
+                        .map(|n| format!(" ({n})"))
                         .unwrap_or_default()
                 );
             }
@@ -278,7 +278,7 @@ fn measure_latency(path: PathBuf, iterations: usize) -> Result<()> {
 
     println!("Measuring file watcher latency\n");
     println!("Watch path: {}", path.display());
-    println!("Iterations: {}\n", iterations);
+    println!("Iterations: {iterations}\n");
 
     // Create a temp file path
     let test_file = path.join(".zero_latency_test");
@@ -312,7 +312,7 @@ fn measure_latency(path: PathBuf, iterations: usize) -> Result<()> {
 
         // Time the write -> event detection
         let start = Instant::now();
-        fs::write(&test_file, format!("test iteration {}", i))?;
+        fs::write(&test_file, format!("test iteration {i}"))?;
 
         // Wait for the event
         let mut detected = false;
@@ -349,7 +349,9 @@ fn measure_latency(path: PathBuf, iterations: usize) -> Result<()> {
     let _ = fs::remove_file(&test_file);
 
     // Print statistics
-    if !latencies.is_empty() {
+    if latencies.is_empty() {
+        println!("\nNo events detected!");
+    } else {
         println!("\nResults:");
 
         let min = latencies.iter().min().unwrap();
@@ -368,8 +370,6 @@ fn measure_latency(path: PathBuf, iterations: usize) -> Result<()> {
         println!("  Median: {:>6.2}ms", median.as_secs_f64() * 1000.0);
         println!("  P95:    {:>6.2}ms", p95.as_secs_f64() * 1000.0);
         println!("\n  Success rate: {}/{}", latencies.len(), iterations);
-    } else {
-        println!("\nNo events detected!");
     }
 
     Ok(())

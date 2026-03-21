@@ -1,0 +1,21 @@
+[package]
+name = "cleanup"
+version.workspace = true
+edition = "2024"
+description = "Storage cleanup by category for Zero"
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+search = { path = "../search" }
+profiles = { path = "../profiles" }
+serde = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+dirs = { workspace = true }
+jwalk = "0.8"
+
+[dev-dependencies]
+tempfile = { workspace = true }

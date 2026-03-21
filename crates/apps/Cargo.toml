@@ -1,0 +1,9 @@
+[package]
+name = "apps"
+version.workspace = true
+edition = "2024"
+description = "App and package inventory for Zero"
+license.workspace = true
+
+[lints]
+workspace = true

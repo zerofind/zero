@@ -1,0 +1,55 @@
+[package]
+name = "cli"
+version.workspace = true
+edition = "2024"
+rust-version = "1.92"
+description = "CLI binary for zero - resilient file sync"
+license.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "zero"
+path = "src/main.rs"
+
+[dependencies]
+ui = { path = "../ui" }
+foundation = { path = "../foundation" }
+scanner = { path = "../scanner" }
+hasher = { path = "../hasher" }
+differ = { path = "../differ" }
+transfer = { path = "../transfer" }
+sync = { path = "../sync" }
+dedup = { path = "../dedup" }
+cleanup = { path = "../cleanup" }
+delete = { path = "../delete" }
+cache = { path = "../cache" }
+search = { path = "../search" }
+disk = { path = "../disk" }
+storage = { path = "../storage" }
+profiles = { path = "../profiles" }
+templates = { path = "../templates" }
+todo = { path = "../todo" }
+automation = { path = "../automation" }
+service = { path = "../service" }
+code = { path = "../code" }
+updater = { path = "../updater" }
+progress = { path = "../progress" }
+telemetry = { path = "../telemetry" }
+apps = { path = "../apps" }
+
+clap = { workspace = true }
+clap_complete = "4.5"
+tracing = { workspace = true }
+anyhow = { workspace = true }
+dirs = { workspace = true }
+rayon = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+zero-watcher = { path = "../watcher" }
+
+[features]
+default = []
+opendal = ["storage/cloud"]

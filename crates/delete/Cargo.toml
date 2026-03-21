@@ -1,0 +1,17 @@
+[package]
+name = "delete"
+version.workspace = true
+edition = "2024"
+description = "File deletion with trash support for Zero"
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+rayon = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

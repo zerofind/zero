@@ -1,0 +1,30 @@
+[package]
+name = "transfer"
+version.workspace = true
+edition = "2024"
+description = "File copy with resume support for Zero"
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+hasher = { path = "../hasher" }
+progress = { path = "../progress" }
+scanner = { path = "../scanner" }
+foundation = { path = "../foundation" }
+etchdb = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+rayon = { workspace = true }
+jwalk = "0.8"
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+postcard = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+tempfile = { workspace = true }

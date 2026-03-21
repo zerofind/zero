@@ -1,0 +1,22 @@
+[package]
+name = "differ"
+version.workspace = true
+edition = "2024"
+description = "File tree comparison for Zero"
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+hasher = { path = "../hasher" }
+progress = { path = "../progress" }
+scanner = { path = "../scanner" }
+serde = { workspace = true }
+thiserror = { workspace = true }
+rayon = { workspace = true }
+tracing = { workspace = true }
+crossfire = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

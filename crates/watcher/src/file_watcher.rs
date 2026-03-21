@@ -2,18 +2,17 @@
 //!
 //! Watches directories for changes and emits debounced events.
 
-use crate::events::{FileChangeKind, FileEvent};
 use crate::FileWatchConfig;
+use crate::events::{FileChangeKind, FileEvent};
 use anyhow::{Context, Result};
+use crossfire::mpsc as cf_mpsc;
 use notify::{
-    event::{CreateKind, ModifyKind, RemoveKind, RenameMode},
     Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher,
+    event::{CreateKind, ModifyKind, RemoveKind, RenameMode},
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc;
 use std::time::{Duration, Instant};
-use tokio::sync::mpsc as tokio_mpsc;
 
 /// File system watcher that monitors directories for changes
 pub struct FileWatcher {
@@ -21,7 +20,7 @@ pub struct FileWatcher {
     watcher: RecommendedWatcher,
 
     /// Channel to receive events from notify
-    rx: mpsc::Receiver<Result<Event, notify::Error>>,
+    rx: crossfire::Rx<cf_mpsc::List<Result<Event, notify::Error>>>,
 
     /// Watched paths and their configurations
     watched_paths: HashMap<PathBuf, WatchedPath>,
@@ -29,7 +28,7 @@ pub struct FileWatcher {
     /// Configuration
     config: FileWatchConfig,
 
-    /// Debounce state: path -> (last_event_kind, last_event_time)
+    /// Debounce state: path -> (`last_event_kind`, `last_event_time`)
     debounce_state: HashMap<PathBuf, (FileChangeKind, Instant)>,
 }
 
@@ -52,7 +51,7 @@ impl FileWatcher {
 
     /// Create a new file watcher with custom configuration
     pub fn with_config(config: FileWatchConfig) -> Result<Self> {
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = cf_mpsc::unbounded_blocking();
 
         let watcher = RecommendedWatcher::new(
             move |res| {
@@ -127,8 +126,8 @@ impl FileWatcher {
                 tracing::warn!(error = %e, "File watcher error");
                 None
             }
-            Err(mpsc::TryRecvError::Empty) => None,
-            Err(mpsc::TryRecvError::Disconnected) => {
+            Err(crossfire::TryRecvError::Empty) => None,
+            Err(crossfire::TryRecvError::Disconnected) => {
                 tracing::error!("File watcher channel disconnected");
                 None
             }
@@ -158,15 +157,15 @@ impl FileWatcher {
                 tracing::warn!(error = %e, "File watcher error");
                 None
             }
-            Err(mpsc::RecvTimeoutError::Timeout) => None,
-            Err(mpsc::RecvTimeoutError::Disconnected) => {
+            Err(crossfire::RecvTimeoutError::Timeout) => None,
+            Err(crossfire::RecvTimeoutError::Disconnected) => {
                 tracing::error!("File watcher channel disconnected");
                 None
             }
         }
     }
 
-    /// Convert a notify event to our FileEvent type
+    /// Convert a notify event to our `FileEvent` type
     fn process_notify_event(&mut self, event: Event) -> Option<FileEvent> {
         // Skip events with no paths
         if event.paths.is_empty() {
@@ -224,7 +223,7 @@ impl FileWatcher {
 
         // Clean up old debounce entries periodically
         if self.debounce_state.len() > 1000 {
-            let cutoff = now - (debounce_duration * 10);
+            let cutoff = now.checked_sub(debounce_duration * 10).unwrap();
             self.debounce_state.retain(|_, (_, time)| *time > cutoff);
         }
 
@@ -253,8 +252,7 @@ impl FileWatcher {
                 let prefix = &pattern[..pattern.len() - 1];
                 if path
                     .file_name()
-                    .map(|n| n.to_string_lossy().starts_with(prefix))
-                    .unwrap_or(false)
+                    .is_some_and(|n| n.to_string_lossy().starts_with(prefix))
                 {
                     return true;
                 }
@@ -282,16 +280,16 @@ impl FileWatcher {
     }
 }
 
-/// Async wrapper for FileWatcher that can be used with tokio
+/// Async wrapper for `FileWatcher` that can be used with tokio
 pub struct AsyncFileWatcher {
     /// The underlying sync watcher
     watcher: FileWatcher,
 
-    /// Tokio channel for sending events
-    event_tx: tokio_mpsc::Sender<FileEvent>,
+    /// Async channel sender for events
+    event_tx: crossfire::MAsyncTx<crossfire::mpsc::Array<FileEvent>>,
 
-    /// Tokio channel for receiving events
-    event_rx: tokio_mpsc::Receiver<FileEvent>,
+    /// Async channel receiver for events
+    event_rx: crossfire::AsyncRx<crossfire::mpsc::Array<FileEvent>>,
 }
 
 impl AsyncFileWatcher {
@@ -303,7 +301,7 @@ impl AsyncFileWatcher {
     /// Create a new async file watcher with custom configuration
     pub fn with_config(config: FileWatchConfig) -> Result<Self> {
         let watcher = FileWatcher::with_config(config)?;
-        let (event_tx, event_rx) = tokio_mpsc::channel(100);
+        let (event_tx, event_rx) = crossfire::mpsc::bounded_async::<FileEvent>(100);
 
         Ok(Self {
             watcher,
@@ -339,12 +337,12 @@ impl AsyncFileWatcher {
 
     /// Receive from the event channel (for use after spawning the watcher task)
     pub async fn recv(&mut self) -> Option<FileEvent> {
-        self.event_rx.recv().await
+        self.event_rx.recv().await.ok()
     }
 
     /// Spawn the watcher as a background task
     /// Returns a receiver for events
-    pub fn spawn(mut self) -> tokio_mpsc::Receiver<FileEvent> {
+    pub fn spawn(mut self) -> crossfire::AsyncRx<crossfire::mpsc::Array<FileEvent>> {
         let tx = self.event_tx.clone();
 
         tokio::spawn(async move {

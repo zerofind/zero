@@ -12,8 +12,6 @@ env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
   BINARY_NAME: zero
-  R2_BUCKET: zero-releases
-  DL_DOMAIN: dl.zerofiles.app
 
 jobs:
   build:
@@ -69,8 +67,8 @@ jobs:
           cp target/${{ matrix.target }}/release/${BINARY_NAME} dist/${ARTIFACT_NAME}/
           cp LICENSE README.md dist/${ARTIFACT_NAME}/ 2>/dev/null || true
           # Include macOS app icon for bundle creation during install
-          if [[ "${{ matrix.os_arch }}" == macos-* ]] && [ -f resources/AppIcon.icns ]; then
-            cp resources/AppIcon.icns dist/${ARTIFACT_NAME}/
+          if [[ "${{ matrix.os_arch }}" == macos-* ]] && [ -f assets/AppIcon.icns ]; then
+            cp assets/AppIcon.icns dist/${ARTIFACT_NAME}/
           fi
           cd dist
           tar -czf ${ARTIFACT_NAME}.tgz ${ARTIFACT_NAME}
@@ -84,7 +82,7 @@ jobs:
           path: dist/${{ env.BINARY_NAME }}-${{ env.VERSION }}-${{ matrix.os_arch }}.tgz*
 
   release:
-    name: Upload to R2
+    name: Create GitHub Release
     needs: [build]
     runs-on: ubuntu-latest
     steps:
@@ -105,38 +103,11 @@ jobs:
       - name: List artifacts
         run: ls -la dist/
 
-      - name: Ensure AWS CLI
-        run: |
-          if ! command -v aws &>/dev/null; then
-            curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o awscliv2.zip
-            unzip -q awscliv2.zip && sudo ./aws/install
-          fi
-          aws --version
-
-      - name: Upload to R2
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          AWS_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT_URL }}
-        run: |
-          # Upload versioned artifacts (immutable, cache forever)
-          for file in dist/*; do
-            aws s3 cp "$file" "s3://${R2_BUCKET}/v${VERSION}/$(basename $file)" \
-              --cache-control "public, max-age=31536000, immutable" \
-              --no-progress
-          done
-
-          # Update latest.txt (short cache so installs pick up new versions quickly)
-          echo "$VERSION" > latest.txt
-          aws s3 cp latest.txt s3://${R2_BUCKET}/latest.txt \
-            --cache-control "public, max-age=60" \
-            --content-type "text/plain" \
-            --no-progress
-
       - name: Create GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create $GITHUB_REF_NAME \
             --title "$GITHUB_REF_NAME" \
-            --notes "Download: https://${DL_DOMAIN}/v${VERSION}/"
+            --generate-notes \
+            dist/*

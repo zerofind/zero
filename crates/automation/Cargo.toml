@@ -1,0 +1,23 @@
+[package]
+name = "automation"
+version.workspace = true
+edition = "2024"
+description = "Trigger-based sync execution for Zero"
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+cache = { path = "../cache" }
+hasher = { path = "../hasher" }
+scanner = { path = "../scanner" }
+sync = { path = "../sync" }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true }
+crossfire = { workspace = true, features = ["tokio"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }

@@ -1,0 +1,21 @@
+[package]
+name = "dedup"
+version.workspace = true
+edition = "2024"
+description = "Duplicate file detection for Zero"
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+hasher = { path = "../hasher" }
+search = { path = "../search" }
+scanner = { path = "../scanner" }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+rayon = { workspace = true }
+crossfire = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

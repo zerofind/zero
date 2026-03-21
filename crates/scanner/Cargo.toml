@@ -1,0 +1,18 @@
+[package]
+name = "scanner"
+version.workspace = true
+edition = "2024"
+description = "Parallel directory walking for Zero"
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+jwalk = "0.8"
+rayon = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

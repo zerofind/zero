@@ -1,0 +1,21 @@
+[package]
+name = "updater"
+version.workspace = true
+edition = "2024"
+description = "Auto-update mechanism for Zero"
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+foundation = { path = "../foundation" }
+ureq = "3"
+flate2 = "1"
+tar = "0.4"
+sha2 = "0.10"
+hex = "0.4"
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }

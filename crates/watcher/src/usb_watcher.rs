@@ -1,31 +1,31 @@
-//! USB mount/unmount watcher using macOS DiskArbitration framework
+//! USB mount/unmount watcher using macOS `DiskArbitration` framework
 //!
 //! This module monitors for volume mount and unmount events on macOS.
-//! It uses the DiskArbitration framework via core-foundation bindings.
+//! It uses the `DiskArbitration` framework via core-foundation bindings.
 //!
-//! Note: DiskArbitration's disappear callback can be unreliable for detecting
+//! Note: `DiskArbitration`'s disappear callback can be unreliable for detecting
 //! unmounts, so we also use a polling fallback to detect when volumes disappear.
 
-use crate::events::{UsbEvent, UsbEventKind};
 use crate::UsbWatchConfig;
+use crate::events::{UsbEvent, UsbEventKind};
 use anyhow::Result;
-use core_foundation::base::{kCFAllocatorDefault, CFType, TCFType};
+use core_foundation::base::{CFType, TCFType, kCFAllocatorDefault};
 use core_foundation::dictionary::CFDictionary;
 use core_foundation::runloop::{
-    kCFRunLoopCommonModes, kCFRunLoopDefaultMode, CFRunLoop, CFRunLoopRef,
+    CFRunLoop, CFRunLoopRef, kCFRunLoopCommonModes, kCFRunLoopDefaultMode,
 };
 use core_foundation::string::CFString;
+use crossfire::mpsc as cf_mpsc;
 use std::collections::HashMap;
 use std::ffi::c_void;
 use std::path::PathBuf;
-use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
 // DiskArbitration framework bindings
 #[link(name = "DiskArbitration", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     fn DASessionCreate(allocator: core_foundation::base::CFAllocatorRef) -> DASessionRef;
     fn DASessionScheduleWithRunLoop(
         session: DASessionRef,
@@ -81,10 +81,10 @@ const DA_DISK_DESCRIPTION_DEVICE_MODEL_KEY: &str = "DADeviceModelKey";
 /// USB mount/unmount watcher
 pub struct UsbWatcher {
     /// Channel to receive events
-    event_rx: mpsc::Receiver<UsbEvent>,
+    event_rx: crossfire::Rx<cf_mpsc::List<UsbEvent>>,
 
     /// Handle to stop the watcher thread
-    stop_tx: mpsc::Sender<()>,
+    stop_tx: crossfire::MTx<cf_mpsc::List<()>>,
 
     /// The watcher thread handle
     thread_handle: Option<thread::JoinHandle<()>>,
@@ -104,7 +104,7 @@ struct VolumeInfo {
 
 /// Shared state for the watcher callbacks
 struct WatcherState {
-    event_tx: mpsc::Sender<UsbEvent>,
+    event_tx: crossfire::MTx<cf_mpsc::List<UsbEvent>>,
     /// Track volumes by BSD name (e.g., "disk4s1") -> volume info
     known_volumes: HashMap<String, VolumeInfo>,
     /// Last time we polled for unmounts
@@ -119,8 +119,8 @@ impl UsbWatcher {
 
     /// Create a new USB watcher with custom configuration
     pub fn with_config(config: UsbWatchConfig) -> Result<Self> {
-        let (event_tx, event_rx) = mpsc::channel();
-        let (stop_tx, stop_rx) = mpsc::channel();
+        let (event_tx, event_rx) = cf_mpsc::unbounded_blocking();
+        let (stop_tx, stop_rx) = cf_mpsc::unbounded_blocking();
 
         // Initialize known volumes by scanning /Volumes
         let known_volumes = scan_current_volumes_map();
@@ -148,8 +148,8 @@ impl UsbWatcher {
     pub fn try_next_event(&mut self) -> Option<UsbEvent> {
         match self.event_rx.try_recv() {
             Ok(event) => self.filter_event(event),
-            Err(mpsc::TryRecvError::Empty) => None,
-            Err(mpsc::TryRecvError::Disconnected) => {
+            Err(crossfire::TryRecvError::Empty) => None,
+            Err(crossfire::TryRecvError::Disconnected) => {
                 tracing::error!("USB watcher channel disconnected (try_recv)");
                 None
             }
@@ -158,12 +158,11 @@ impl UsbWatcher {
 
     /// Receive the next event (blocking)
     pub fn next_event(&mut self) -> Option<UsbEvent> {
-        match self.event_rx.recv() {
-            Ok(event) => self.filter_event(event),
-            Err(_) => {
-                tracing::error!("USB watcher channel disconnected (recv)");
-                None
-            }
+        if let Ok(event) = self.event_rx.recv() {
+            self.filter_event(event)
+        } else {
+            tracing::error!("USB watcher channel disconnected (recv)");
+            None
         }
     }
 
@@ -171,8 +170,8 @@ impl UsbWatcher {
     pub fn next_event_timeout(&mut self, timeout: Duration) -> Option<UsbEvent> {
         match self.event_rx.recv_timeout(timeout) {
             Ok(event) => self.filter_event(event),
-            Err(mpsc::RecvTimeoutError::Timeout) => None,
-            Err(mpsc::RecvTimeoutError::Disconnected) => {
+            Err(crossfire::RecvTimeoutError::Timeout) => None,
+            Err(crossfire::RecvTimeoutError::Disconnected) => {
                 tracing::error!("USB watcher channel disconnected (recv_timeout)");
                 None
             }
@@ -257,10 +256,10 @@ fn scan_current_volumes_map() -> HashMap<String, VolumeInfo> {
             let path = entry.path();
             if path.is_dir() {
                 // Use the volume name as a pseudo-BSD name for initial scan
-                let key = path
-                    .file_name()
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_else(|| path.to_string_lossy().to_string());
+                let key = path.file_name().map_or_else(
+                    || path.to_string_lossy().to_string(),
+                    |n| n.to_string_lossy().to_string(),
+                );
 
                 volumes.insert(
                     key,
@@ -289,27 +288,32 @@ fn scan_current_volumes_map() -> HashMap<String, VolumeInfo> {
     volumes
 }
 
-/// Run the DiskArbitration event loop
-fn run_disk_arbitration_loop(state: Arc<Mutex<WatcherState>>, stop_rx: mpsc::Receiver<()>) {
+/// Run the `DiskArbitration` event loop
+fn run_disk_arbitration_loop(
+    state: Arc<Mutex<WatcherState>>,
+    stop_rx: crossfire::Rx<cf_mpsc::List<()>>,
+) {
+    // SAFETY: All DiskArbitration calls require an unsafe block because they are
+    // FFI into Apple's C framework. The session is created, used, and cleaned up
+    // within this function. The Arc<Mutex<WatcherState>> is passed to callbacks
+    // via Arc::into_raw and reconstructed via Arc::from_raw on cleanup.
     unsafe {
-        // Create a DiskArbitration session
         let session = DASessionCreate(kCFAllocatorDefault);
         if session.is_null() {
             tracing::error!("Failed to create DiskArbitration session (null DASessionRef)");
             return;
         }
 
-        // Get the current run loop
         let run_loop = CFRunLoop::get_current();
         let run_loop_ref = run_loop.as_concrete_TypeRef();
 
-        // Schedule the session with the run loop
         DASessionScheduleWithRunLoop(session, run_loop_ref, kCFRunLoopCommonModes);
 
-        // Convert state to raw pointer for callbacks
+        // SAFETY: Arc::into_raw increments the refcount. The matching
+        // Arc::from_raw at the end of this function balances it. The raw
+        // pointer is passed to DA callbacks which only borrow it (no from_raw).
         let state_ptr = Arc::into_raw(Arc::clone(&state)) as *mut c_void;
 
-        // Register callbacks
         DARegisterDiskAppearedCallback(
             session,
             std::ptr::null(),
@@ -324,28 +328,25 @@ fn run_disk_arbitration_loop(state: Arc<Mutex<WatcherState>>, stop_rx: mpsc::Rec
             state_ptr,
         );
 
-        // Run the loop with periodic checks for stop signal and polling for unmounts
         loop {
-            // Run the loop for a short interval
             core_foundation::runloop::CFRunLoopRunInMode(
                 kCFRunLoopDefaultMode,
                 0.1, // 100ms
-                false as u8,
+                u8::from(false),
             );
 
-            // Check for stop signal
             if stop_rx.try_recv().is_ok() {
                 break;
             }
 
-            // Poll for unmounted volumes (fallback for unreliable DA callbacks)
             poll_for_unmounts(&state);
         }
 
-        // Cleanup
+        // Cleanup: unschedule before dropping the Arc the callbacks reference
         DASessionUnscheduleFromRunLoop(session, run_loop_ref, kCFRunLoopCommonModes);
 
-        // Reconstruct the Arc to drop it properly
+        // SAFETY: Balances the Arc::into_raw above. Callbacks are unregistered
+        // (session unscheduled) so no further access to state_ptr can occur.
         let _ = Arc::from_raw(state_ptr as *const Mutex<WatcherState>);
     }
 }
@@ -368,7 +369,7 @@ fn poll_for_unmounts(state: &Arc<Mutex<WatcherState>>) {
 
     // Find volumes that are in our known list but no longer exist
     let mut unmounted = Vec::new();
-    for (key, info) in guard.known_volumes.iter() {
+    for (key, info) in &guard.known_volumes {
         if !current_volumes.contains(&info.mount_point) {
             unmounted.push((key.clone(), info.clone()));
         }
@@ -399,6 +400,8 @@ extern "C" fn disk_appeared_callback(disk: DADiskRef, context: *mut c_void) {
         return;
     }
 
+    // SAFETY: context is an Arc::into_raw'd pointer to Mutex<WatcherState>.
+    // We borrow it (no Arc::from_raw) — ownership stays with the event loop.
     unsafe {
         let state = &*(context as *const Mutex<WatcherState>);
 
@@ -443,6 +446,7 @@ extern "C" fn disk_disappeared_callback(disk: DADiskRef, context: *mut c_void) {
         return;
     }
 
+    // SAFETY: Same as disk_appeared_callback — borrowed, not owned.
     unsafe {
         let state = &*(context as *const Mutex<WatcherState>);
 
@@ -467,7 +471,7 @@ extern "C" fn disk_disappeared_callback(disk: DADiskRef, context: *mut c_void) {
     }
 }
 
-/// Extract disk information from a DADisk reference, returning BSD name separately
+/// Extract disk information from a `DADisk` reference, returning BSD name separately
 unsafe fn extract_disk_info_with_bsd(
     disk: DADiskRef,
     kind: UsbEventKind,
@@ -557,7 +561,7 @@ fn get_string_value(dict: &CFDictionary<CFString, CFType>, key: &str) -> Option<
         if value.instance_of::<CFString>() {
             // Safety: we just checked the type
             let cf_string: CFString =
-                unsafe { CFString::wrap_under_get_rule(value.as_CFTypeRef() as *const _) };
+                unsafe { CFString::wrap_under_get_rule(value.as_CFTypeRef().cast()) };
             Some(cf_string.to_string())
         } else {
             None
@@ -574,8 +578,7 @@ fn get_url_path(dict: &CFDictionary<CFString, CFType>, key: &str) -> Option<Stri
         // The volume path is actually a CFURL
         if value.instance_of::<CFURL>() {
             // Safety: we just checked the type
-            let url: CFURL =
-                unsafe { CFURL::wrap_under_get_rule(value.as_CFTypeRef() as *const _) };
+            let url: CFURL = unsafe { CFURL::wrap_under_get_rule(value.as_CFTypeRef().cast()) };
             url.to_path().map(|p| p.to_string_lossy().to_string())
         } else {
             None
@@ -592,9 +595,9 @@ fn get_uuid_value(dict: &CFDictionary<CFString, CFType>, key: &str) -> Option<St
         if value.instance_of::<CFUUID>() {
             // Safety: we just checked the type
             let cf_uuid: CFUUID =
-                unsafe { CFUUID::wrap_under_get_rule(value.as_CFTypeRef() as *const _) };
+                unsafe { CFUUID::wrap_under_get_rule(value.as_CFTypeRef().cast()) };
             // Use the Debug/Description output which gives us the UUID string
-            Some(format!("{:?}", cf_uuid))
+            Some(format!("{cf_uuid:?}"))
         } else {
             None
         }
@@ -610,7 +613,7 @@ fn get_bool_value(dict: &CFDictionary<CFString, CFType>, key: &str) -> Option<bo
         if value.instance_of::<CFBoolean>() {
             // Safety: we just checked the type
             let b: CFBoolean =
-                unsafe { CFBoolean::wrap_under_get_rule(value.as_CFTypeRef() as *const _) };
+                unsafe { CFBoolean::wrap_under_get_rule(value.as_CFTypeRef().cast()) };
             Some(b.into())
         } else {
             None
@@ -627,7 +630,7 @@ fn get_number_value(dict: &CFDictionary<CFString, CFType>, key: &str) -> Option<
         if value.instance_of::<CFNumber>() {
             // Safety: we just checked the type
             let num: CFNumber =
-                unsafe { CFNumber::wrap_under_get_rule(value.as_CFTypeRef() as *const _) };
+                unsafe { CFNumber::wrap_under_get_rule(value.as_CFTypeRef().cast()) };
             num.to_i64()
         } else {
             None

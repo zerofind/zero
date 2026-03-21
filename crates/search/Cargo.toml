@@ -1,0 +1,41 @@
+[package]
+name = "search"
+version.workspace = true
+edition = "2024"
+description = "Roaring bitmap search index for Zero"
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+cache = { path = "../cache" }
+scanner = { path = "../scanner" }
+foundation = { path = "../foundation" }
+profiles = { path = "../profiles" }
+zero-watcher = { workspace = true }
+roaring = { version = "0.11", features = ["serde"] }
+globset = "0.4"
+zstd = { workspace = true }
+clap = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+postcard = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+rayon = { workspace = true }
+jwalk = "0.8"
+sha2 = "0.10"
+hex = "0.4"
+
+[dev-dependencies]
+tempfile = { workspace = true }
+divan = { workspace = true }
+
+[[bench]]
+name = "search_bench"
+harness = false
+
+[[bench]]
+name = "arena_bench"
+harness = false

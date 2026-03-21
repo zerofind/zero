@@ -1,0 +1,227 @@
+# macOS-Specific Cleanup Categories
+# These categories only apply to macOS systems
+
+# =============================================================================
+# Developer - Xcode and Apple development tools
+# =============================================================================
+
+[xcode_derived_data]
+name = "Xcode Build Data"
+patterns = ["~/Library/Developer/Xcode/DerivedData"]
+group = "developer"
+description = "Xcode project build files and indexes"
+warning = "You may need to rebuild your Xcode projects after cleanup"
+
+[xcode_archives]
+name = "Xcode Archives"
+patterns = ["~/Library/Developer/Xcode/Archives"]
+group = "developer"
+description = "Archived builds for App Store submission"
+warning = "Old archives cannot be recovered - ensure you have backups"
+
+[xcode_simulators]
+name = "iOS Simulators"
+patterns = ["~/Library/Developer/CoreSimulator/Devices"]
+group = "developer"
+description = "iOS/watchOS/tvOS simulator devices and data"
+warning = "Simulators will need to be re-downloaded"
+
+[ios_device_support]
+name = "iOS Device Support"
+patterns = [
+    "~/Library/Developer/Xcode/iOS DeviceSupport",
+    "~/Library/Developer/Xcode/watchOS DeviceSupport",
+    "~/Library/Developer/Xcode/tvOS DeviceSupport"
+]
+group = "developer"
+description = "Debug symbols for connected iOS devices"
+
+[cocoapods_cache]
+name = "CocoaPods Cache"
+patterns = ["~/Library/Caches/CocoaPods", "~/.cocoapods"]
+group = "developer"
+description = "CocoaPods dependency cache"
+warning = "Run 'pod install' to restore pods"
+
+[swiftpm_cache]
+name = "Swift Packages"
+patterns = ["~/Library/Caches/org.swift.swiftpm"]
+group = "developer"
+description = "Swift Package Manager cache"
+warning = "Xcode will re-download packages on next build"
+
+[carthage_cache]
+name = "Carthage Cache"
+patterns = ["~/Library/Caches/org.carthage.CarthageKit"]
+group = "developer"
+description = "Carthage dependency cache"
+
+# =============================================================================
+# System - macOS system caches and files
+# =============================================================================
+
+[system_caches]
+name = "Application Caches"
+patterns = ["~/Library/Caches"]
+group = "system"
+description = "Temporary files stored by applications"
+exclude = [
+    "~/Library/Caches/com.apple.Safari",
+    "~/Library/Caches/Google",
+    "~/Library/Caches/Firefox"
+]
+
+[system_logs]
+name = "System Logs"
+patterns = ["~/Library/Logs", "/var/log"]
+group = "system"
+description = "Application and system log files"
+min_age = "7d"
+
+[ds_store]
+name = ".DS_Store Files"
+patterns = ["**/.DS_Store"]
+group = "system"
+description = "Finder folder metadata files (safe to delete)"
+
+[spotlight_index]
+name = "Spotlight Index"
+patterns = [
+    "**/.Spotlight-V100",
+    "**/index.spotlightV3",
+    "**/.SpotlightIndex"
+]
+group = "system"
+description = "Spotlight search indexes - contains extracted text and OCR data"
+
+[system_junk]
+name = "System Junk"
+patterns = [
+    "**/._*",
+    "**/.localized",
+    "**/.fseventsd",
+    "**/.Trashes",
+    "**/.TemporaryItems",
+    "**/.com.apple.timemachine.donotpresent"
+]
+group = "system"
+description = "macOS system files (resource forks, localization markers, etc.)"
+
+[homebrew_cache]
+name = "Homebrew Cache"
+patterns = ["~/Library/Caches/Homebrew", "~/Library/Logs/Homebrew"]
+group = "system"
+description = "Homebrew downloaded bottles and build logs"
+warning = "Homebrew will re-download packages if needed"
+
+[quicklook_cache]
+name = "QuickLook Cache"
+patterns = ["~/Library/Caches/com.apple.QuickLook.thumbnailcache"]
+group = "system"
+description = "Cached QuickLook previews and thumbnails"
+
+# =============================================================================
+# iOS - iPhone/iPad related data
+# =============================================================================
+
+[ios_backups]
+name = "iOS Backups"
+patterns = ["~/Library/Application Support/MobileSync/Backup"]
+group = "ios"
+description = "iPhone and iPad backup files (can be very large)"
+warning = "These backups cannot be recovered once deleted!"
+
+[ios_software_updates]
+name = "iOS Software Updates"
+patterns = ["~/Library/iTunes/iPhone Software Updates", "~/Library/iTunes/iPad Software Updates"]
+group = "ios"
+description = "Downloaded iOS update files"
+
+# =============================================================================
+# Media - Photos, Music, Videos caches
+# =============================================================================
+
+[photos_cache]
+name = "Photos Cache"
+patterns = [
+    "~/Pictures/Photos Library.photoslibrary/private/com.apple.photoanalysisd",
+    "~/Pictures/Photos Library.photoslibrary/resources/cpl"
+]
+group = "media"
+description = "Photos app analysis and preview caches"
+
+[music_cache]
+name = "Music Cache"
+patterns = ["~/Library/Caches/com.apple.Music"]
+group = "media"
+description = "Apple Music cached streams and artwork"
+
+[podcast_cache]
+name = "Podcast Cache"
+patterns = ["~/Library/Group Containers/*.groups.com.apple.podcasts"]
+group = "media"
+description = "Downloaded podcast episodes"
+
+# =============================================================================
+# Mail - Email attachments and caches
+# =============================================================================
+
+[mail_downloads]
+name = "Mail Downloads"
+patterns = [
+    "~/Library/Mail Downloads",
+    "~/Library/Containers/com.apple.mail/Data/Library/Mail Downloads"
+]
+group = "mail"
+description = "Downloaded email attachments"
+
+[mail_cache]
+name = "Mail Cache"
+patterns = ["~/Library/Caches/com.apple.mail"]
+group = "mail"
+description = "Mail app cache files"
+
+# =============================================================================
+# Messages - iMessage attachments
+# =============================================================================
+
+[messages_attachments]
+name = "Messages Attachments"
+patterns = ["~/Library/Messages/Attachments"]
+group = "messages"
+description = "iMessage photo and file attachments"
+warning = "Attachments will be removed from message history"
+
+# =============================================================================
+# Documents - User files cleanup
+# =============================================================================
+
+[old_downloads]
+name = "Old Downloads"
+patterns = ["~/Downloads/*"]
+group = "documents"
+description = "Files in Downloads folder older than 30 days"
+min_age = "30d"
+
+[dmg_files]
+name = "Disk Images"
+patterns = ["~/Downloads/*.dmg", "~/Desktop/*.dmg"]
+group = "documents"
+description = "macOS disk images (often left after app installation)"
+
+[large_files]
+name = "Large Files"
+patterns = ["~/**/*"]
+group = "documents"
+description = "Files larger than 500MB"
+min_size = "500MB"
+
+# =============================================================================
+# Trash
+# =============================================================================
+
+[trash]
+name = "Trash"
+patterns = ["~/.Trash"]
+group = "trash"
+description = "Files in the Trash that can be permanently deleted"

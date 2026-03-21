@@ -1,0 +1,20 @@
+[package]
+name = "foundation"
+version.workspace = true
+edition = "2024"
+description = "Shared types, utilities, and output formatting for Zero"
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+dirs = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

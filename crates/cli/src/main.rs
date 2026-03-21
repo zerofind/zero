@@ -1,0 +1,735 @@
+//! zero - A resilient file synchronization and deduplication tool
+
+use std::env;
+use std::panic;
+use std::path::Path;
+use std::process;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+
+use clap::{CommandFactory, Parser};
+use cli::Cli;
+use foundation::output::{OutputMode, Outputter};
+
+mod cli;
+use cli::{Commands, ShellType};
+
+/// Global flag to track if we're in a panic state
+static PANICKING: AtomicBool = AtomicBool::new(false);
+
+/// All known CLI commands and flags (used by `preprocess_args` and `looks_like_path`)
+const KNOWN_COMMANDS: &[&str] = &[
+    "automation",
+    "cleanup",
+    "code",
+    "completions",
+    "cp",
+    "copy",
+    "delete",
+    "diff",
+    "disk",
+    "download",
+    "drives",
+    "dupes",
+    "erase",
+    "get",
+    "help",
+    "index",
+    "ls",
+    "list",
+    "rm",
+    "scan",
+    "search",
+    "service",
+    "sync",
+    "telemetry",
+    "templates",
+    "todo",
+    "update",
+    "verify",
+    "watch",
+    "wipe",
+    // flags
+    "--help",
+    "-h",
+    "--version",
+    "-V",
+];
+
+/// Set up a panic handler that ensures clean process exit
+/// This prevents zombie rayon threads from hanging around after a panic/stack overflow
+fn setup_panic_handler() {
+    // Store the default panic hook
+    let default_hook = panic::take_hook();
+
+    panic::set_hook(Box::new(move |panic_info| {
+        // Mark that we're panicking to prevent recursive issues
+        if PANICKING.swap(true, Ordering::SeqCst) {
+            // Already panicking, just abort immediately
+            eprintln!("\n⚠ Double panic detected, aborting immediately");
+            process::abort();
+        }
+
+        // Print panic info using the default handler
+        default_hook(panic_info);
+
+        // Print cleanup message
+        eprintln!("\n⚠ zero encountered a fatal error and must exit.");
+        eprintln!("  This ensures no zombie processes are left running.");
+
+        // Force immediate process exit to clean up all threads (including rayon pool)
+        // Using exit(1) instead of abort() for cleaner shutdown
+        // This is the "early exit strategy" - when things go wrong, exit fast and clean
+        process::exit(1);
+    }));
+}
+
+/// Configure the global rayon thread pool with proper panic handling
+fn setup_rayon_global_pool() {
+    // Configure the global rayon thread pool
+    // This sets up proper defaults and panic handling for any code using par_iter() etc.
+    let result = rayon::ThreadPoolBuilder::new()
+        .stack_size(8 * 1024 * 1024) // 8MB stack per thread to prevent stack overflow
+        .panic_handler(|panic_info| {
+            // Log the panic from a rayon thread
+            eprintln!("\n⚠ Panic in rayon worker thread: {panic_info:?}");
+            // The global panic handler will handle process exit
+        })
+        .build_global();
+
+    if let Err(e) = result {
+        // Global pool already initialized (e.g., in tests), that's fine
+        tracing::debug!(error = %e, "Rayon global pool already initialized");
+    }
+}
+
+/// Check if an argument looks like a path (local or cloud URL)
+/// Used to detect default sync command usage: `zero source dest`
+fn looks_like_path(s: &str) -> bool {
+    // Cloud URLs
+    if s.contains("://") {
+        return true;
+    }
+    // Absolute paths
+    if s.starts_with('/') || s.starts_with('~') {
+        return true;
+    }
+    // Relative paths
+    if s.starts_with("./") || s.starts_with("../") {
+        return true;
+    }
+    // Check if it's an existing path on disk
+    if Path::new(s).exists() {
+        return true;
+    }
+    // Could be a relative path that doesn't exist yet (destination)
+    // If it doesn't start with '-' and contains a path separator or extension dot
+    if !s.starts_with('-') && (s.contains('/') || s.contains('.')) && !KNOWN_COMMANDS.contains(&s) {
+        return true;
+    }
+    false
+}
+
+/// Pre-process arguments to support default sync command
+/// Transforms `zero source dest [options]` into `zero sync source dest [options]`
+fn preprocess_args() -> Vec<String> {
+    let args: Vec<String> = env::args().collect();
+
+    // Need at least: zero source dest
+    if args.len() < 3 {
+        return args;
+    }
+
+    // Check if the first argument after program name looks like a path
+    // and is NOT a known subcommand
+    let first_arg = &args[1];
+
+    // Skip if it's a global flag
+    if first_arg.starts_with('-') {
+        return args;
+    }
+
+    // Skip if it's a known subcommand
+    if KNOWN_COMMANDS.contains(&first_arg.as_str()) {
+        return args;
+    }
+
+    // Check if it looks like a path
+    if looks_like_path(first_arg) {
+        // Insert "sync" as the subcommand
+        let mut new_args = vec![args[0].clone(), "sync".to_string()];
+        new_args.extend(args[1..].iter().cloned());
+        return new_args;
+    }
+
+    args
+}
+
+fn main() -> anyhow::Result<()> {
+    // IMPORTANT: Set up panic handler FIRST before anything else
+    // This ensures clean exit on panics, preventing zombie rayon threads
+    setup_panic_handler();
+
+    // Configure rayon with larger stacks and panic handling
+    setup_rayon_global_pool();
+
+    // Pre-process args to support default sync command: `zero source dest`
+    let args = preprocess_args();
+    let cli = Cli::parse_from(args);
+
+    // Create output handler
+    let output_mode = if cli.json {
+        OutputMode::Json
+    } else {
+        OutputMode::Human
+    };
+    let out = Outputter::new(output_mode);
+
+    // Set up logging (only in human mode).
+    // Priority: RUST_LOG env > --verbose flag > default (warn).
+    if !cli.json {
+        foundation::logging::init(if cli.verbose {
+            foundation::logging::VERBOSE
+        } else {
+            "warn"
+        });
+
+        tracing::info!(
+            version = env!("CARGO_PKG_VERSION"),
+            platform = std::env::consts::OS,
+            arch = std::env::consts::ARCH,
+            "zero starting"
+        );
+    }
+
+    // First-run telemetry notice (only once, on first launch)
+    if !cli.json && telemetry::check_first_run() {
+        eprintln!("Zero collects anonymous usage statistics to improve the product.");
+        eprintln!("No file names, paths, or personal data is ever collected.");
+        eprintln!("Run `zero telemetry show` to see exactly what is sent.");
+        eprintln!("Run `zero telemetry off` to disable.\n");
+    }
+
+    // Handle no command: launch GUI
+    let command = if let Some(cmd) = cli.command {
+        cmd
+    } else {
+        telemetry::record_ui_launch();
+        ui::launch();
+        return Ok(());
+    };
+
+    // Background telemetry report (skip for telemetry/service commands)
+    match &command {
+        Commands::Telemetry { .. } | Commands::Service { .. } => {}
+        _ => telemetry::maybe_report(),
+    }
+
+    // Background update check: spawn a thread for non-update, non-service commands
+    // when auto_update is enabled and enough time has passed since the last check
+    let update_hint: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+    let bg_check = match &command {
+        Commands::Update { .. } | Commands::Service { .. } => false,
+        _ => updater::read_auto_update_setting() && updater::should_check(),
+    };
+
+    if bg_check {
+        let hint = Arc::clone(&update_hint);
+        std::thread::spawn(move || {
+            if let Ok(updater::UpdateStatus::Available { version }) = updater::check_latest()
+                && let Ok(mut h) = hint.lock()
+            {
+                *h = Some(version);
+            }
+            updater::record_check();
+        });
+    }
+
+    match command {
+        // =====================================================================
+        // Primary commands
+        // =====================================================================
+        Commands::Sync {
+            source,
+            dest,
+            verify,
+            hash_on_copy,
+            preserve_permissions,
+            exclude,
+            dry_run,
+            mirror,
+            no_chunked,
+            chunk_threshold,
+        } => {
+            // --verify implies checksum comparison AND hash-on-copy
+            // --hash-on-copy only does hash-on-copy (mtime+size comparison)
+            let use_checksum = verify;
+            let do_hash_on_copy = verify || hash_on_copy;
+            cli::commands::cmd_sync(
+                &out,
+                &cli::commands::CmdSyncOptions {
+                    source: &source,
+                    dest: &dest,
+                    use_checksum,
+                    delete_orphans: mirror,
+                    hash_on_copy: do_hash_on_copy,
+                    preserve_permissions,
+                    exclude_patterns: &exclude,
+                    dry_run,
+                    chunked: !no_chunked, // chunked is default, flag disables it
+                    chunk_threshold,
+                },
+            )?;
+        }
+
+        // Top-level ls command (works with local and cloud paths)
+        Commands::Ls {
+            path,
+            recursive,
+            long,
+        } => {
+            cli::commands::cmd_cloud_ls(&out, &path, recursive, long)?;
+        }
+
+        // Top-level cp command (works with local and cloud paths)
+        Commands::Cp {
+            source,
+            dest,
+            recursive,
+        } => {
+            cli::commands::cmd_cloud_cp(&out, &source, &dest, recursive)?;
+        }
+
+        // Top-level get command (quick download from cloud)
+        Commands::Get {
+            url,
+            output,
+            recursive,
+        } => {
+            cli::commands::cmd_get(&out, &url, &output, recursive)?;
+        }
+
+        // =====================================================================
+        // Verification and comparison
+        // =====================================================================
+        Commands::Diff {
+            source,
+            dest,
+            checksum,
+            full,
+            check_permissions,
+            show_identical,
+            max_depth,
+        } => {
+            cli::commands::cmd_diff(
+                &out,
+                &source,
+                &dest,
+                checksum,
+                full,
+                check_permissions,
+                show_identical,
+                max_depth,
+            )?;
+        }
+
+        // =====================================================================
+        // File operations
+        // =====================================================================
+        Commands::Delete {
+            paths,
+            permanent,
+            force,
+            dry_run,
+        } => {
+            let args = cli::commands::delete::DeleteArgs {
+                paths,
+                trash: !permanent, // Default is trash (safe), --permanent disables it
+                recursive: true,   // Always recursive for directories
+                force,
+                dry_run,
+            };
+            cli::commands::cmd_delete(&out, &args)?;
+        }
+
+        Commands::Dupes {
+            path,
+            query,
+            type_filter,
+            from_file,
+            delete,
+            verify,
+            max_depth,
+            min_size,
+        } => {
+            let args = cli::commands::dupes::DupesArgs {
+                path,
+                query,
+                type_filter,
+                from_file,
+                delete,
+                verify,
+                max_depth,
+                min_size,
+            };
+            cli::commands::cmd_dupes(&out, &args)?;
+        }
+
+        Commands::Scan {
+            path,
+            max_depth,
+            follow_symlinks,
+            benchmark,
+            skip_hidden,
+        } => {
+            if let Some(iterations) = benchmark {
+                cli::commands::cmd_benchmark(
+                    &out,
+                    &path,
+                    max_depth,
+                    follow_symlinks,
+                    iterations,
+                    skip_hidden,
+                )?;
+            } else {
+                cli::commands::cmd_scan(&out, &path, max_depth, follow_symlinks, skip_hidden)?;
+            }
+        }
+
+        Commands::Index {
+            path,
+            algorithm,
+            max_depth,
+            stats,
+            list,
+            no_store,
+            prune,
+            benchmark,
+        } => {
+            cli::commands::cmd_index(
+                &out,
+                &cli::commands::IndexOptions {
+                    path: &path,
+                    algorithm,
+                    max_depth,
+                    stats,
+                    list,
+                    no_store,
+                    prune,
+                    benchmark,
+                },
+            )?;
+        }
+
+        // =====================================================================
+        // System information
+        // =====================================================================
+        Commands::Drives => {
+            cli::commands::cmd_drives(&out)?;
+        }
+
+        Commands::Disk { path } => {
+            cli::commands::cmd_disk(&out, &path)?;
+        }
+
+        Commands::Erase {
+            path,
+            level,
+            verify,
+            force,
+            dry_run,
+        } => {
+            let args = cli::commands::erase::EraseArgs {
+                path,
+                level,
+                verify,
+                force,
+                dry_run,
+            };
+            cli::commands::cmd_erase(&out, &args)?;
+        }
+
+        // =====================================================================
+        // Automation and monitoring
+        // =====================================================================
+        Commands::Automation { auto_cmd } => {
+            cli::commands::cmd_automation(&out, auto_cmd)?;
+        }
+
+        Commands::Templates { show, resolve } => {
+            cli::commands::cmd_templates(&out, show, resolve)?;
+        }
+
+        Commands::Watch { watch_cmd } => {
+            cli::commands::cmd_watch(&out, watch_cmd)?;
+        }
+
+        // =====================================================================
+        // Search
+        // =====================================================================
+        Commands::Search {
+            query,
+            r#in: path_filter,
+            index,
+            cache,
+            limit,
+            count,
+            files_only,
+            dirs_only,
+            extension,
+            type_filter,
+            types,
+            recent,
+            watch,
+            sort,
+            min_size,
+            max_size,
+            exclude_hidden,
+            open,
+            reveal,
+        } => {
+            if types {
+                cli::commands::cmd_search_types(&out)?;
+            } else if watch {
+                // Watch mode requires --index to specify what to watch
+                if let Some(index_path) = index {
+                    cli::commands::cmd_search_watch(&out, &index_path, cache.as_deref())?;
+                } else {
+                    out.error("Usage: zero search --watch --index <path>");
+                    out.info("Specify the directory to watch with --index");
+                }
+            } else if let Some(index_path) = index {
+                cli::commands::cmd_search_index(&out, &index_path, cache.as_deref())?;
+            } else if query.is_some()
+                || type_filter.is_some()
+                || !extension.is_empty()
+                || path_filter.is_some()
+                || recent.is_some()
+            {
+                // Allow search with: query, type filter, extension filter, path, or recent (or combination)
+                cli::commands::cmd_search(
+                    &out,
+                    &cli::commands::SearchOptions {
+                        query: query.as_deref(),
+                        path_filter: path_filter.as_deref(),
+                        cache_path: cache.as_deref(),
+                        limit,
+                        count_only: count,
+                        files_only,
+                        dirs_only,
+                        extensions: &extension,
+                        type_filter,
+                        recent,
+                        sort: sort.as_deref(),
+                        min_size: min_size.as_deref(),
+                        max_size: max_size.as_deref(),
+                        exclude_hidden,
+                        open,
+                        reveal,
+                    },
+                )?;
+            } else {
+                out.error("Usage: zero search <query> or zero search --type <type>");
+                out.info("Run 'zero search --types' to see available type filters");
+                out.info("Example: zero search --type images");
+            }
+        }
+
+        // =====================================================================
+        // Service mode (XPC daemon integration)
+        // =====================================================================
+        Commands::Service { verbose } => {
+            // Service mode runs in JSON-RPC mode for XPC daemon
+            // It doesn't use the normal outputter since it communicates via stdin/stdout
+            service::run_service(verbose)?;
+        }
+
+        // =====================================================================
+        // Shell completions
+        // =====================================================================
+        Commands::Completions { shell, install } => {
+            cmd_completions(shell, install)?;
+        }
+
+        // =====================================================================
+        // Cleanup
+        // =====================================================================
+        Commands::Cleanup { cleanup_cmd } => {
+            cli::commands::cmd_cleanup(&out, cleanup_cmd)?;
+        }
+
+        // =====================================================================
+        // Todo management
+        // =====================================================================
+        Commands::Todo { todo_cmd } => {
+            cli::commands::cmd_todo(&out, todo_cmd.as_ref())?;
+        }
+
+        // =====================================================================
+        // Updates
+        // =====================================================================
+        Commands::Update { check } => {
+            cli::commands::cmd_update(&out, check)?;
+        }
+
+        // =====================================================================
+        // Telemetry
+        // =====================================================================
+        Commands::Telemetry { telemetry_cmd } => {
+            cli::commands::cmd_telemetry(&out, &telemetry_cmd)?;
+        }
+
+        // =====================================================================
+        // Code indexing
+        // =====================================================================
+        Commands::Code { code_cmd } => {
+            use cli::CodeCommands;
+            match code_cmd {
+                CodeCommands::Index { path, git_only } => {
+                    cli::commands::cmd_code_index(&out, &path, git_only)?;
+                }
+                CodeCommands::Search {
+                    query,
+                    kind,
+                    language,
+                    project,
+                    limit,
+                } => {
+                    cli::commands::cmd_code_search(
+                        &out,
+                        &query,
+                        kind.as_deref(),
+                        language.as_deref(),
+                        project.as_ref(),
+                        limit,
+                    )?;
+                }
+                CodeCommands::Overview { path } => {
+                    cli::commands::cmd_code_overview(&out, &path)?;
+                }
+                CodeCommands::List => {
+                    cli::commands::cmd_code_list(&out)?;
+                }
+                CodeCommands::Remove { path } => {
+                    cli::commands::cmd_code_remove(&out, &path)?;
+                }
+                CodeCommands::Symbols {
+                    project,
+                    kind,
+                    limit,
+                } => {
+                    cli::commands::cmd_code_project_symbols(
+                        &out,
+                        &project,
+                        kind.as_deref(),
+                        limit,
+                    )?;
+                }
+            }
+        }
+    }
+
+    // Print update hint if background check found a new version
+    if let Ok(hint) = update_hint.lock()
+        && let Some(version) = hint.as_ref()
+    {
+        eprintln!("hint: zero v{version} available — run `zero update` to install");
+    }
+
+    Ok(())
+}
+
+/// Generate or install shell completions
+fn cmd_completions(shell: Option<ShellType>, install: bool) -> anyhow::Result<()> {
+    if install {
+        // Auto-detect shell and install
+        let shell_name = env::var("SHELL").unwrap_or_default();
+        let detected = if shell_name.contains("fish") {
+            ShellType::Fish
+        } else if shell_name.contains("zsh") {
+            ShellType::Zsh
+        } else if shell_name.contains("bash") {
+            ShellType::Bash
+        } else {
+            anyhow::bail!(
+                "Could not detect shell from $SHELL='{shell_name}'\n\
+                 Specify shell explicitly: zero completions fish"
+            );
+        };
+
+        let shell_type: clap_complete::Shell = detected.into();
+        let (path, instructions) = get_completion_path(detected)?;
+
+        // Generate completions
+        let mut cmd = Cli::command();
+        let mut buf = Vec::new();
+        clap_complete::generate(shell_type, &mut cmd, "zero", &mut buf);
+
+        // Create parent directory if needed
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
+        // Write to file
+        std::fs::write(&path, &buf)?;
+
+        eprintln!("✓ Installed completions to {}", path.display());
+        eprintln!("  {instructions}");
+
+        return Ok(());
+    }
+
+    // Generate to stdout
+    let shell = shell.ok_or_else(|| {
+        anyhow::anyhow!(
+            "Specify a shell: zero completions fish\n\
+             Or use --install to auto-detect and install"
+        )
+    })?;
+
+    let shell_type: clap_complete::Shell = shell.into();
+    let mut cmd = Cli::command();
+    clap_complete::generate(shell_type, &mut cmd, "zero", &mut std::io::stdout());
+
+    Ok(())
+}
+
+/// Get the completion file path and reload instructions for a shell
+fn get_completion_path(shell: ShellType) -> anyhow::Result<(std::path::PathBuf, &'static str)> {
+    let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
+
+    match shell {
+        ShellType::Fish => {
+            let path = home.join(".config/fish/completions/zero.fish");
+            Ok((
+                path,
+                "Restart fish or run: source ~/.config/fish/completions/zero.fish",
+            ))
+        }
+        ShellType::Zsh => {
+            let path = home.join(".zfunc/_zero");
+            Ok((
+                path,
+                "Add to .zshrc: fpath=(~/.zfunc $fpath); autoload -Uz compinit && compinit",
+            ))
+        }
+        ShellType::Bash => {
+            let path = home.join(".local/share/bash-completion/completions/zero");
+            Ok((
+                path,
+                "Restart bash or run: source ~/.local/share/bash-completion/completions/zero",
+            ))
+        }
+        ShellType::Elvish => {
+            let path = home.join(".elvish/lib/completions/zero.elv");
+            Ok((path, "Restart elvish to load completions"))
+        }
+        ShellType::PowerShell => {
+            let path = home.join("Documents/PowerShell/Completions/zero.ps1");
+            Ok((
+                path,
+                "Add to $PROFILE: . ~/Documents/PowerShell/Completions/zero.ps1",
+            ))
+        }
+    }
+}

@@ -1,9 +1,12 @@
 [package]
 name = "zero-watcher"
 version.workspace = true
-edition = "2021"
+edition = "2024"
 description = "File system and USB mount watching for zero"
 license.workspace = true
+
+[lints]
+workspace = true
 
 [lib]
 name = "zero_watcher"
@@ -20,25 +23,28 @@ notify = "8.2"
 notify-debouncer-mini = "0.7"
 
 # Async runtime
-tokio = { version = "1.41", features = ["rt-multi-thread", "macros", "sync", "time"] }
+tokio = { workspace = true }
 
 # Serialization
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 # Error handling
-thiserror = "2.0"
-anyhow = "1.0"
+thiserror = { workspace = true }
+anyhow = { workspace = true }
 
 # Logging
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 
 # CLI for test binary
-clap = { version = "4.5", features = ["derive"] }
+clap = { workspace = true }
 
 # Time handling
 chrono = { version = "0.4", features = ["serde"] }
+
+# Channels
+crossfire = { workspace = true, features = ["tokio"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # macOS frameworks for USB detection
@@ -46,5 +52,5 @@ core-foundation = { version = "0.10", features = ["uuid"] }
 core-foundation-sys = "0.8"
 
 [dev-dependencies]
-tempfile = "3.13"
+tempfile = { workspace = true }
 

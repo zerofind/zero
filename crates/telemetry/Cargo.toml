@@ -1,0 +1,19 @@
+[package]
+name = "telemetry"
+version.workspace = true
+edition = "2024"
+description = "Privacy-first telemetry for Zero"
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+foundation = { path = "../foundation" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+sha2 = "0.10"
+hex = "0.4"
+dirs = { workspace = true }
+ureq = "3"

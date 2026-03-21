@@ -1,0 +1,82 @@
+# File Type Definitions
+# Global classification of files by extension
+# Used by both indexing (TypeIndex) and cleanup queries
+
+[images]
+extensions = [
+    "png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "bmp", "tiff", "tif",
+    "svg", "ico", "cr2", "nef", "arw", "orf", "raf", "psd", "ai", "eps",
+    "dng", "rw2", "srw", "x3f"
+]
+
+[videos]
+extensions = [
+    "mp4", "mov", "avi", "mkv", "webm", "m4v", "wmv", "flv", "mpg", "mpeg",
+    "3gp", "3g2", "m2ts", "vob", "ogv", "rm", "rmvb", "asf", "divx"
+]
+
+[audio]
+extensions = [
+    "mp3", "wav", "flac", "aac", "ogg", "oga", "opus", "wma", "m4a", "alac",
+    "aiff", "aif", "mid", "midi", "ape", "wv", "mka", "ac3", "dts"
+]
+
+[documents]
+extensions = [
+    "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp",
+    "rtf", "txt", "md", "markdown", "tex", "pages", "numbers", "key", "epub",
+    "mobi", "azw", "azw3", "djvu", "chm"
+]
+
+[code]
+extensions = [
+    "rs", "py", "js", "ts", "jsx", "tsx", "go", "java", "c", "cpp", "cc", "cxx",
+    "h", "hpp", "hh", "swift", "kt", "kts", "rb", "php", "cs", "scala", "zig",
+    "hs", "ml", "mli", "ex", "exs", "erl", "hrl", "clj", "cljs", "lisp", "scm",
+    "rkt", "lua", "pl", "pm", "r", "jl", "nim", "cr", "v", "d", "f", "f90",
+    "f95", "asm", "s", "sql", "sh", "bash", "zsh", "fish", "ps1", "psm1", "bat",
+    "cmd", "vue", "svelte", "elm"
+]
+
+[archives]
+extensions = [
+    "zip", "tar", "gz", "tgz", "bz2", "xz", "7z", "rar", "dmg", "iso", "cab",
+    "lzma", "lz", "zst", "lz4", "br", "arj", "ace", "sit", "sitx", "pkg"
+]
+
+[config]
+extensions = [
+    "json", "yaml", "yml", "toml", "xml", "ini", "conf", "cfg", "env",
+    "properties", "plist", "editorconfig", "gitignore", "dockerignore"
+]
+
+[executables]
+extensions = [
+    "exe", "msi", "app", "apk", "ipa", "jar", "deb", "rpm", "bin", "run",
+    "appimage", "com", "scr", "gadget", "msp", "msu"
+]
+
+[fonts]
+extensions = [
+    "ttf", "otf", "woff", "woff2", "eot", "fon", "fnt"
+]
+
+# Language-specific subsets (for more precise filtering)
+
+[rust]
+extensions = ["rs", "rlib", "rmeta"]
+
+[go]
+extensions = ["go", "mod", "sum"]
+
+[swift]
+extensions = ["swift", "swiftmodule", "swiftdoc"]
+
+[typescript]
+extensions = ["ts", "tsx", "mts", "cts"]
+
+[javascript]
+extensions = ["js", "jsx", "mjs", "cjs"]
+
+[python]
+extensions = ["py", "pyi", "pyc", "pyo", "pyw"]

@@ -1,0 +1,24 @@
+[package]
+name = "cache"
+version.workspace = true
+edition = "2024"
+description = "SQLite persistence layer for Zero"
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+foundation = { path = "../foundation" }
+etchdb = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+postcard = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+anyhow = { workspace = true }
+sha2 = "0.10"
+hex = "0.4"
+
+[dev-dependencies]
+tempfile = { workspace = true }
