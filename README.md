@@ -23,47 +23,41 @@ curl -sSfL https://zero-coral-tau.vercel.app | bash
 ```
 
 
-## Finder, done right
+## What it does
 
-Permissions, owner, git status — visible in every row. Workspaces that remember your bookmarks. Cmd+K to jump to any file or action.
+- **File browser** — Browse files with native git status, permissions, and inline documents. Split pane, workspaces, Cmd+K palette, Quick Look.
 
-- Split pane — drag between folders without juggling windows.
-- Configurable columns, inline rename, multiple selection. 6 native themes.
+- **Search** — Search 1.7M files in 83ms, ranked by frequency and recency. Filter by type, extension, language, size, or path.
 
+- **Text editor** — Edit files inline. Markdown, JSON, TOML, YAML, XML, plain text, config files, and code.
 
-## Fast search. Smart results.
+- **Data tables** — Open a CSV and see a real table. Sortable columns, auto-detected delimiters.
 
-Searches 1.7 million files in 83 milliseconds. Results ranked by frequency and recency — files you use surface first.
+- **Git integration** — See modified, staged, and untracked files in the file browser.
 
-- Filter by type (images, videos, code, documents), extension, language, size, path, or recency.
+- **Copy & sync** — Transfer files that resume from the exact byte. Survives sleep, crashes, and disconnects. Every file checksum-verified. Mirror, verify, exclude, dry run.
 
+- **Cloud transfer** — Sync to S3, Backblaze B2, Google Cloud Storage, Dropbox, and WebDAV.
 
-## Never restart a copy again
+- **Cleanup** — Find and remove files eating your disk — node_modules, build caches, system logs, old downloads. Preview size before deleting. Reversible.
 
-Zero resumes from the exact byte — survives sleep, crashes, and disconnects. Every file checksum-verified.
+- **Deduplication** — Find identical files across folders and drives. Filter by type or query. Batch deletion with verification.
 
-- Mirror, verify, exclude, dry run, permission preservation. Backup templates included.
-- Cloud storage: S3, Backblaze B2, Google Cloud Storage, Dropbox, WebDAV.
+- **Code intelligence** — Search for functions, types, and traits by name across every project on your machine. Rust and Go.
 
+- **AI agent** — Automate tasks and discover your files with AI. Ask it to find, move, rename, or clean up — has your full file index. Bring your own key.
 
-## Agentic Mode
+- **MCP server** — Expose search and code intelligence to any external AI tool or IDE.
 
-The agent has your full file index. Ask it to find, move, rename, or clean up — shows every step.
+- **Automation** — Run syncs automatically when a USB drive connects or source files change. Runs in the background.
 
-- Claude Sonnet 4.6, Opus 4.6, GPT-5, and more. Bring your own key.
-- MCP server — any external AI tool or IDE can query Zero's search and code intelligence.
+- **Secure erase** — Permanently wipe files with quick, normal, or strong multi-pass methods. Refuses system disks.
 
+- **Themes** — Native themes with light and dark variants.
 
-## More
+- **CLI** — JSON output, shell completions, pipe-friendly. `zero /src /dst` just works.
 
-- **Code intelligence** — search for a function and get its definition, not every file that mentions it. Structural search across every project on your machine.
-- **Git integration** — modified, staged, untracked visible in the file browser. Folders show change counts.
-- **Text editor** — built-in editor with syntax highlighting for 28 languages.
-- **Data tables** — open a CSV and see a real table. Sortable columns, auto-detected delimiters.
-- **Cleanup** — node_modules, build caches, system logs, old downloads — 36 categories. Shows size before you touch anything. Reversible with Put Back.
-- **Deduplication** — scans folders and drives for identical files. Batch deletion with verification.
-- **Automation** — auto-sync when a USB drive connects or source files change. Daemon mode.
-- **Disk** — volumes, capacity, filesystem details. Secure erase with multiple strength levels.
+- **Privacy** — 100% local search — nothing leaves your machine. Opt-in telemetry with full inspection. No silent network calls.
 
 
 ## Performance
