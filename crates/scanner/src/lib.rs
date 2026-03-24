@@ -17,7 +17,7 @@
 //! let progress = Arc::new(CrawlProgress::new());
 //! let entries = scan_with_progress(
 //!     Path::new("/some/path"),
-//!     ScanOptions::default(),
+//!     &ScanOptions::default(),
 //!     Some(progress),
 //! ).unwrap();
 //! ```

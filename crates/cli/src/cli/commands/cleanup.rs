@@ -50,7 +50,7 @@ fn cmd_cleanup_dev(
     }
 
     let progress = Arc::new(DevScanProgress::new());
-    let result = scan_dev_garbage(&resolved, category, max_depth, Some(progress));
+    let result = scan_dev_garbage(&resolved, category, max_depth, Some(&progress));
 
     let duration_ms = start.elapsed().as_millis() as u64;
 
@@ -148,7 +148,11 @@ fn cmd_cleanup_dev(
         return Ok(());
     }
 
-    let selected: Vec<_> = indices.iter().map(|&i| &scan_result.items[i]).collect();
+    // SAFETY(index): indices are validated by parse_selection to be in bounds
+    let selected: Vec<_> = indices
+        .iter()
+        .filter_map(|&i| scan_result.items.get(i))
+        .collect();
     let selected_bytes: u64 = selected.iter().map(|i| i.total_bytes).sum();
 
     if !out.is_json() {
@@ -165,7 +169,7 @@ fn cmd_cleanup_dev(
         .recursive(true)
         .continue_on_error(true);
 
-    let delete_result = delete_paths(&paths, options);
+    let delete_result = delete_paths(&paths, &options);
     let total_duration_ms = start.elapsed().as_millis() as u64;
 
     match delete_result {

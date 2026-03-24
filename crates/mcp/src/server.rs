@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -79,10 +80,10 @@ fn format_time(unix_ts: u64) -> String {
 }
 
 fn days_to_ymd(days: u64) -> (u64, u64, u64) {
-    let z = days + 719468;
-    let era = z / 146097;
-    let doe = z - era * 146097;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let z = days + 719_468;
+    let era = z / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
     let y = yoe + era * 400;
     let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
     let mp = (5 * doy + 2) / 153;
@@ -296,14 +297,15 @@ impl ZeroMcpServer {
             let mut text = String::from("Indexed code projects:\n\n");
             for p in &projects {
                 let langs: Vec<&str> = p.languages.iter().map(code::Language::as_str).collect();
-                text.push_str(&format!(
-                    "{}    {}    {} symbols    {} files    {} LOC\n",
+                let _ = writeln!(
+                    text,
+                    "{}    {}    {} symbols    {} files    {} LOC",
                     p.path.display(),
                     langs.join(", "),
                     p.symbol_count,
                     p.file_count,
                     p.lines_of_code,
-                ));
+                );
             }
             return Ok(CallToolResult::success(vec![Content::text(text)]));
         }
@@ -335,10 +337,10 @@ impl ZeroMcpServer {
             for r in &results {
                 let e = &r.element;
                 if e.file_path != current_file {
-                    current_file = e.file_path.clone();
-                    text.push_str(&format!("// {current_file}\n"));
+                    current_file.clone_from(&e.file_path);
+                    let _ = writeln!(text, "// {current_file}");
                 }
-                text.push_str(&format!("{}\n", e.signature));
+                let _ = writeln!(text, "{}", e.signature);
             }
 
             return Ok(CallToolResult::success(vec![Content::text(text)]));
@@ -370,19 +372,20 @@ impl ZeroMcpServer {
         );
         for r in &results {
             let e = &r.element;
-            text.push_str(&format!("{}\n", e.signature));
-            text.push_str(&format!(
-                "  {}:{}  [{}]  {}  {}\n",
+            let _ = writeln!(text, "{}", e.signature);
+            let _ = writeln!(
+                text,
+                "  {}:{}  [{}]  {}  {}",
                 e.file_path,
                 e.line_number,
                 short_project_name(&r.project_path),
                 e.language,
                 e.kind,
-            ));
+            );
             if let Some(doc) = &e.doc
                 && let Some(first_line) = doc.lines().next()
             {
-                text.push_str(&format!("  /// {first_line}\n"));
+                let _ = writeln!(text, "  /// {first_line}");
             }
             text.push('\n');
         }
@@ -407,14 +410,11 @@ impl ZeroMcpServer {
             .overview(&project_path)
             .map_err(|e| rmcp::ErrorData::internal_error(e.to_string(), None))?;
 
-        let overview = match overview {
-            Some(o) => o,
-            None => {
-                return Ok(CallToolResult::success(vec![Content::text(format!(
-                    "Project not indexed: {}\n\nUse the CLI to index: zero code index {}",
-                    params.project, params.project
-                ))]));
-            }
+        let Some(overview) = overview else {
+            return Ok(CallToolResult::success(vec![Content::text(format!(
+                "Project not indexed: {}\n\nUse the CLI to index: zero code index {}",
+                params.project, params.project
+            ))]));
         };
 
         let langs: Vec<&str> = overview
@@ -436,15 +436,15 @@ impl ZeroMcpServer {
             text.push_str("\nModules:\n");
             for (module, types) in &overview.modules {
                 if types.is_empty() {
-                    text.push_str(&format!("  {module}\n"));
+                    let _ = writeln!(text, "  {module}");
                 } else {
-                    text.push_str(&format!("  {} — ({})\n", module, types.join(", ")));
+                    let _ = writeln!(text, "  {} — ({})", module, types.join(", "));
                 }
             }
         }
 
         if !overview.key_types.is_empty() {
-            text.push_str(&format!("\nKey types: {}\n", overview.key_types.join(", ")));
+            let _ = writeln!(text, "\nKey types: {}", overview.key_types.join(", "));
         }
 
         Ok(CallToolResult::success(vec![Content::text(text)]))

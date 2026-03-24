@@ -67,7 +67,8 @@ impl StorageIdentifier {
         let mut hasher = Sha256::new();
         hasher.update(path_str.as_bytes());
         let hash = hasher.finalize();
-        let hash_hex = hex::encode(&hash[..16]); // Use first 16 bytes (32 hex chars)
+        let bytes = hash.get(..16).expect("SHA-256 output is always 32 bytes");
+        let hash_hex = hex::encode(bytes); // Use first 16 bytes (32 hex chars)
         StorageIdentifier::PathHash(hash_hex)
     }
 

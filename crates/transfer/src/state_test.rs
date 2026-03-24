@@ -238,9 +238,9 @@ fn test_append_multiple_completed() {
 
     for i in 0..10 {
         let entry = CompletedEntry {
-            path: PathBuf::from(format!("file{}.txt", i)),
+            path: PathBuf::from(format!("file{i}.txt")),
             size: i * 100,
-            hash: format!("hash{}", i),
+            hash: format!("hash{i}"),
         };
         state.append_completed(&entry).unwrap();
     }
@@ -356,6 +356,6 @@ fn test_wal_replay_on_reopen() {
 #[test]
 fn test_state_error_display() {
     let err = StateError::NoActiveJob;
-    let display = format!("{}", err);
+    let display = format!("{err}");
     assert!(!display.is_empty());
 }

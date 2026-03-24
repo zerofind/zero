@@ -288,14 +288,14 @@ impl PaletteView {
         let trimmed = query.trim();
         if trimmed.starts_with('/') {
             let p = PathBuf::from(trimmed);
-            if p.exists() || p.parent().is_some_and(|pp| pp.exists()) {
+            if p.exists() || p.parent().is_some_and(std::path::Path::exists) {
                 return Some(p);
             }
         } else if let Some(rest) = trimmed.strip_prefix("~/")
             && let Some(home) = dirs::home_dir()
         {
             let p = home.join(rest);
-            if p.exists() || p.parent().is_some_and(|pp| pp.exists()) {
+            if p.exists() || p.parent().is_some_and(std::path::Path::exists) {
                 return Some(p);
             }
         }
@@ -305,17 +305,13 @@ impl PaletteView {
     /// Compute section lengths for the filtered results view in Root mode.
     /// Returns (path_detect, apps, bookmarks, storages, search_files_item, actions, files).
     pub(super) fn root_result_sections(&self) -> (usize, usize, usize, usize, usize, usize, usize) {
-        let path_count = if Self::detect_path(&self.query).is_some() {
-            1
-        } else {
-            0
-        };
+        let path_count = usize::from(Self::detect_path(&self.query).is_some());
         let apps = self.app_results.len();
         let bookmarks = self.filtered_bookmarks().len();
         let storages = self.filtered_storages().len();
         let actions = self.filtered_actions().len();
         // "Search Files" dynamic item always shown when query is non-empty
-        let search_files = if self.query.is_empty() { 0 } else { 1 };
+        let search_files = usize::from(!self.query.is_empty());
         let files = self.results.len().min(8);
         (
             path_count,
@@ -328,6 +324,7 @@ impl PaletteView {
         )
     }
 
+    #[allow(clippy::many_single_char_names)]
     pub(super) fn root_result_total(&self) -> usize {
         let (p, a, b, s, sf, act, f) = self.root_result_sections();
         p + a + b + s + sf + act + f
@@ -446,6 +443,7 @@ impl PaletteView {
             .collect()
     }
 
+    #[allow(clippy::many_single_char_names)]
     pub(super) fn confirm_selection(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         tracing::debug!(
             selected_idx = self.selected_idx,
@@ -591,6 +589,7 @@ impl PaletteView {
         }
     }
 
+    #[allow(clippy::unused_self)]
     pub(super) fn dismiss(&mut self, cx: &mut Context<Self>) {
         tracing::debug!("palette: dismiss");
         cx.emit(PaletteEvent::Dismiss);

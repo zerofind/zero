@@ -59,6 +59,8 @@ pub fn init_zero_theme(cx: &mut gpui::App) {
         .collect();
 
     // Apply default (Zero) immediately
+    // First theme set is always the built-in Zero theme
+    #[allow(clippy::indexing_slicing)]
     apply_theme_set(&sets[0], cx);
 
     cx.set_global(ThemeStore { sets });
@@ -133,7 +135,7 @@ pub fn theme_names_for_mode(mode: ThemeMode, cx: &gpui::App) -> Vec<String> {
                 .find(|s| s.name.as_ref() == **name)
                 .is_some_and(|set| set.themes.iter().any(|t| t.mode == mode))
         })
-        .map(|s| s.to_string())
+        .map(std::string::ToString::to_string)
         .collect()
 }
 
@@ -172,9 +174,8 @@ pub fn detect_system_theme() -> ThemeMode {
 /// Watch `~/.config/zero/themes/` for user-supplied theme JSON files.
 /// Any `.json` file dropped there is auto-loaded via `ThemeRegistry`.
 pub fn watch_user_themes(cx: &mut gpui::App) {
-    let dir = dirs::config_dir()
-        .map(|d| d.join("zero").join("themes"))
-        .unwrap_or_else(|| PathBuf::from(""));
+    let dir =
+        dirs::config_dir().map_or_else(|| PathBuf::from(""), |d| d.join("zero").join("themes"));
 
     if dir.as_os_str().is_empty() {
         return;

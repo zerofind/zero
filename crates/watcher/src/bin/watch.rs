@@ -7,7 +7,7 @@
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use tracing_subscriber::EnvFilter;
 #[cfg(target_os = "macos")]
@@ -111,19 +111,19 @@ fn main() -> Result<()> {
             paths,
             debounce_ms,
             no_recursive,
-        } => watch_files(paths, debounce_ms, !no_recursive, cli.json),
+        } => watch_files(&paths, debounce_ms, !no_recursive, cli.json),
 
         #[cfg(target_os = "macos")]
         Commands::Usb { filter, serial } => watch_usb(filter, serial, cli.json),
 
         #[cfg(target_os = "macos")]
-        Commands::All { paths, debounce_ms } => watch_all(paths, debounce_ms, cli.json),
+        Commands::All { paths, debounce_ms } => watch_all(&paths, debounce_ms, cli.json),
 
-        Commands::Latency { path, iterations } => measure_latency(path, iterations),
+        Commands::Latency { path, iterations } => measure_latency(&path, iterations),
     }
 }
 
-fn watch_files(paths: Vec<PathBuf>, debounce_ms: u64, recursive: bool, json: bool) -> Result<()> {
+fn watch_files(paths: &[PathBuf], debounce_ms: u64, recursive: bool, json: bool) -> Result<()> {
     let config = FileWatchConfig {
         debounce_ms,
         recursive,
@@ -132,7 +132,7 @@ fn watch_files(paths: Vec<PathBuf>, debounce_ms: u64, recursive: bool, json: boo
 
     let mut watcher = FileWatcher::with_config(config)?;
 
-    for path in &paths {
+    for path in paths {
         watcher.watch(path)?;
         if !json {
             println!("Watching: {}", path.display());
@@ -208,7 +208,7 @@ fn watch_usb(filter: Vec<String>, serial: Vec<String>, json: bool) -> Result<()>
 }
 
 #[cfg(target_os = "macos")]
-fn watch_all(paths: Vec<PathBuf>, debounce_ms: u64, json: bool) -> Result<()> {
+fn watch_all(paths: &[PathBuf], debounce_ms: u64, json: bool) -> Result<()> {
     let file_config = FileWatchConfig {
         debounce_ms,
         recursive: true,
@@ -218,7 +218,7 @@ fn watch_all(paths: Vec<PathBuf>, debounce_ms: u64, json: bool) -> Result<()> {
     let mut file_watcher = FileWatcher::with_config(file_config)?;
     let mut usb_watcher = UsbWatcher::new()?;
 
-    for path in &paths {
+    for path in paths {
         file_watcher.watch(path)?;
         if !json {
             println!("Watching files: {}", path.display());
@@ -273,7 +273,7 @@ fn watch_all(paths: Vec<PathBuf>, debounce_ms: u64, json: bool) -> Result<()> {
     }
 }
 
-fn measure_latency(path: PathBuf, iterations: usize) -> Result<()> {
+fn measure_latency(path: &Path, iterations: usize) -> Result<()> {
     use std::fs;
 
     println!("Measuring file watcher latency\n");
@@ -285,7 +285,7 @@ fn measure_latency(path: PathBuf, iterations: usize) -> Result<()> {
 
     // Ensure the path exists
     if !path.exists() {
-        fs::create_dir_all(&path)?;
+        fs::create_dir_all(path)?;
     }
 
     let config = FileWatchConfig {
@@ -295,7 +295,7 @@ fn measure_latency(path: PathBuf, iterations: usize) -> Result<()> {
     };
 
     let mut watcher = FileWatcher::with_config(config)?;
-    watcher.watch(&path)?;
+    watcher.watch(path)?;
 
     // Wait for watcher to be ready
     std::thread::sleep(Duration::from_millis(100));
@@ -317,23 +317,22 @@ fn measure_latency(path: PathBuf, iterations: usize) -> Result<()> {
         // Wait for the event
         let mut detected = false;
         while start.elapsed() < Duration::from_secs(5) {
-            if let Some(event) = watcher.next_event_timeout(Duration::from_millis(10)) {
-                if event
+            if let Some(event) = watcher.next_event_timeout(Duration::from_millis(10))
+                && event
                     .paths
                     .iter()
                     .any(|p| p.ends_with(".zero_latency_test"))
-                {
-                    let latency = start.elapsed();
-                    latencies.push(latency);
-                    println!(
-                        "  Iteration {}: {:>6.2}ms ({:?})",
-                        i + 1,
-                        latency.as_secs_f64() * 1000.0,
-                        event.kind
-                    );
-                    detected = true;
-                    break;
-                }
+            {
+                let latency = start.elapsed();
+                latencies.push(latency);
+                println!(
+                    "  Iteration {}: {:>6.2}ms ({:?})",
+                    i + 1,
+                    latency.as_secs_f64() * 1000.0,
+                    event.kind
+                );
+                detected = true;
+                break;
             }
         }
 
@@ -354,14 +353,17 @@ fn measure_latency(path: PathBuf, iterations: usize) -> Result<()> {
     } else {
         println!("\nResults:");
 
-        let min = latencies.iter().min().unwrap();
-        let max = latencies.iter().max().unwrap();
+        let min = latencies.iter().min().expect("latencies non-empty");
+        let max = latencies.iter().max().expect("latencies non-empty");
         let sum: Duration = latencies.iter().sum();
         let avg = sum / latencies.len() as u32;
 
         let mut sorted = latencies.clone();
         sorted.sort();
+        // SAFETY: latencies.is_empty() is checked above, so sorted is non-empty
+        #[allow(clippy::indexing_slicing)]
         let median = sorted[sorted.len() / 2];
+        #[allow(clippy::indexing_slicing)]
         let p95 = sorted[(sorted.len() as f64 * 0.95) as usize];
 
         println!("  Min:    {:>6.2}ms", min.as_secs_f64() * 1000.0);

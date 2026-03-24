@@ -70,7 +70,7 @@ impl ServiceHub {
 
     /// Initialize services after FDA is confirmed.
     pub fn init(&self, cx: &mut App) {
-        self.search.update(cx, |svc, cx| svc.activate(cx));
-        self.apps.update(cx, |svc, cx| svc.load(cx));
+        self.search.update(cx, search::SearchService::activate);
+        self.apps.update(cx, apps::AppService::load);
     }
 }

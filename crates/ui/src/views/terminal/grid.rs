@@ -315,7 +315,9 @@ pub fn layout_grid(
     let cursor_shape = content.cursor.shape;
 
     // Cursor character with inverted colors for block cursor
-    let cursor_char_info = if content.cursor_char != ' ' {
+    let cursor_char_info = if content.cursor_char == ' ' {
+        None
+    } else {
         let inverted_fg = bg_default;
         let cursor_font = font.clone();
         let ch = content.cursor_char.to_string();
@@ -324,12 +326,10 @@ pub fn layout_grid(
             font: cursor_font,
             color: inverted_fg,
             background_color: None,
-            underline: Default::default(),
-            strikethrough: Default::default(),
+            underline: Option::default(),
+            strikethrough: Option::default(),
         };
         Some((cursor_pos, SharedString::from(ch), run, font_size))
-    } else {
-        None
     };
 
     GridLayout {

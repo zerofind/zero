@@ -33,7 +33,7 @@ exclude = ["vendor"]
 resolver = "2"
 
 [workspace.package]
-version = "0.7.0"
+version = "0.7.1"
 edition = "2024"
 rust-version = "1.94.0"
 license = "MIT"

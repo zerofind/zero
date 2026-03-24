@@ -278,9 +278,8 @@ impl ZeroApp {
                 settings.save();
 
                 // Trigger index rebuild with the new roots
-                let root_paths = settings.search_roots.clone();
                 self.services.search.update(cx, |svc, cx| {
-                    svc.rebuild(root_paths, cx);
+                    svc.rebuild(&settings.search_roots, cx);
                 });
 
                 self.onboarding = None;
@@ -337,7 +336,7 @@ impl ZeroApp {
                 let total = self.services.search.read(cx).roots_count();
 
                 if let Some(banner) = &mut self.banner {
-                    banner.phase = Some(format!("{}/{} locations loaded", loaded, total));
+                    banner.phase = Some(format!("{loaded}/{total} locations loaded"));
                 }
                 cx.notify();
             }
@@ -384,7 +383,7 @@ impl ZeroApp {
             SearchEvent::IndexCleared => {
                 cx.notify();
             }
-            SearchEvent::IndexUpdated(_) | SearchEvent::StoragesChanged => {
+            SearchEvent::IndexUpdated(()) | SearchEvent::StoragesChanged => {
                 cx.notify();
             }
         }
@@ -538,7 +537,7 @@ impl Render for ZeroApp {
                                     .label(if saving { "Saving..." } else { "Save" })
                                     .on_click(cx.listener(|this, _, _, cx| {
                                         if let Some(editor) = &this.editor {
-                                            editor.update(cx, |e, cx| e.save(cx));
+                                            editor.update(cx, EditorView::save);
                                         }
                                     })),
                             )
@@ -749,7 +748,7 @@ impl Render for ZeroApp {
                 this.go_forward(window, cx);
             }))
             .on_action(cx.listener(|this, _: &GoUp, window, cx| {
-                if let Some(parent) = this.current_path.parent().map(|p| p.to_path_buf()) {
+                if let Some(parent) = this.current_path.parent().map(std::path::Path::to_path_buf) {
                     this.navigate_to(parent, window, cx);
                 }
             }))
@@ -897,8 +896,8 @@ impl Render for ZeroApp {
                             .pb(CONTENT_INSET)
                             .when(sidebar_open, |el| el.pl(px(0.0)))
                             .when(!sidebar_open, |el| el.pl(CONTENT_INSET))
-                            .when_some(titlebar, |el, tb| el.child(tb))
-                            .when_some(content_banner, |el, banner_el| el.child(banner_el))
+                            .when_some(titlebar, gpui::ParentElement::child)
+                            .when_some(content_banner, gpui::ParentElement::child)
                             .when_some(banner, |el, data| el.child(ProgressBanner::new(data)))
                             .child(
                                 h_flex()

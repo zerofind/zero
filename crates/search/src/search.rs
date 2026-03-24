@@ -331,7 +331,7 @@ impl std::fmt::Debug for CompactNameIndex {
         f.debug_struct("CompactNameIndex")
             .field("entries", &self.entries.len())
             .field("overflow", &self.overflow.len())
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -382,16 +382,23 @@ impl CompactNameIndex {
 
     /// Get name string for an entry
     #[inline]
+    #[allow(unsafe_code)]
+    #[allow(clippy::indexing_slicing)]
     fn entry_name(&self, entry: &NameEntry) -> &str {
         let start = entry.name_offset as usize;
         let end = start + entry.name_len as usize;
-        // SAFETY: all names come from to_lowercase() which produces valid UTF-8
+        // SAFETY: all names come from to_lowercase() which produces valid UTF-8.
+        // Bounds are valid because NameEntry values are only created in
+        // build_from() which writes name_offset/name_len from name_data.len().
         unsafe { std::str::from_utf8_unchecked(&self.name_data[start..end]) }
     }
 
     /// Get slab indices for an entry
     #[inline]
+    #[allow(clippy::indexing_slicing)]
     fn entry_indices(&self, entry: &NameEntry) -> &[u32] {
+        // Bounds valid: indices_start/indices_count set from self.indices.len()
+        // during build_from()
         let start = entry.indices_start as usize;
         let end = start + entry.indices_count as usize;
         &self.indices[start..end]
@@ -451,7 +458,7 @@ impl std::fmt::Debug for CompactMtimeIndex {
         f.debug_struct("CompactMtimeIndex")
             .field("groups", &self.groups.len())
             .field("overflow", &self.overflow.len())
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -487,7 +494,9 @@ impl CompactMtimeIndex {
 
     /// Get slab indices for a group
     #[inline]
+    #[allow(clippy::indexing_slicing)]
     fn group_indices(&self, start: u32, count: u32) -> &[u32] {
+        // Bounds valid: start/count set from self.indices.len() during build_from()
         let s = start as usize;
         let e = s + count as usize;
         &self.indices[s..e]
@@ -659,7 +668,9 @@ impl SearchIndex {
 
     /// Get path for a slab index (zero-copy)
     #[inline]
+    #[allow(clippy::indexing_slicing)]
     fn node_path(&self, idx: usize) -> &str {
+        // Caller guarantees idx is a valid slab index (from enumerate or remove loop)
         let node = &self.slab[idx];
         self.path_arena.get(node.path_offset, node.path_len)
     }
@@ -719,6 +730,8 @@ impl SearchIndex {
     }
 
     /// Add a root directory with progress tracking
+    // Takes Arc by value: cheap to clone and matches caller patterns (Arc::clone)
+    #[allow(clippy::needless_pass_by_value)]
     #[instrument(skip(self, progress), fields(root = %root.display()))]
     pub fn add_root_with_progress(
         &mut self,
@@ -785,9 +798,8 @@ impl SearchIndex {
                         }
                     } else if file_type.is_file() {
                         // Index file
-                        let metadata = match entry.metadata() {
-                            Ok(m) => m,
-                            Err(_) => continue,
+                        let Ok(metadata) = entry.metadata() else {
+                            continue;
                         };
 
                         let size = metadata.len();
@@ -823,13 +835,11 @@ impl SearchIndex {
     /// Returns the number of entries removed.
     #[instrument(skip(self), fields(root = %root.display()))]
     pub fn remove_root(&mut self, root: &Path) -> usize {
-        let root_str = match root.to_str() {
-            Some(s) => s.to_string(),
-            None => {
-                tracing::warn!(root = %root.display(), "non-UTF-8 root path, nothing to remove");
-                return 0;
-            }
+        let Some(root_s) = root.to_str() else {
+            tracing::warn!(root = %root.display(), "non-UTF-8 root path, nothing to remove");
+            return 0;
         };
+        let root_str = root_s.to_string();
         let root_prefix = if root_str.ends_with('/') {
             root_str.clone()
         } else {
@@ -864,6 +874,8 @@ impl SearchIndex {
     ///
     /// Returns `false` if the path is too long (>65535 bytes) or the arena
     /// is at capacity (~4GB). The node is silently skipped.
+    // Takes by value: callers construct FileNode temporaries for insertion
+    #[allow(clippy::needless_pass_by_value)]
     pub fn insert(&mut self, node: FileNode) -> bool {
         let name_lower = node.name().to_lowercase();
         let is_directory = node.is_directory();
@@ -960,13 +972,14 @@ impl SearchIndex {
             }
         }
 
-        let (idx, name_lower) = match (found_idx, found_name) {
-            (Some(idx), Some(name)) => (idx, name),
-            _ => return false,
+        let (Some(idx), Some(name_lower)) = (found_idx, found_name) else {
+            return false;
         };
 
         // Get node info before removal for stats update
-        let node = &self.slab[idx];
+        let Some(node) = self.slab.get(idx) else {
+            return false;
+        };
         match node.node_type {
             NodeType::File => {
                 self.file_count = self.file_count.saturating_sub(1);
@@ -983,7 +996,9 @@ impl SearchIndex {
             .remove_from_overflow(&name_lower, idx as u32);
 
         // Free the arena slot
-        let node = &self.slab[idx];
+        let Some(node) = self.slab.get(idx) else {
+            return false;
+        };
         self.path_arena.remove(node.path_offset, node.path_len);
 
         // Remove from type index
@@ -1027,10 +1042,12 @@ impl SearchIndex {
     ///
     /// Returns up to `limit` results sorted by relevance.
     pub fn search(&self, query: &str, limit: usize) -> Vec<SearchResult> {
-        self.search_with_options(query, SearchOptions::with_limit(limit))
+        self.search_with_options(query, &SearchOptions::with_limit(limit))
     }
 
     /// Unified search — dispatches to optimized internal paths based on query shape.
+    // Takes by value: cloned per index in par_iter (manager.rs)
+    #[allow(clippy::needless_pass_by_value)]
     #[instrument(skip(self), fields(query = %q.text, limit = q.limit))]
     pub fn query(&self, q: SearchQuery) -> Vec<SearchResult> {
         // Glob pattern detection: if query contains * or ?, use glob matching
@@ -1052,8 +1069,8 @@ impl SearchIndex {
                 self.list_all(q.limit)
             }
             _ => {
-                let opts = self.query_to_options(&q);
-                self.search_with_options(&q.text, opts)
+                let opts = Self::query_to_options(&q);
+                self.search_with_options(&q.text, &opts)
             }
         }
     }
@@ -1067,7 +1084,7 @@ impl SearchIndex {
 
         let now = super::scoring::now_secs();
         let query_lower = q.text.to_lowercase();
-        let opts = self.query_to_options(q);
+        let opts = Self::query_to_options(q);
         let type_bitmap = q
             .type_filter
             .and_then(|cat| self.type_index.get_indices(cat));
@@ -1217,13 +1234,13 @@ impl SearchIndex {
         results
     }
 
-    fn query_to_options(&self, q: &SearchQuery) -> SearchOptions {
+    fn query_to_options(q: &SearchQuery) -> SearchOptions {
         let mut opts = SearchOptions::with_limit(q.limit);
         opts.include_dirs = q.include_dirs;
         opts.include_files = q.include_files;
         opts.include_trash = q.include_trash;
-        opts.extension_filter = q.extension.clone();
-        opts.extensions_filter = q.extensions.clone();
+        opts.extension_filter.clone_from(&q.extension);
+        opts.extensions_filter.clone_from(&q.extensions);
         opts.min_size = q.min_size;
         opts.max_size = q.max_size;
         opts.exclude_hidden = q.exclude_hidden;
@@ -1328,7 +1345,7 @@ impl SearchIndex {
         let Some(category) = FileTypeCategory::parse_str(type_name) else {
             let mut opts = SearchOptions::with_limit(limit);
             opts.include_trash = include_trash;
-            return self.search_with_options(query, opts);
+            return self.search_with_options(query, &opts);
         };
 
         let Some(type_bitmap) = self.type_index.get_indices(category) else {
@@ -1529,7 +1546,7 @@ impl SearchIndex {
     }
 
     /// Search with full options
-    pub fn search_with_options(&self, query: &str, options: SearchOptions) -> Vec<SearchResult> {
+    pub fn search_with_options(&self, query: &str, options: &SearchOptions) -> Vec<SearchResult> {
         let query_lower = query.to_lowercase();
         let has_filter = options.extension_filter.is_some();
         if query.is_empty() && !has_filter {
@@ -1554,7 +1571,7 @@ impl SearchIndex {
                 indices,
                 query,
                 &query_cmp,
-                &options,
+                options,
                 &mut results,
                 limit2,
                 now,
@@ -1572,7 +1589,7 @@ impl SearchIndex {
                     indices,
                     query,
                     &query_cmp,
-                    &options,
+                    options,
                     &mut results,
                     limit2,
                     now,
@@ -1797,7 +1814,7 @@ mod tests {
         index.insert(FileNode::file("doc.md".into(), 100, 0));
 
         let options = SearchOptions::default().with_extension("pdf");
-        let results = index.search_with_options("doc", options);
+        let results = index.search_with_options("doc", &options);
 
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].node.name(), "doc.pdf");
@@ -1811,7 +1828,7 @@ mod tests {
         index.insert(FileNode::directory("docs".into(), 0));
 
         let options = SearchOptions::default().files_only();
-        let results = index.search_with_options("docs", options);
+        let results = index.search_with_options("docs", &options);
 
         assert_eq!(results.len(), 1);
         assert!(results[0].node.is_file());
@@ -1825,7 +1842,7 @@ mod tests {
         index.insert(FileNode::directory("docs".into(), 0));
 
         let options = SearchOptions::default().dirs_only();
-        let results = index.search_with_options("docs", options);
+        let results = index.search_with_options("docs", &options);
 
         assert_eq!(results.len(), 1);
         assert!(results[0].node.is_directory());
@@ -1873,7 +1890,7 @@ mod tests {
         let mut index = SearchIndex::new();
 
         for i in 0..100 {
-            index.insert(FileNode::file(format!("file{}.txt", i), 100, 0));
+            index.insert(FileNode::file(format!("file{i}.txt"), 100, 0));
         }
 
         let results = index.search("file", 10);

@@ -66,14 +66,11 @@ pub fn cmd_verify_with_cache(
         ..Default::default()
     };
 
-    let scan_opts_source = scan_options.clone();
-    let scan_opts_dest = scan_options;
-
     // Wrap in catch_unwind for panic safety (early exit strategy)
     let scan_result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
         rayon::join(
-            || scan_collect(source, scan_opts_source),
-            || scan_collect(dest, scan_opts_dest),
+            || scan_collect(source, &scan_options),
+            || scan_collect(dest, &scan_options),
         )
     }));
 
@@ -412,16 +409,10 @@ pub fn cmd_verify(
     };
 
     // Parallel scan
-    let source_path = source;
-    let dest_path = dest;
-    let scan_opts_source = scan_options.clone();
-    let scan_opts_dest = scan_options;
-
-    // Wrap in catch_unwind for panic safety (early exit strategy)
     let scan_result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
         rayon::join(
-            || scan_collect(source_path, scan_opts_source),
-            || scan_collect(dest_path, scan_opts_dest),
+            || scan_collect(source, &scan_options),
+            || scan_collect(dest, &scan_options),
         )
     }));
 
@@ -465,7 +456,7 @@ pub fn cmd_verify(
 
         diff_with_progress(&source_files, &dest_files, &diff_options, |progress| {
             // Only update every 100ms to avoid flickering
-            let mut last = last_update.lock().unwrap();
+            let mut last = last_update.lock().expect("last_update mutex poisoned");
             if last.elapsed() < Duration::from_millis(100) {
                 return;
             }

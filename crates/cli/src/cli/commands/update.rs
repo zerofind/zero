@@ -4,6 +4,7 @@ use foundation::output::Outputter;
 use updater::{self, CURRENT_VERSION, UpdateStatus, check_latest, download_update, install_binary};
 
 /// Run the update command
+#[allow(clippy::unnecessary_wraps)] // CLI command handlers return Result for consistency
 pub fn cmd_update(out: &Outputter, check_only: bool) -> anyhow::Result<()> {
     out.info(&format!("Current version: {CURRENT_VERSION}"));
 

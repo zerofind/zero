@@ -36,10 +36,10 @@ pub fn cmd_automation(out: &Outputter, auto_cmd: AutomationCommands) -> Result<(
             debounce_ms,
         } => cmd_automation_create(
             out,
-            name,
-            template,
+            &name,
+            template.as_ref(),
             sources,
-            dests,
+            &dests,
             device_serial,
             volume_name,
             dest_path,
@@ -147,9 +147,7 @@ fn cmd_automation_list(out: &Outputter) -> anyhow::Result<()> {
 fn cmd_automation_show(out: &Outputter, id: i64) -> anyhow::Result<()> {
     let start = Instant::now();
     let db = ControlDb::open()?;
-    let auto = if let Some(a) = db.get_automation(id)? {
-        a
-    } else {
+    let Some(auto) = db.get_automation(id)? else {
         let msg = format!("Automation not found: {id}");
         cmd_error!(
             out,
@@ -305,13 +303,13 @@ fn cmd_automation_show(out: &Outputter, id: i64) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 fn cmd_automation_create(
     out: &Outputter,
-    name: String,
-    template: Option<String>,
+    name: &str,
+    template: Option<&String>,
     sources: Vec<PathBuf>,
-    dests: Vec<String>,
+    dests: &[String],
     device_serial: Option<String>,
     volume_name: Option<String>,
     dest_path: Option<PathBuf>,
@@ -387,7 +385,7 @@ fn cmd_automation_create(
         .collect();
 
     let auto = db.create_automation(NewAutomation {
-        name: name.clone(),
+        name: name.to_string(),
         dest_device_serial: device_serial,
         dest_volume_name: volume_name,
         dest_path: dest_path.map(|p| p.to_string_lossy().to_string()),
@@ -409,7 +407,7 @@ fn cmd_automation_create(
 
     let data = AutomationCreateData {
         id: auto.id,
-        name: name.clone(),
+        name: name.to_string(),
     };
     cmd_success!(out, "automation create", duration_ms, data, {
         out.success(&format!(
@@ -425,9 +423,7 @@ fn cmd_automation_delete(out: &Outputter, id: i64) -> anyhow::Result<()> {
     let db = ControlDb::open()?;
 
     // Check it exists
-    let auto = if let Some(a) = db.get_automation(id)? {
-        a
-    } else {
+    let Some(auto) = db.get_automation(id)? else {
         let msg = format!("Automation not found: {id}");
         cmd_error!(
             out,
@@ -463,9 +459,7 @@ async fn cmd_automation_run(out: &Outputter, id: i64) -> anyhow::Result<()> {
     let db = ControlDb::open()?;
 
     // Check it exists
-    let auto = if let Some(a) = db.get_automation(id)? {
-        a
-    } else {
+    let Some(auto) = db.get_automation(id)? else {
         let msg = format!("Automation not found: {id}");
         cmd_error!(
             out,
@@ -505,9 +499,13 @@ async fn cmd_automation_run(out: &Outputter, id: i64) -> anyhow::Result<()> {
     }
 
     // Get the run result
+    // SAFETY(index): run_id is guaranteed non-empty by the is_empty() check above
+    let first_run_id = run_id
+        .first()
+        .ok_or_else(|| anyhow::anyhow!("No run IDs returned"))?;
     let run = executor
         .db()
-        .get_run(run_id[0])?
+        .get_run(*first_run_id)?
         .ok_or_else(|| anyhow::anyhow!("Run not found"))?;
 
     if out.is_json() {
@@ -576,9 +574,7 @@ fn cmd_automation_history(out: &Outputter, id: i64, limit: i64) -> anyhow::Resul
     let db = ControlDb::open()?;
 
     // Check automation exists
-    let auto = if let Some(a) = db.get_automation(id)? {
-        a
-    } else {
+    let Some(auto) = db.get_automation(id)? else {
         let msg = format!("Automation not found: {id}");
         cmd_error!(
             out,
@@ -690,7 +686,7 @@ async fn cmd_automation_daemon(out: &Outputter) -> anyhow::Result<()> {
 
     // Mark any interrupted runs
     let executor = Executor::with_db(db, ExecutorConfig::default());
-    let interrupted = executor.recover_interrupted_runs().await?;
+    let interrupted = executor.recover_interrupted_runs()?;
     if interrupted > 0 {
         out.info(&format!("Recovered {interrupted} interrupted runs"));
     }
@@ -770,7 +766,7 @@ async fn cmd_automation_daemon(out: &Outputter) -> anyhow::Result<()> {
                             .await;
                     }
                 }
-                _ => {}
+                zero_watcher::UsbEventKind::Unmounting => {}
             }
         }
 

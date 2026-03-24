@@ -12,6 +12,8 @@ impl ZeroApp {
     /// Push a new view onto the navigation stack. All navigation flows through here.
     pub fn push_view(&mut self, view: ActiveView, window: &mut Window, cx: &mut Context<Self>) {
         // Don't push duplicate consecutive entries
+        // SAFETY: nav_idx is always valid — initialized to 0 and only modified by push/back/forward
+        #[allow(clippy::indexing_slicing)]
         if self.nav_stack[self.nav_idx] == view {
             return;
         }
@@ -26,12 +28,14 @@ impl ZeroApp {
 
     /// Sync UI state from the current stack entry.
     pub(crate) fn apply_current_view(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // nav_idx is always in bounds — maintained by push_view, go_back, go_forward
+        #[allow(clippy::indexing_slicing)]
         let view = self.nav_stack[self.nav_idx].clone();
         self.active_view = view.clone();
 
         match &view {
             ActiveView::FileBrowser(path) => {
-                self.current_path = path.clone();
+                self.current_path.clone_from(path);
                 // Persist last_path to active workspace
                 let mut settings = crate::session::Settings::load();
                 settings.active_ws_mut().last_path = Some(path.clone());

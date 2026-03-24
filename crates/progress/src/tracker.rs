@@ -213,9 +213,3 @@ impl Default for AtomicProgress {
         Self::empty()
     }
 }
-
-// SAFETY: All fields are either atomic types (AtomicU64, AtomicUsize) which are
-// inherently Send+Sync, RwLock<String> which is Send+Sync, or Instant which is
-// Send+Sync. The manual impls are technically redundant but kept for clarity.
-unsafe impl Send for AtomicProgress {}
-unsafe impl Sync for AtomicProgress {}

@@ -21,7 +21,7 @@ use super::stream::{DedupStreamEvent, find_duplicates_streaming};
 use super::types::{DedupError, DedupOptions, DedupProgress, DedupResult, DeleteResult};
 
 /// Find duplicate files in a directory (convenience wrapper).
-pub fn find_duplicates(path: &Path, options: DedupOptions) -> Result<DedupResult, DedupError> {
+pub fn find_duplicates(path: &Path, options: &DedupOptions) -> Result<DedupResult, DedupError> {
     find_duplicates_with_progress(path, options, None)
 }
 
@@ -32,13 +32,13 @@ pub fn find_duplicates(path: &Path, options: DedupOptions) -> Result<DedupResult
 #[instrument(skip(options, progress), fields(path = %path.display()))]
 pub fn find_duplicates_with_progress(
     path: &Path,
-    options: DedupOptions,
+    options: &DedupOptions,
     progress: Option<Arc<DedupProgress>>,
 ) -> Result<DedupResult, DedupError> {
     let progress = progress.unwrap_or_else(|| Arc::new(DedupProgress::new()));
     let (tx, rx) = crossfire::mpsc::unbounded_blocking();
 
-    find_duplicates_streaming(path, options, progress, tx, None)?;
+    find_duplicates_streaming(path, options, &progress, &tx, None)?;
 
     let mut groups = Vec::new();
     let mut files_scanned = 0;
@@ -136,9 +136,8 @@ pub(super) fn matches_type_filter(path: &std::path::Path, filter: FileTypeCatego
         .and_then(|e| e.to_str())
         .map(str::to_lowercase);
 
-    let ext = match ext {
-        Some(e) => e,
-        None => return false,
+    let Some(ext) = ext else {
+        return false;
     };
 
     match filter {

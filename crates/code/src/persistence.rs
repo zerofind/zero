@@ -35,14 +35,14 @@ pub fn save_summary(summary: &ProjectSummary, path: &Path) -> Result<(), CodePer
 pub fn load_summary(path: &Path) -> Result<ProjectSummary, CodePersistError> {
     let data = fs::read(path)?;
 
-    if data.len() < MAGIC.len() || data[..4] != MAGIC {
-        return Err(CodePersistError::Serialize(
-            "invalid .cidx snapshot magic".into(),
-        ));
-    }
+    let (header, compressed) = data
+        .split_at_checked(MAGIC.len())
+        .filter(|(h, _)| *h == MAGIC)
+        .ok_or_else(|| CodePersistError::Serialize("invalid .cidx snapshot magic".into()))?;
+    let _ = header;
 
     let decompressed =
-        zstd::stream::decode_all(Cursor::new(&data[4..])).map_err(CodePersistError::Io)?;
+        zstd::stream::decode_all(Cursor::new(compressed)).map_err(CodePersistError::Io)?;
 
     let summary: ProjectSummary = postcard::from_bytes(&decompressed)
         .map_err(|e| CodePersistError::Serialize(e.to_string()))?;

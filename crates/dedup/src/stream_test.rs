@@ -36,7 +36,7 @@ fn test_streaming_events_order() {
     let progress = Arc::new(DedupProgress::new());
     let (tx, rx) = crossfire::mpsc::unbounded_blocking();
 
-    find_duplicates_streaming(dir.path(), test_options(), progress, tx, None).unwrap();
+    find_duplicates_streaming(dir.path(), &test_options(), &progress, &tx, None).unwrap();
 
     let events: Vec<DedupStreamEvent> = std::iter::from_fn(|| rx.recv().ok()).collect();
 
@@ -74,7 +74,7 @@ fn test_streaming_no_duplicates() {
     let progress = Arc::new(DedupProgress::new());
     let (tx, rx) = crossfire::mpsc::unbounded_blocking();
 
-    find_duplicates_streaming(dir.path(), test_options(), progress, tx, None).unwrap();
+    find_duplicates_streaming(dir.path(), &test_options(), &progress, &tx, None).unwrap();
 
     let events: Vec<DedupStreamEvent> = std::iter::from_fn(|| rx.recv().ok()).collect();
     let group_count = events
@@ -94,7 +94,7 @@ fn test_streaming_cancellation() {
     progress.cancel();
 
     let (tx, rx) = crossfire::mpsc::unbounded_blocking();
-    find_duplicates_streaming(dir.path(), test_options(), progress, tx, None).unwrap();
+    find_duplicates_streaming(dir.path(), &test_options(), &progress, &tx, None).unwrap();
 
     let events: Vec<DedupStreamEvent> = std::iter::from_fn(|| rx.recv().ok()).collect();
     // Should complete immediately with no groups
@@ -130,7 +130,7 @@ fn test_streaming_largest_groups_first() {
     let progress = Arc::new(DedupProgress::new());
     let (tx, rx) = crossfire::mpsc::unbounded_blocking();
 
-    find_duplicates_streaming(dir.path(), test_options(), progress, tx, None).unwrap();
+    find_duplicates_streaming(dir.path(), &test_options(), &progress, &tx, None).unwrap();
 
     let groups: Vec<DuplicateGroup> = std::iter::from_fn(|| rx.recv().ok())
         .filter_map(|e| match e {

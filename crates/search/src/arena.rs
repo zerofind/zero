@@ -62,6 +62,9 @@ impl PathArena {
         {
             let (offset, free_len) = self.free_list.swap_remove(best);
             // Write into the reused slot
+            // Bounds guaranteed: best-fit search above ensures free_len >= len,
+            // and offset + free_len is within self.data from the original push.
+            #[allow(clippy::indexing_slicing)]
             self.data[offset as usize..offset as usize + len as usize].copy_from_slice(bytes);
             // If the slot was larger, put the remainder back on the free list,
             // but only if the remainder is large enough to be useful (>=4 bytes).
@@ -86,13 +89,20 @@ impl PathArena {
 
     /// Get a path string from the arena (zero-copy)
     ///
-    /// # Safety
-    /// All data pushed via `push()` is valid UTF-8, so `from_utf8_unchecked` is safe.
+    /// Callers must only pass `(offset, len)` values returned by `push()`.
+    /// The data at those coordinates is always valid UTF-8 because `push()` only
+    /// accepts `&str`. The slice bounds are valid because `push()` extends
+    /// `self.data` to cover `offset..offset+len` or reuses a free slot of at
+    /// least `len` bytes.
     #[inline]
+    #[allow(unsafe_code)]
+    #[allow(clippy::indexing_slicing)]
     pub fn get(&self, offset: u32, len: u16) -> &str {
         let start = offset as usize;
         let end = start + len as usize;
-        // SAFETY: all input to push() is &str (valid UTF-8)
+        // SAFETY: all input to push() is &str (valid UTF-8), and (offset, len)
+        // pairs are only produced by push() which guarantees data[start..end]
+        // is within bounds and contains the original UTF-8 bytes.
         unsafe { std::str::from_utf8_unchecked(&self.data[start..end]) }
     }
 
@@ -112,6 +122,8 @@ impl PathArena {
         // Coalesce with any adjacent free regions
         let mut i = 0;
         while i < self.free_list.len() {
+            // Index is valid: loop condition guarantees i < self.free_list.len()
+            #[allow(clippy::indexing_slicing)]
             let (f_off, f_len) = self.free_list[i];
             let f_end = f_off + u32::from(f_len);
 

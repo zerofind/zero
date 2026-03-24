@@ -89,6 +89,9 @@ pub enum HashError {
 /// Two files with different prefix hashes cannot be duplicates, avoiding a
 /// full-file read. Returns `None` if the file is smaller than `prefix_bytes`
 /// (caller should fall through to a full hash instead).
+// Slicing by `to_read` (clamped to buffer.len()) and `n` (returned by Read::read,
+// guaranteed <= buffer.len()) cannot panic.
+#[allow(clippy::indexing_slicing)]
 pub fn hash_file_prefix(
     path: &Path,
     algorithm: HashAlgorithm,
@@ -312,6 +315,9 @@ pub fn hash_file_with_atomic_progress(
 }
 
 /// Hash using Blake3
+// SAFETY: mmap is read-only; see SAFETY comment at the unsafe block.
+// bytes_read from Read::read is guaranteed <= buffer.len(), so slicing cannot panic.
+#[allow(unsafe_code, clippy::indexing_slicing)]
 fn hash_blake3(
     file: &File,
     file_size: u64,
@@ -354,6 +360,8 @@ fn hash_blake3(
 }
 
 /// Hash using Blake3 with progress callbacks (always chunked, no mmap)
+// bytes_read from Read::read is guaranteed <= buffer.len(), so slicing cannot panic.
+#[allow(clippy::indexing_slicing)]
 fn hash_blake3_with_progress<F>(
     file: &File,
     buffer: &mut [u8],
@@ -386,6 +394,9 @@ where
 }
 
 /// Hash using Blake3 with atomic progress updates
+// SAFETY: mmap is read-only; see SAFETY comment at the unsafe block.
+// bytes_read from Read::read is guaranteed <= buffer.len(), so slicing cannot panic.
+#[allow(unsafe_code, clippy::indexing_slicing)]
 fn hash_blake3_with_atomic_progress(
     file: &File,
     file_size: u64,
@@ -429,6 +440,9 @@ fn hash_blake3_with_atomic_progress(
 }
 
 /// Hash using XXH3 (128-bit)
+// SAFETY: mmap is read-only; see SAFETY comment at the unsafe block.
+// bytes_read from Read::read is guaranteed <= buffer.len(), so slicing cannot panic.
+#[allow(unsafe_code, clippy::indexing_slicing)]
 fn hash_xxh3(
     file: &File,
     file_size: u64,
@@ -469,6 +483,8 @@ fn hash_xxh3(
 }
 
 /// Hash using XXH3 with progress callbacks (always chunked, no mmap)
+// bytes_read from Read::read is guaranteed <= buffer.len(), so slicing cannot panic.
+#[allow(clippy::indexing_slicing)]
 fn hash_xxh3_with_progress<F>(
     file: &File,
     buffer: &mut [u8],
@@ -502,6 +518,9 @@ where
 }
 
 /// Hash using XXH3 (128-bit) with atomic progress updates
+// SAFETY: mmap is read-only; see SAFETY comment at the unsafe block.
+// bytes_read from Read::read is guaranteed <= buffer.len(), so slicing cannot panic.
+#[allow(unsafe_code, clippy::indexing_slicing)]
 fn hash_xxh3_with_atomic_progress(
     file: &File,
     file_size: u64,

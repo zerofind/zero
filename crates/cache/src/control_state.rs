@@ -155,7 +155,11 @@ impl ControlState {
                 s.last_mount_path = Some(path.to_string_lossy().to_string());
                 s.last_seen_at = Some(now_timestamp());
             }
-            return self.storages[&id].clone();
+            return self
+                .storages
+                .get(&id)
+                .expect("storage disappeared after lookup")
+                .clone();
         }
 
         // Create new

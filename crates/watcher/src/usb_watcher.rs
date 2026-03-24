@@ -5,6 +5,9 @@
 //!
 //! Note: `DiskArbitration`'s disappear callback can be unreliable for detecting
 //! unmounts, so we also use a polling fallback to detect when volumes disappear.
+//!
+//! This entire module is macOS IOKit/DiskArbitration FFI — unsafe is inherent.
+#![allow(unsafe_code)]
 
 use crate::UsbWatchConfig;
 use crate::events::{UsbEvent, UsbEventKind};
@@ -133,7 +136,7 @@ impl UsbWatcher {
 
         let state_clone = Arc::clone(&state);
         let thread_handle = thread::spawn(move || {
-            run_disk_arbitration_loop(state_clone, stop_rx);
+            run_disk_arbitration_loop(&state_clone, &stop_rx);
         });
 
         Ok(Self {
@@ -290,73 +293,76 @@ fn scan_current_volumes_map() -> HashMap<String, VolumeInfo> {
 
 /// Run the `DiskArbitration` event loop
 fn run_disk_arbitration_loop(
-    state: Arc<Mutex<WatcherState>>,
-    stop_rx: crossfire::Rx<cf_mpsc::List<()>>,
+    state: &Arc<Mutex<WatcherState>>,
+    stop_rx: &crossfire::Rx<cf_mpsc::List<()>>,
 ) {
-    // SAFETY: All DiskArbitration calls require an unsafe block because they are
-    // FFI into Apple's C framework. The session is created, used, and cleaned up
-    // within this function. The Arc<Mutex<WatcherState>> is passed to callbacks
-    // via Arc::into_raw and reconstructed via Arc::from_raw on cleanup.
+    // SAFETY: DASessionCreate is FFI into Apple's DiskArbitration framework.
+    // The session is created, used, and cleaned up within this function.
+    let session = unsafe { DASessionCreate(kCFAllocatorDefault) };
+    if session.is_null() {
+        tracing::error!("Failed to create DiskArbitration session (null DASessionRef)");
+        return;
+    }
+
+    let run_loop = CFRunLoop::get_current();
+    let run_loop_ref = run_loop.as_concrete_TypeRef();
+
+    // SAFETY: session and run_loop_ref are valid pointers obtained above.
+    unsafe { DASessionScheduleWithRunLoop(session, run_loop_ref, kCFRunLoopCommonModes) };
+
+    // SAFETY: Arc::into_raw increments the refcount. The matching
+    // Arc::from_raw at the end of this function balances it. The raw
+    // pointer is passed to DA callbacks which only borrow it (no from_raw).
+    let state_ptr = Arc::into_raw(Arc::clone(state)) as *mut c_void;
+
+    // SAFETY: session is valid, callback and context pointer are correct types.
     unsafe {
-        let session = DASessionCreate(kCFAllocatorDefault);
-        if session.is_null() {
-            tracing::error!("Failed to create DiskArbitration session (null DASessionRef)");
-            return;
-        }
-
-        let run_loop = CFRunLoop::get_current();
-        let run_loop_ref = run_loop.as_concrete_TypeRef();
-
-        DASessionScheduleWithRunLoop(session, run_loop_ref, kCFRunLoopCommonModes);
-
-        // SAFETY: Arc::into_raw increments the refcount. The matching
-        // Arc::from_raw at the end of this function balances it. The raw
-        // pointer is passed to DA callbacks which only borrow it (no from_raw).
-        let state_ptr = Arc::into_raw(Arc::clone(&state)) as *mut c_void;
-
         DARegisterDiskAppearedCallback(
             session,
             std::ptr::null(),
             disk_appeared_callback,
             state_ptr,
         );
+    }
 
+    // SAFETY: session is valid, callback and context pointer are correct types.
+    unsafe {
         DARegisterDiskDisappearedCallback(
             session,
             std::ptr::null(),
             disk_disappeared_callback,
             state_ptr,
         );
+    }
 
-        loop {
+    loop {
+        // SAFETY: FFI call to run the CFRunLoop for 100ms.
+        unsafe {
             core_foundation::runloop::CFRunLoopRunInMode(
                 kCFRunLoopDefaultMode,
                 0.1, // 100ms
                 u8::from(false),
             );
-
-            if stop_rx.try_recv().is_ok() {
-                break;
-            }
-
-            poll_for_unmounts(&state);
         }
 
-        // Cleanup: unschedule before dropping the Arc the callbacks reference
-        DASessionUnscheduleFromRunLoop(session, run_loop_ref, kCFRunLoopCommonModes);
+        if stop_rx.try_recv().is_ok() {
+            break;
+        }
 
-        // SAFETY: Balances the Arc::into_raw above. Callbacks are unregistered
-        // (session unscheduled) so no further access to state_ptr can occur.
-        let _ = Arc::from_raw(state_ptr as *const Mutex<WatcherState>);
+        poll_for_unmounts(state);
     }
+
+    // SAFETY: Cleanup — unschedule before dropping the Arc the callbacks reference.
+    unsafe { DASessionUnscheduleFromRunLoop(session, run_loop_ref, kCFRunLoopCommonModes) };
+
+    // SAFETY: Balances the Arc::into_raw above. Callbacks are unregistered
+    // (session unscheduled) so no further access to state_ptr can occur.
+    let _ = unsafe { Arc::from_raw(state_ptr as *const Mutex<WatcherState>) };
 }
 
 /// Poll for volumes that have been unmounted (fallback detection)
 fn poll_for_unmounts(state: &Arc<Mutex<WatcherState>>) {
-    let mut guard = match state.lock() {
-        Ok(g) => g,
-        Err(_) => return,
-    };
+    let Ok(mut guard) = state.lock() else { return };
 
     // Only poll every 500ms
     if guard.last_poll.elapsed() < Duration::from_millis(500) {
@@ -402,41 +408,44 @@ extern "C" fn disk_appeared_callback(disk: DADiskRef, context: *mut c_void) {
 
     // SAFETY: context is an Arc::into_raw'd pointer to Mutex<WatcherState>.
     // We borrow it (no Arc::from_raw) — ownership stays with the event loop.
-    unsafe {
-        let state = &*(context as *const Mutex<WatcherState>);
+    let state = unsafe { &*(context as *const Mutex<WatcherState>) };
 
-        if let Some((bsd_name, event)) = extract_disk_info_with_bsd(disk, UsbEventKind::Mounted) {
-            let mut guard = match state.lock() {
-                Ok(g) => g,
-                Err(e) => {
-                    tracing::error!(error = %e, "Failed to lock watcher state");
-                    return;
-                }
-            };
+    // SAFETY: disk is a valid DADiskRef (checked for null above).
+    let Some((bsd_name, event)) =
+        (unsafe { extract_disk_info_with_bsd(disk, UsbEventKind::Mounted) })
+    else {
+        return;
+    };
 
-            // Use BSD name as key, or fall back to mount point
-            let key = bsd_name.unwrap_or_else(|| event.mount_point.to_string_lossy().to_string());
-
-            // Check if this is a new volume
-            if guard.known_volumes.contains_key(&key) {
-                return; // Already known, skip
-            }
-
-            // Add to known volumes
-            guard.known_volumes.insert(
-                key,
-                VolumeInfo {
-                    mount_point: event.mount_point.clone(),
-                    volume_name: event.volume_name.clone(),
-                    device_serial: event.device_serial.clone(),
-                    file_system: event.file_system.clone(),
-                },
-            );
-
-            // Send the event
-            let _ = guard.event_tx.send(event);
+    let mut guard = match state.lock() {
+        Ok(g) => g,
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to lock watcher state");
+            return;
         }
+    };
+
+    // Use BSD name as key, or fall back to mount point
+    let key = bsd_name.unwrap_or_else(|| event.mount_point.to_string_lossy().to_string());
+
+    // Check if this is a new volume
+    if guard.known_volumes.contains_key(&key) {
+        return; // Already known, skip
     }
+
+    // Add to known volumes
+    guard.known_volumes.insert(
+        key,
+        VolumeInfo {
+            mount_point: event.mount_point.clone(),
+            volume_name: event.volume_name.clone(),
+            device_serial: event.device_serial.clone(),
+            file_system: event.file_system.clone(),
+        },
+    );
+
+    // Send the event
+    let _ = guard.event_tx.send(event);
 }
 
 /// Callback when a disk disappears (is unmounted)
@@ -447,28 +456,30 @@ extern "C" fn disk_disappeared_callback(disk: DADiskRef, context: *mut c_void) {
     }
 
     // SAFETY: Same as disk_appeared_callback — borrowed, not owned.
-    unsafe {
-        let state = &*(context as *const Mutex<WatcherState>);
+    let state = unsafe { &*(context as *const Mutex<WatcherState>) };
 
-        // Try to get disk info - may fail for disappearing disks
-        if let Some((bsd_name, event)) = extract_disk_info_with_bsd(disk, UsbEventKind::Unmounted) {
-            let mut guard = match state.lock() {
-                Ok(g) => g,
-                Err(e) => {
-                    tracing::error!(error = %e, "Failed to lock watcher state");
-                    return;
-                }
-            };
+    // SAFETY: disk is a valid DADiskRef (checked for null above).
+    let Some((bsd_name, event)) =
+        (unsafe { extract_disk_info_with_bsd(disk, UsbEventKind::Unmounted) })
+    else {
+        return;
+    };
 
-            let key = bsd_name.unwrap_or_else(|| event.mount_point.to_string_lossy().to_string());
-
-            // Remove from known volumes
-            guard.known_volumes.remove(&key);
-
-            // Send the event
-            let _ = guard.event_tx.send(event);
+    let mut guard = match state.lock() {
+        Ok(g) => g,
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to lock watcher state");
+            return;
         }
-    }
+    };
+
+    let key = bsd_name.unwrap_or_else(|| event.mount_point.to_string_lossy().to_string());
+
+    // Remove from known volumes
+    guard.known_volumes.remove(&key);
+
+    // Send the event
+    let _ = guard.event_tx.send(event);
 }
 
 /// Extract disk information from a `DADisk` reference, returning BSD name separately
@@ -476,13 +487,16 @@ unsafe fn extract_disk_info_with_bsd(
     disk: DADiskRef,
     kind: UsbEventKind,
 ) -> Option<(Option<String>, UsbEvent)> {
-    let desc_dict = DADiskCopyDescription(disk);
+    // SAFETY: disk is a valid DADiskRef, checked for null by callers.
+    let desc_dict = unsafe { DADiskCopyDescription(disk) };
     if desc_dict.is_null() {
         return None;
     }
 
-    // Wrap in CFDictionary for safe access
-    let dict: CFDictionary<CFString, CFType> = CFDictionary::wrap_under_create_rule(desc_dict);
+    // SAFETY: desc_dict is non-null (checked above) and follows the Create Rule
+    // (caller owns the reference). wrap_under_create_rule takes ownership.
+    let dict: CFDictionary<CFString, CFType> =
+        unsafe { CFDictionary::wrap_under_create_rule(desc_dict) };
 
     // Get BSD name first (we need it for tracking)
     let bsd_name = get_string_value(&dict, DA_DISK_DESCRIPTION_MEDIA_BSD_NAME_KEY);

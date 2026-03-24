@@ -33,8 +33,7 @@ impl FileBrowserView {
         let now = Instant::now();
         let timed_out = self
             .typeahead_last_key
-            .map(|last| now.duration_since(last).as_millis() > TYPEAHEAD_TIMEOUT_MS)
-            .unwrap_or(true);
+            .is_none_or(|last| now.duration_since(last).as_millis() > TYPEAHEAD_TIMEOUT_MS);
 
         if timed_out {
             self.typeahead_buffer.clear();
@@ -87,6 +86,7 @@ impl FileBrowserView {
             }
 
             let mut result = None;
+            #[allow(clippy::indexing_slicing)] // idx is always < len due to modulo
             for offset in 1..=len {
                 let idx = (current + offset) % len;
                 if delegate.entries[idx]

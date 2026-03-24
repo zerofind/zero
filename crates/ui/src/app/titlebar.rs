@@ -23,8 +23,7 @@ impl ZeroApp {
                 let group_name = self
                     .cleanup
                     .as_ref()
-                    .map(|v| v.read(cx).group_name(*idx))
-                    .unwrap_or("Detail");
+                    .map_or("Detail", |v| v.read(cx).group_name(*idx));
                 (
                     "Cleanup".to_string(),
                     IconName::Delete,
@@ -39,15 +38,13 @@ impl ZeroApp {
             ActiveView::Editor(path) => {
                 let name = path
                     .file_name()
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_else(|| "Editor".to_string());
+                    .map_or_else(|| "Editor".to_string(), |n| n.to_string_lossy().to_string());
                 (name, IconName::File, None)
             }
             ActiveView::DataTable(path) => {
                 let name = path
                     .file_name()
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_else(|| "Data".to_string());
+                    .map_or_else(|| "Data".to_string(), |n| n.to_string_lossy().to_string());
                 (name, IconName::LayoutDashboard, None)
             }
             ActiveView::FileBrowser(_) => {
@@ -61,11 +58,10 @@ impl ZeroApp {
                     return (label, IconName::Search, None);
                 }
 
-                let folder_name = self
-                    .current_path
-                    .file_name()
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_else(|| "Macintosh HD".to_string());
+                let folder_name = self.current_path.file_name().map_or_else(
+                    || "Macintosh HD".to_string(),
+                    |n| n.to_string_lossy().to_string(),
+                );
                 let git_branch = self.file_browser.as_ref().and_then(|browser| {
                     let delegate = browser.read(cx).table_state.read(cx).delegate();
                     delegate

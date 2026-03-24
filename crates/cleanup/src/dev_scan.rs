@@ -100,7 +100,7 @@ pub fn scan_dev_garbage(
     root: &Path,
     category_filter: Option<&str>,
     max_depth: Option<usize>,
-    progress: Option<Arc<DevScanProgress>>,
+    progress: Option<&Arc<DevScanProgress>>,
 ) -> Result<DevScanResult, DevScanError> {
     let root = root
         .canonicalize()
@@ -141,9 +141,8 @@ pub fn scan_dev_garbage(
                 let name = entry.file_name().to_string_lossy().to_string();
                 if let Some(categories) = callback_lookup.get(name.as_str()) {
                     let entry_path = entry.path();
-                    let parent = match entry_path.parent() {
-                        Some(p) => p,
-                        None => continue,
+                    let Some(parent) = entry_path.parent() else {
+                        continue;
                     };
 
                     for cat in categories {
@@ -161,36 +160,31 @@ pub fn scan_dev_garbage(
         });
 
     for entry in walker {
-        if let Some(ref p) = progress
+        if let Some(p) = progress
             && p.cancelled.load(Ordering::Relaxed)
         {
             break;
         }
 
-        let entry = match entry {
-            Ok(e) => e,
-            Err(_) => continue,
-        };
+        let Ok(entry) = entry else { continue };
 
         if !entry.file_type().is_dir() {
             continue;
         }
 
         dirs_scanned += 1;
-        if let Some(ref p) = progress {
+        if let Some(p) = progress {
             p.dirs_scanned.store(dirs_scanned, Ordering::Relaxed);
         }
 
         let name = entry.file_name().to_string_lossy().to_string();
-        let categories = match lookup.get(name.as_str()) {
-            Some(c) => c,
-            None => continue,
+        let Some(categories) = lookup.get(name.as_str()) else {
+            continue;
         };
 
         let entry_path = entry.path();
-        let parent = match entry_path.parent() {
-            Some(p) => p,
-            None => continue,
+        let Some(parent) = entry_path.parent() else {
+            continue;
         };
 
         for cat in categories {
@@ -216,7 +210,7 @@ pub fn scan_dev_garbage(
                 warning: cat.warning.clone(),
             };
 
-            if let Some(ref p) = progress {
+            if let Some(p) = progress {
                 p.garbage_found.fetch_add(1, Ordering::Relaxed);
                 p.bytes_found.fetch_add(total_bytes, Ordering::Relaxed);
             }

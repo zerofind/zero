@@ -19,8 +19,7 @@ const SNIFF_LINES: usize = 20;
 pub fn is_data_table(path: &Path) -> bool {
     path.extension()
         .and_then(|e| e.to_str())
-        .map(|e| DATA_TABLE_EXTENSIONS.contains(&e.to_lowercase().as_str()))
-        .unwrap_or(false)
+        .is_some_and(|e| DATA_TABLE_EXTENSIONS.contains(&e.to_lowercase().as_str()))
 }
 
 /// Detect the delimiter for a delimited file.
@@ -48,7 +47,7 @@ fn sniff_delimiter(path: &Path) -> Option<u8> {
     let lines: Vec<String> = reader
         .lines()
         .take(SNIFF_LINES)
-        .filter_map(|l| l.ok())
+        .filter_map(std::result::Result::ok)
         .filter(|l| !l.is_empty())
         .collect();
 
@@ -65,7 +64,9 @@ fn sniff_delimiter(path: &Path) -> Option<u8> {
             .collect();
 
         // All lines must agree on the column count.
-        let first = counts[0];
+        let Some(&first) = counts.first() else {
+            continue;
+        };
         if first <= 1 {
             continue;
         }
@@ -81,6 +82,7 @@ fn sniff_delimiter(path: &Path) -> Option<u8> {
 }
 
 /// Count fields in a line for a given delimiter, respecting double-quote escaping.
+#[allow(clippy::indexing_slicing)] // manual index loop with bounds checks
 fn count_fields(line: &[u8], delim: u8) -> usize {
     let mut fields = 1usize;
     let mut in_quotes = false;

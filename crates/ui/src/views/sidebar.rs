@@ -258,6 +258,8 @@ impl AppSidebar {
             .enumerate()
             .map(|(i, _name)| {
                 let is_active = i == active_idx;
+                // labels and workspace_names always have the same length
+                #[allow(clippy::indexing_slicing)]
                 let label = labels[i].clone();
 
                 let (text_col, bg) = if is_active {
@@ -448,11 +450,10 @@ impl AppSidebar {
     /// Path bar shown below nav header when toolbar is hidden.
     fn render_path_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let muted = cx.theme().muted_foreground;
-        let folder_name = self
-            .current_path
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| "Macintosh HD".to_string());
+        let folder_name = self.current_path.file_name().map_or_else(
+            || "Macintosh HD".to_string(),
+            |n| n.to_string_lossy().to_string(),
+        );
 
         div()
             .id("sidebar-path-bar")
@@ -519,10 +520,10 @@ impl AppSidebar {
             .iter()
             .enumerate()
             .map(|(i, path)| {
-                let name = path
-                    .file_name()
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_else(|| path.to_string_lossy().to_string());
+                let name = path.file_name().map_or_else(
+                    || path.to_string_lossy().to_string(),
+                    |n| n.to_string_lossy().to_string(),
+                );
 
                 let icon = match name.as_str() {
                     "Desktop" => IconName::LayoutDashboard,
@@ -631,10 +632,10 @@ impl AppSidebar {
             .iter()
             .enumerate()
             .map(|(i, path)| {
-                let name = path
-                    .file_name()
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_else(|| path.to_string_lossy().to_string());
+                let name = path.file_name().map_or_else(
+                    || path.to_string_lossy().to_string(),
+                    |n| n.to_string_lossy().to_string(),
+                );
 
                 let icon = bookmark_icon(&name);
                 let is_active = active_bm == Some(path);

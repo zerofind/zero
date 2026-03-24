@@ -72,9 +72,9 @@ struct CandidateFile {
 #[instrument(skip(options, progress, tx, manager), fields(path = %path.display()))]
 pub fn find_duplicates_streaming(
     path: &Path,
-    options: DedupOptions,
-    progress: Arc<DedupProgress>,
-    tx: StreamSender,
+    options: &DedupOptions,
+    progress: &Arc<DedupProgress>,
+    tx: &StreamSender,
     manager: Option<&IndexManager>,
 ) -> Result<(), DedupError> {
     if progress.is_cancelled() {
@@ -87,9 +87,9 @@ pub fn find_duplicates_streaming(
 
     // --- Phase 0: Discover files (index or walk) ---
     let (candidates, files_scanned, bytes_scanned) = if let Some(mgr) = manager {
-        discover_from_index(mgr, path, &options, &progress, &tx)
+        discover_from_index(mgr, path, options, progress, tx)
     } else {
-        discover_from_walk(path, &options, &progress, &tx)?
+        discover_from_walk(path, options, progress, tx)?
     };
 
     if progress.is_cancelled() {
@@ -138,9 +138,9 @@ pub fn find_duplicates_streaming(
 
     // --- Phase 2: Hash each size-group and emit verified groups ---
     if options.skip_hash {
-        emit_size_only_groups(potential_duplicates, &tx);
+        emit_size_only_groups(potential_duplicates, tx);
     } else {
-        hash_groups_streaming(potential_duplicates, &options, &progress, &tx);
+        hash_groups_streaming(potential_duplicates, options, progress, tx);
     }
 
     // --- Phase 3: Done ---
@@ -229,7 +229,7 @@ fn discover_from_walk(
         ..Default::default()
     };
 
-    let iter = scan_with_progress(path, scan_options, Some(scan_progress.clone()))?;
+    let iter = scan_with_progress(path, &scan_options, Some(scan_progress.clone()))?;
     let type_filter = options.type_filter;
     let min_size = options.min_size;
     let mut candidates = Vec::new();

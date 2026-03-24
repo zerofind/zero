@@ -139,6 +139,7 @@ impl FileBrowserView {
             trashed_indices.dedup();
 
             let mut remove_set = Vec::new();
+            #[allow(clippy::indexing_slicing)] // idx validated by selection tracking
             for &idx in &trashed_indices {
                 let depth = delegate.entries[idx].depth;
                 let mut end = idx + 1;
@@ -172,7 +173,7 @@ impl FileBrowserView {
     /// Navigate to a new directory in-place — no entity teardown.
     pub fn navigate(&mut self, path: PathBuf, cx: &mut Context<Self>) {
         tracing::debug!(path = %path.display(), "browser: navigate");
-        self.path = path.clone();
+        self.path.clone_from(&path);
 
         // Clear modal/search state (meaningless in new folder)
         self.search_active = false;
@@ -448,9 +449,8 @@ impl FileBrowserView {
         }
         tracing::debug!(count = entries.len(), "browser: duplicate files");
         for entry in &entries {
-            let file_name = match entry.path.file_name() {
-                Some(n) => n,
-                None => continue,
+            let Some(file_name) = entry.path.file_name() else {
+                continue;
             };
             let parent = entry.path.parent().unwrap_or(&self.path);
             let target = unique_path(&parent.join(file_name));
@@ -478,8 +478,8 @@ pub(super) fn unique_path(base: &Path) -> PathBuf {
 
     for i in 2..1000 {
         let name = match &ext {
-            Some(e) => format!("{} {}.{}", stem, i, e),
-            None => format!("{} {}", stem, i),
+            Some(e) => format!("{stem} {i}.{e}"),
+            None => format!("{stem} {i}"),
         };
         let candidate = parent.join(name);
         if !candidate.exists() {

@@ -153,7 +153,7 @@ impl RenderOnce for ProgressBanner {
                         )
                     }),
             )
-            .when_some(progress_bar, |el, bar| el.child(bar))
+            .when_some(progress_bar, gpui::ParentElement::child)
     }
 }
 

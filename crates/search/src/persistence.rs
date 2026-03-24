@@ -40,11 +40,17 @@ pub fn save_index(index: &SearchIndex, path: &Path) -> Result<(), IndexError> {
 pub fn load_index(path: &Path) -> Result<SearchIndex, IndexError> {
     let data = fs::read(path)?;
 
-    if data.len() < MAGIC.len() || data[..4] != MAGIC {
+    let header = data
+        .get(..MAGIC.len())
+        .ok_or_else(|| IndexError::Serialize("snapshot too short for magic header".into()))?;
+    if header != MAGIC {
         return Err(IndexError::Serialize("invalid snapshot magic".into()));
     }
 
-    let decompressed = zstd::stream::decode_all(Cursor::new(&data[4..])).map_err(IndexError::Io)?;
+    let compressed = data
+        .get(MAGIC.len()..)
+        .ok_or_else(|| IndexError::Serialize("snapshot has no data after magic header".into()))?;
+    let decompressed = zstd::stream::decode_all(Cursor::new(compressed)).map_err(IndexError::Io)?;
 
     let (roots, nodes): (Vec<String>, Vec<FileNode>) =
         postcard::from_bytes(&decompressed).map_err(|e| IndexError::Serialize(e.to_string()))?;

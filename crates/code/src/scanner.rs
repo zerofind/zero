@@ -39,9 +39,8 @@ pub fn scan_project(root: &Path) -> Result<ProjectSummary, ScanError> {
             continue;
         }
 
-        let language = match detect_language(path) {
-            Some(lang) => lang,
-            None => continue,
+        let Some(language) = detect_language(path) else {
+            continue;
         };
 
         if is_test_file(path, language) {
@@ -59,9 +58,8 @@ pub fn scan_project(root: &Path) -> Result<ProjectSummary, ScanError> {
             .and_then(|e| e.to_str())
             .unwrap_or_default();
 
-        let parser = match parser_for_extension(ext) {
-            Some(p) => p,
-            None => continue,
+        let Some(parser) = parser_for_extension(ext) else {
+            continue;
         };
 
         // Count lines of code
@@ -110,9 +108,8 @@ pub fn scan_files(root: &Path, files: &[PathBuf]) -> Result<ProjectSummary, Scan
             .and_then(|e| e.to_str())
             .unwrap_or_default();
 
-        let parser = match parser_for_extension(ext) {
-            Some(p) => p,
-            None => continue,
+        let Some(parser) = parser_for_extension(ext) else {
+            continue;
         };
 
         let relative_path = full_path
@@ -148,9 +145,8 @@ pub fn discover_projects(root: &Path, git_only: bool) -> Vec<PathBuf> {
         .into_iter()
         .filter_entry(|e| !is_hidden(e) && !is_excluded_dir(e))
     {
-        let entry = match entry {
-            Ok(e) => e,
-            Err(_) => continue,
+        let Ok(entry) = entry else {
+            continue;
         };
 
         if !entry.file_type().is_dir() {

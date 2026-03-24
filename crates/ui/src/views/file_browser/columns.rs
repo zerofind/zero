@@ -17,6 +17,7 @@ pub enum FileColumn {
     Attributes,
 }
 
+#[allow(clippy::trivially_copy_pass_by_ref)]
 impl FileColumn {
     pub fn label(&self) -> &'static str {
         match self {

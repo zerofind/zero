@@ -47,7 +47,7 @@ pub enum TodoError {
 pub type TodoResult<T> = Result<T, TodoError>;
 
 /// Convert `TodoError` -> `etchdb::Error` for use inside store.write closures
-fn to_etch(e: TodoError) -> etchdb::Error {
+fn to_etch(e: &TodoError) -> etchdb::Error {
     etchdb::Error::Invalid {
         field: "todo",
         message: e.to_string(),
@@ -55,7 +55,7 @@ fn to_etch(e: TodoError) -> etchdb::Error {
 }
 
 /// Convert `etchdb::Error` -> `TodoError`
-fn from_etch(e: etchdb::Error) -> TodoError {
+fn from_etch(e: &etchdb::Error) -> TodoError {
     TodoError::Io(std::io::Error::other(e.to_string()))
 }
 
@@ -131,7 +131,7 @@ impl TodoManager {
                 tx.put_task(&task);
                 Ok(next_id)
             })
-            .map_err(from_etch)
+            .map_err(|e| from_etch(&e))
     }
 
     /// Add a task with text and optional list
@@ -161,13 +161,13 @@ impl TodoManager {
                 let mut task = tx
                     .get_task(id)
                     .cloned()
-                    .ok_or_else(|| to_etch(TodoError::TaskNotFound(id)))?;
+                    .ok_or_else(|| to_etch(&TodoError::TaskNotFound(id)))?;
                 task.text = text;
                 task.touch();
                 tx.put_task(&task);
                 Ok(())
             })
-            .map_err(from_etch)
+            .map_err(|e| from_etch(&e))
     }
 
     /// Set task status
@@ -177,7 +177,7 @@ impl TodoManager {
                 let mut task = tx
                     .get_task(id)
                     .cloned()
-                    .ok_or_else(|| to_etch(TodoError::TaskNotFound(id)))?;
+                    .ok_or_else(|| to_etch(&TodoError::TaskNotFound(id)))?;
 
                 match status {
                     TaskStatus::Done => task.complete(),
@@ -192,7 +192,7 @@ impl TodoManager {
                 tx.put_task(&task);
                 Ok(())
             })
-            .map_err(from_etch)
+            .map_err(|e| from_etch(&e))
     }
 
     /// Complete a task
@@ -215,7 +215,7 @@ impl TodoManager {
                 }
                 Ok(completed)
             })
-            .map_err(from_etch)
+            .map_err(|e| from_etch(&e))
     }
 
     /// Reopen a task
@@ -225,12 +225,12 @@ impl TodoManager {
                 let mut task = tx
                     .get_task(id)
                     .cloned()
-                    .ok_or_else(|| to_etch(TodoError::TaskNotFound(id)))?;
+                    .ok_or_else(|| to_etch(&TodoError::TaskNotFound(id)))?;
                 task.reopen();
                 tx.put_task(&task);
                 Ok(())
             })
-            .map_err(from_etch)
+            .map_err(|e| from_etch(&e))
     }
 
     /// Remove a task
@@ -240,11 +240,11 @@ impl TodoManager {
                 let task = tx
                     .get_task(id)
                     .cloned()
-                    .ok_or_else(|| to_etch(TodoError::TaskNotFound(id)))?;
+                    .ok_or_else(|| to_etch(&TodoError::TaskNotFound(id)))?;
                 tx.delete_task(id);
                 Ok(task)
             })
-            .map_err(from_etch)
+            .map_err(|e| from_etch(&e))
     }
 
     /// Assign a task
@@ -255,13 +255,13 @@ impl TodoManager {
                 let mut task = tx
                     .get_task(id)
                     .cloned()
-                    .ok_or_else(|| to_etch(TodoError::TaskNotFound(id)))?;
+                    .ok_or_else(|| to_etch(&TodoError::TaskNotFound(id)))?;
                 task.assigned = Some(assignee);
                 task.touch();
                 tx.put_task(&task);
                 Ok(())
             })
-            .map_err(from_etch)
+            .map_err(|e| from_etch(&e))
     }
 
     /// Unassign a task
@@ -271,13 +271,13 @@ impl TodoManager {
                 let mut task = tx
                     .get_task(id)
                     .cloned()
-                    .ok_or_else(|| to_etch(TodoError::TaskNotFound(id)))?;
+                    .ok_or_else(|| to_etch(&TodoError::TaskNotFound(id)))?;
                 task.assigned = None;
                 task.touch();
                 tx.put_task(&task);
                 Ok(())
             })
-            .map_err(from_etch)
+            .map_err(|e| from_etch(&e))
     }
 
     /// Set task due date
@@ -287,13 +287,13 @@ impl TodoManager {
                 let mut task = tx
                     .get_task(id)
                     .cloned()
-                    .ok_or_else(|| to_etch(TodoError::TaskNotFound(id)))?;
+                    .ok_or_else(|| to_etch(&TodoError::TaskNotFound(id)))?;
                 task.due = due;
                 task.touch();
                 tx.put_task(&task);
                 Ok(())
             })
-            .map_err(from_etch)
+            .map_err(|e| from_etch(&e))
     }
 
     /// Add a tag to a task
@@ -304,7 +304,7 @@ impl TodoManager {
                 let mut task = tx
                     .get_task(id)
                     .cloned()
-                    .ok_or_else(|| to_etch(TodoError::TaskNotFound(id)))?;
+                    .ok_or_else(|| to_etch(&TodoError::TaskNotFound(id)))?;
                 if !task.has_tag(&tag) {
                     task.tags.push(tag);
                     task.touch();
@@ -312,7 +312,7 @@ impl TodoManager {
                 }
                 Ok(())
             })
-            .map_err(from_etch)
+            .map_err(|e| from_etch(&e))
     }
 
     /// Remove a tag from a task
@@ -323,7 +323,7 @@ impl TodoManager {
                 let mut task = tx
                     .get_task(id)
                     .cloned()
-                    .ok_or_else(|| to_etch(TodoError::TaskNotFound(id)))?;
+                    .ok_or_else(|| to_etch(&TodoError::TaskNotFound(id)))?;
                 let original_len = task.tags.len();
                 task.tags.retain(|t| t.to_lowercase() != tag_lower);
                 if task.tags.len() != original_len {
@@ -332,7 +332,7 @@ impl TodoManager {
                 }
                 Ok(())
             })
-            .map_err(from_etch)
+            .map_err(|e| from_etch(&e))
     }
 
     /// Move task to a different list (legacy - use `move_task` for reordering)
@@ -343,13 +343,13 @@ impl TodoManager {
                 let mut task = tx
                     .get_task(id)
                     .cloned()
-                    .ok_or_else(|| to_etch(TodoError::TaskNotFound(id)))?;
+                    .ok_or_else(|| to_etch(&TodoError::TaskNotFound(id)))?;
                 task.list = list;
                 task.touch();
                 tx.put_task(&task);
                 Ok(())
             })
-            .map_err(from_etch)
+            .map_err(|e| from_etch(&e))
     }
 
     /// Move a task within or between lists
@@ -365,21 +365,20 @@ impl TodoManager {
         let to_list_owned = to_list.map(String::from);
         self.store
             .write(|tx| {
-                // Verify task exists
-                let _task = tx
+                let mut task = tx
                     .get_task(id)
-                    .ok_or_else(|| to_etch(TodoError::TaskNotFound(id)))?;
+                    .cloned()
+                    .ok_or_else(|| to_etch(&TodoError::TaskNotFound(id)))?;
 
                 // If changing list, emit a Put for the updated task
                 if let Some(ref list) = to_list_owned {
-                    let mut task = tx.get_task(id).cloned().unwrap();
-                    task.list = list.clone();
+                    task.list.clone_from(list);
                     task.touch();
                     tx.put_task(&task);
                 }
                 Ok(())
             })
-            .map_err(from_etch)
+            .map_err(|e| from_etch(&e))
     }
 
     // =========================================================================

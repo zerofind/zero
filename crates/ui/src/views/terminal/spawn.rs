@@ -121,7 +121,7 @@ impl Terminal {
 
                 loop {
                     futures::select_biased! {
-                        _ = timer => break,
+                        () = timer => break,
                         event = events_rx.next() => {
                             if let Some(event) = event {
                                 if matches!(event, AlacTermEvent::Wakeup) {

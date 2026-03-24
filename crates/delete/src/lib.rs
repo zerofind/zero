@@ -17,12 +17,12 @@
 //! use delete::{DeleteOptions, delete_paths};
 //!
 //! // Permanent delete
-//! let result = delete_paths(&[Path::new("/tmp/file.txt")], DeleteOptions::default())?;
+//! let result = delete_paths(&[Path::new("/tmp/file.txt")], &DeleteOptions::default())?;
 //!
 //! // Move to trash
 //! let result = delete_paths(
 //!     &[Path::new("/tmp/file.txt")],
-//!     DeleteOptions::default().use_trash(true)
+//!     &DeleteOptions::default().use_trash(true)
 //! )?;
 //! # Ok::<(), delete::DeleteError>(())
 //! ```
@@ -217,18 +217,18 @@ pub fn delete_path(path: &Path, options: &DeleteOptions) -> Result<DeletedItem, 
 /// Delete multiple paths (batch operation)
 ///
 /// Uses parallel deletion for efficiency.
-pub fn delete_paths(paths: &[&Path], options: DeleteOptions) -> Result<DeleteResult, DeleteError> {
+pub fn delete_paths(paths: &[&Path], options: &DeleteOptions) -> Result<DeleteResult, DeleteError> {
     if paths.is_empty() {
         return Ok(DeleteResult::empty());
     }
 
     // For small batches, do sequential deletion
     if paths.len() < 4 {
-        return delete_paths_sequential(paths, &options);
+        return delete_paths_sequential(paths, options);
     }
 
     // Parallel deletion for larger batches
-    delete_paths_parallel(paths, &options)
+    delete_paths_parallel(paths, options)
 }
 
 /// Sequential deletion (for small batches or when order matters)
@@ -597,7 +597,7 @@ mod tests {
         File::create(&file3).unwrap();
 
         let paths: Vec<&Path> = vec![file1.as_path(), file2.as_path(), file3.as_path()];
-        let result = delete_paths(&paths, DeleteOptions::default()).unwrap();
+        let result = delete_paths(&paths, &DeleteOptions::default()).unwrap();
 
         assert_eq!(result.files_deleted, 3);
         assert!(result.success());

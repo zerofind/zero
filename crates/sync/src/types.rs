@@ -558,8 +558,3 @@ impl Default for SyncAtomicProgress {
         Self::new()
     }
 }
-
-// SAFETY: All fields are atomic types (AtomicU64, AtomicUsize, AtomicU32,
-// AtomicBool), RwLock<Option<String>>, or Instant — all inherently Send+Sync.
-unsafe impl Send for SyncAtomicProgress {}
-unsafe impl Sync for SyncAtomicProgress {}

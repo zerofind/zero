@@ -216,6 +216,8 @@ fn get_mount_point(path: &Path) -> Result<String, DiskError> {
 
     // The mount point is the last field (may contain spaces)
     // We need to find it after "Mounted on" in header
+    // SAFETY: bounds checked above (lines.len() >= 2)
+    #[allow(clippy::indexing_slicing)]
     let data_line = lines[1];
 
     // Find mount point - it's everything after the percentage columns

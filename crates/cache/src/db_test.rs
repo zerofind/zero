@@ -25,7 +25,7 @@ fn test_storage_lifecycle() {
     // Create a storage
     let device_info = DeviceInfo::usb("TEST123", Some("Test Drive".to_string()));
     let (storage, _db) = manager
-        .get_or_create_storage(Path::new("/Volumes/Test"), Some(device_info))
+        .get_or_create_storage(Path::new("/Volumes/Test"), &Some(device_info))
         .unwrap();
 
     assert_eq!(storage.device_serial, Some("TEST123".to_string()));
@@ -48,7 +48,7 @@ fn test_file_operations() {
     let (_temp_dir, manager) = setup_test_env();
 
     let (storage, db) = manager
-        .get_or_create_storage(Path::new("/test"), None)
+        .get_or_create_storage(Path::new("/test"), &None)
         .unwrap();
 
     // Insert a file
@@ -141,7 +141,7 @@ fn test_cache_manager_db_caching() {
     let (_temp_dir, manager) = setup_test_env();
 
     let (storage, _) = manager
-        .get_or_create_storage(Path::new("/test"), None)
+        .get_or_create_storage(Path::new("/test"), &None)
         .unwrap();
 
     // First access - opens DB
@@ -161,14 +161,14 @@ fn test_list_storages() {
     manager
         .get_or_create_storage(
             Path::new("/a"),
-            Some(DeviceInfo::usb("A", Some("Drive A".to_string()))),
+            &Some(DeviceInfo::usb("A", Some("Drive A".to_string()))),
         )
         .unwrap();
 
     manager
         .get_or_create_storage(
             Path::new("/b"),
-            Some(DeviceInfo::usb("B", Some("Drive B".to_string()))),
+            &Some(DeviceInfo::usb("B", Some("Drive B".to_string()))),
         )
         .unwrap();
 

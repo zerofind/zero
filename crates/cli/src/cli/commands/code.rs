@@ -131,9 +131,7 @@ pub fn cmd_code_list(out: &Outputter) -> anyhow::Result<()> {
 pub fn cmd_code_overview(out: &Outputter, path: &Path) -> anyhow::Result<()> {
     let mut index = CodeIndex::new()?;
 
-    let overview = if let Some(o) = index.overview(path)? {
-        o
-    } else {
+    let Some(overview) = index.overview(path)? else {
         out.warn(&format!("Project not indexed: {}", path.display()));
         out.info("Run: zero code index <path>");
         return Ok(());
@@ -198,7 +196,11 @@ pub fn cmd_code_project_symbols(
         return Ok(());
     }
 
-    let proj_path = &results[0].project_path;
+    // SAFETY(index): results is guaranteed non-empty by the is_empty() check above
+    let proj_path = &results
+        .first()
+        .expect("results non-empty after is_empty check")
+        .project_path;
     let langs: Vec<&str> = index
         .indexed_projects()
         .iter()
@@ -217,7 +219,7 @@ pub fn cmd_code_project_symbols(
     for r in &results {
         let e = &r.element;
         if e.file_path != current_file {
-            current_file = e.file_path.clone();
+            current_file.clone_from(&e.file_path);
             println!("// {current_file}");
         }
         println!("{}", e.signature);

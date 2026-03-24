@@ -4,7 +4,7 @@ use super::*;
 
 #[test]
 fn test_erase_level_defaults_to_normal() {
-    let level: EraseLevel = Default::default();
+    let level = EraseLevel::default();
     assert_eq!(level, EraseLevel::Normal);
 }
 
@@ -102,7 +102,7 @@ fn test_all_levels() {
 #[test]
 fn test_scheme_display() {
     let scheme = Scheme::vsitr();
-    assert_eq!(format!("{}", scheme), "VSITR 7-Pass (7 passes)");
+    assert_eq!(format!("{scheme}"), "VSITR 7-Pass (7 passes)");
 }
 
 #[test]

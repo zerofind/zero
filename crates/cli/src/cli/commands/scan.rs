@@ -24,7 +24,7 @@ pub fn cmd_scan(
         ..Default::default()
     };
 
-    let entries = scan_collect(path, options)?;
+    let entries = scan_collect(path, &options)?;
     let duration = start.elapsed();
     let duration_ms = duration.as_millis() as u64;
 
@@ -119,7 +119,7 @@ pub fn cmd_benchmark(
         skip_hidden,
         ..Default::default()
     };
-    let entries = scan_collect(path, options.clone())?;
+    let entries = scan_collect(path, &options)?;
     let file_count = entries.len();
     let total_size: u64 = entries.iter().map(|e| e.size).sum();
     let warmup_elapsed = warmup_start.elapsed();
@@ -137,9 +137,7 @@ pub fn cmd_benchmark(
     for i in 0..iterations {
         let start = Instant::now();
 
-        let count: usize = scan(path, options.clone())?
-            .filter(std::result::Result::is_ok)
-            .count();
+        let count: usize = scan(path, &options)?.flatten().count();
 
         let elapsed = start.elapsed();
         times.push(elapsed);
@@ -156,13 +154,18 @@ pub fn cmd_benchmark(
 
     // Calculate statistics
     times.sort();
-    let min = times.first().unwrap();
-    let max = times.last().unwrap();
-    let median = times[times.len() / 2];
+    // times is guaranteed non-empty: iterations >= 1 from .max(1) above
+    let min = times.first().expect("at least one iteration");
+    let max = times.last().expect("at least one iteration");
+    // SAFETY(index): times.len() >= 1, so times.len() / 2 is valid
+    let median = times.get(times.len() / 2).expect("valid median index");
     let mean: Duration = times.iter().sum::<Duration>() / times.len() as u32;
 
     let p95_idx = (times.len() as f64 * 0.95) as usize;
-    let p95 = times[p95_idx.min(times.len() - 1)];
+    // SAFETY(index): p95_idx is clamped to valid range
+    let p95 = times
+        .get(p95_idx.min(times.len() - 1))
+        .expect("valid p95 index");
 
     out.newline();
     out.info(&format!("Results ({iterations} iterations):"));
@@ -172,8 +175,8 @@ pub fn cmd_benchmark(
     out.kv("Min", format_duration(*min));
     out.kv("Max", format_duration(*max));
     out.kv("Mean", format_duration(mean));
-    out.kv("Median", format_duration(median));
-    out.kv("P95", format_duration(p95));
+    out.kv("Median", format_duration(*median));
+    out.kv("P95", format_duration(*p95));
     out.newline();
 
     // Throughput

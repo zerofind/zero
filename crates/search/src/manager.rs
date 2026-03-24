@@ -256,13 +256,13 @@ impl IndexManager {
         };
 
         // Load all indexes from disk
-        manager.load_all_indexes()?;
+        manager.load_all_indexes();
 
         Ok(manager)
     }
 
     /// Load all indexes listed in the roots cache
-    fn load_all_indexes(&mut self) -> Result<(), IndexError> {
+    fn load_all_indexes(&mut self) {
         let roots: Vec<_> = self.roots_cache.keys().cloned().collect();
 
         for root in roots {
@@ -273,8 +273,6 @@ impl IndexManager {
                 let _ = self.control_db.remove_indexed_root(&root);
             }
         }
-
-        Ok(())
     }
 
     /// Load a single index from disk (snapshot file)
@@ -288,7 +286,7 @@ impl IndexManager {
         if !path.is_file() {
             return Err(IndexError::Io(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                format!("Index not found: {path:?}"),
+                format!("Index not found: {}", path.display()),
             )));
         }
 
@@ -544,8 +542,10 @@ impl IndexManager {
 
     /// Search with custom options across all indexes in parallel
     /// If options.limit is 0, returns all results (unlimited)
+    // Takes by value: public API, avoids forcing callers to borrow temporaries
+    #[allow(clippy::needless_pass_by_value)]
     pub fn search_with_options(&self, query: &str, options: SearchOptions) -> Vec<SearchResult> {
-        self.search_filtered(query, options, None)
+        self.search_filtered(query, &options, None)
     }
 
     /// Search with filtering by roots
@@ -558,7 +558,7 @@ impl IndexManager {
     pub fn search_filtered(
         &self,
         query: &str,
-        options: SearchOptions,
+        options: &SearchOptions,
         roots: Option<&[String]>,
     ) -> Vec<SearchResult> {
         if self.indexes.is_empty() {
@@ -591,7 +591,7 @@ impl IndexManager {
         // Parallel search across selected indexes
         let mut all_results: Vec<SearchResult> = indexes_to_search
             .par_iter()
-            .flat_map(|(_, index)| index.search_with_options(query, effective_options.clone()))
+            .flat_map(|(_, index)| index.search_with_options(query, &effective_options))
             .collect();
 
         // Sort by score (descending)
@@ -609,6 +609,8 @@ impl IndexManager {
     ///
     /// This is the preferred entry point. Dispatches to per-root `SearchIndex::query()`
     /// and merges results.
+    // Takes by value: q is cloned per index in par_iter and this is the public API
+    #[allow(clippy::needless_pass_by_value)]
     pub fn query(&self, q: SearchQuery) -> Vec<SearchResult> {
         if self.indexes.is_empty() {
             return Vec::new();
@@ -1051,6 +1053,8 @@ impl IndexManager {
     ///
     /// The same `CrawlProgress` is shared across all roots, so
     /// counters accumulate across the entire rebuild.
+    // Takes by value: Arc is cheap to clone and this matches add_root_with_progress's signature
+    #[allow(clippy::needless_pass_by_value)]
     pub fn rebuild_all_with_progress(
         &mut self,
         progress: Option<Arc<CrawlProgress>>,
@@ -1104,19 +1108,19 @@ impl SharedIndexManager {
 
     /// Unified search (read lock)
     pub fn query(&self, q: SearchQuery) -> Vec<SearchResult> {
-        let guard = self.inner.read().unwrap();
+        let guard = self.inner.read().expect("lock poisoned");
         guard.query(q)
     }
 
     /// Search across all indexes (read lock)
     pub fn search(&self, query: &str, limit: usize) -> Vec<SearchResult> {
-        let guard = self.inner.read().unwrap();
+        let guard = self.inner.read().expect("lock poisoned");
         guard.search(query, limit)
     }
 
     /// Search by type (read lock)
     pub fn search_by_type(&self, type_filter: &str, limit: usize) -> Vec<SearchResult> {
-        let guard = self.inner.read().unwrap();
+        let guard = self.inner.read().expect("lock poisoned");
         guard.search_by_type(type_filter, limit)
     }
 
@@ -1127,61 +1131,61 @@ impl SharedIndexManager {
         type_filter: &str,
         limit: usize,
     ) -> Vec<SearchResult> {
-        let guard = self.inner.read().unwrap();
+        let guard = self.inner.read().expect("lock poisoned");
         guard.search_with_type(query, type_filter, limit)
     }
 
     /// Add a root (write lock)
     pub fn add_root(&self, root: &str) -> Result<usize, IndexError> {
-        let mut guard = self.inner.write().unwrap();
+        let mut guard = self.inner.write().expect("lock poisoned");
         guard.add_root(root)
     }
 
     /// Remove a root (write lock)
     pub fn remove_root(&self, root: &str) -> usize {
-        let mut guard = self.inner.write().unwrap();
+        let mut guard = self.inner.write().expect("lock poisoned");
         guard.remove_root(root)
     }
 
     /// Check if a root exists (read lock)
     pub fn has_root(&self, root: &str) -> bool {
-        let guard = self.inner.read().unwrap();
+        let guard = self.inner.read().expect("lock poisoned");
         guard.has_root(root)
     }
 
     /// Get all roots (read lock)
     pub fn roots(&self) -> Vec<String> {
-        let guard = self.inner.read().unwrap();
+        let guard = self.inner.read().expect("lock poisoned");
         guard.roots()
     }
 
     /// Get stats (read lock)
     pub fn stats(&self) -> Vec<RootStats> {
-        let guard = self.inner.read().unwrap();
+        let guard = self.inner.read().expect("lock poisoned");
         guard.stats()
     }
 
     /// Get total file count (read lock)
     pub fn total_file_count(&self) -> usize {
-        let guard = self.inner.read().unwrap();
+        let guard = self.inner.read().expect("lock poisoned");
         guard.total_file_count()
     }
 
     /// Get type count (read lock)
     pub fn type_count(&self, type_filter: &str) -> u64 {
-        let guard = self.inner.read().unwrap();
+        let guard = self.inner.read().expect("lock poisoned");
         guard.type_count(type_filter)
     }
 
     /// Clear all indexes (write lock)
     pub fn clear(&self) {
-        let mut guard = self.inner.write().unwrap();
+        let mut guard = self.inner.write().expect("lock poisoned");
         guard.clear();
     }
 
     /// Rebuild a root (write lock)
     pub fn rebuild_root(&self, root: &str) -> Result<usize, IndexError> {
-        let mut guard = self.inner.write().unwrap();
+        let mut guard = self.inner.write().expect("lock poisoned");
         guard.rebuild_root(root)
     }
 
@@ -1209,7 +1213,7 @@ pub fn load_index_snapshot(indexes_dir: &Path, hash: &str) -> Result<SearchIndex
     if !path.is_file() {
         return Err(IndexError::Io(std::io::Error::new(
             std::io::ErrorKind::NotFound,
-            format!("Index file not found: {path:?}"),
+            format!("Index file not found: {}", path.display()),
         )));
     }
     persistence::load_index(&path)
@@ -1219,7 +1223,8 @@ pub fn hash_path(path: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(path.as_bytes());
     let result = hasher.finalize();
-    // Use first 16 bytes (32 hex chars) for reasonable uniqueness
+    // SHA-256 always produces 32 bytes; 16 bytes = 32 hex chars for reasonable uniqueness
+    #[allow(clippy::indexing_slicing)]
     hex::encode(&result[..16])
 }
 

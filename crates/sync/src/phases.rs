@@ -61,9 +61,9 @@ pub struct TransferResult {
 pub fn phase_scan(
     source: &Path,
     dest: &Path,
-    scan_options: ScanOptions,
+    scan_options: &ScanOptions,
     dest_is_empty: bool,
-    sync_progress: &Option<Arc<SyncAtomicProgress>>,
+    sync_progress: Option<&Arc<SyncAtomicProgress>>,
 ) -> Result<ScanResult, SyncError> {
     eprint!("Scanning source...");
     let _ = std::io::stderr().flush();
@@ -99,6 +99,7 @@ pub fn phase_scan(
             scan_options,
             Some(Arc::clone(&source_scan_progress)),
         )?;
+
         source_scan_progress.cancel();
         eprintln!(
             " {} files ({:.1}s)",
@@ -109,15 +110,13 @@ pub fn phase_scan(
     } else {
         let source_path = source.to_path_buf();
         let dest_path = dest.to_path_buf();
-        let scan_opts_source = scan_options.clone();
-        let scan_opts_dest = scan_options;
         let src_progress = Arc::clone(&source_scan_progress);
         let dst_progress = Arc::clone(&dest_scan_progress);
 
         let scan_result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
             rayon::join(
-                || scan_collect_with_progress(&source_path, scan_opts_source, Some(src_progress)),
-                || scan_collect_with_progress(&dest_path, scan_opts_dest, Some(dst_progress)),
+                || scan_collect_with_progress(&source_path, scan_options, Some(src_progress)),
+                || scan_collect_with_progress(&dest_path, scan_options, Some(dst_progress)),
             )
         }));
 
@@ -622,7 +621,7 @@ pub fn phase_cache_flush(
 pub fn phase_delete(
     dest: &Path,
     files_to_delete: &[PathBuf],
-    sync_progress: &Option<Arc<SyncAtomicProgress>>,
+    sync_progress: Option<&Arc<SyncAtomicProgress>>,
 ) -> (usize, usize) {
     if files_to_delete.is_empty() {
         return (0, 0);

@@ -140,6 +140,7 @@ impl TableDelegate for FileBrowserDelegate {
         self.entries.len()
     }
 
+    #[allow(clippy::indexing_slicing)]
     fn column(&self, col_ix: usize, _cx: &App) -> &Column {
         &self.columns[col_ix]
     }
@@ -301,6 +302,7 @@ impl TableDelegate for FileBrowserDelegate {
 
 // -- Column renderers ---------------------------------------------------------
 
+#[allow(clippy::indexing_slicing)] // row_ix validated by table framework
 fn render_name_column(
     entry: &BrowserEntry,
     row_ix: usize,
@@ -361,13 +363,13 @@ fn render_name_column(
                                 delegate
                                     .selected
                                     .retain(|&idx| idx <= row_ix || idx > row_ix + count);
-                                for idx in delegate.selected.iter_mut() {
+                                for idx in &mut delegate.selected {
                                     if *idx > row_ix + count {
                                         *idx -= count;
                                     }
                                 }
                             } else {
-                                for idx in delegate.selected.iter_mut() {
+                                for idx in &mut delegate.selected {
                                     if *idx > row_ix {
                                         *idx += count;
                                     }
@@ -487,6 +489,7 @@ fn render_permissions_column(
         .into_any_element()
 }
 
+#[allow(unsafe_code)]
 fn render_owner_column(
     entry: &BrowserEntry,
     cx: &mut Context<TableState<FileBrowserDelegate>>,
@@ -517,6 +520,7 @@ fn render_owner_column(
     let user_color = {
         #[cfg(unix)]
         {
+            // SAFETY: getuid() is always safe — no arguments, no pointers, just returns the uid.
             let current_uid = unsafe { libc::getuid() };
             let is_current =
                 entry.mode.is_some() && resolve_uid_matches_name(current_uid, &owner.user);
@@ -553,13 +557,21 @@ fn render_owner_column(
 }
 
 #[cfg(unix)]
+#[allow(unsafe_code)]
 fn resolve_uid_matches_name(uid: u32, name: &str) -> bool {
+    // SAFETY: getpwuid returns a pointer to a static struct or null.
     let pw = unsafe { libc::getpwuid(uid) };
     if pw.is_null() {
         return uid.to_string() == name;
     }
-    let pw_name = unsafe { std::ffi::CStr::from_ptr((*pw).pw_name) };
-    pw_name.to_string_lossy() == name
+    // SAFETY: pw is non-null (checked above); pw_name is a valid C string pointer per POSIX.
+    let pw_name = unsafe { (*pw).pw_name };
+    if pw_name.is_null() {
+        return uid.to_string() == name;
+    }
+    // SAFETY: pw_name is non-null, checked above.
+    let cstr = unsafe { std::ffi::CStr::from_ptr(pw_name) };
+    cstr.to_string_lossy() == name
 }
 
 fn render_name_editing(

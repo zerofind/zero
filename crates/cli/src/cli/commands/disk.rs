@@ -7,6 +7,7 @@ use foundation::output::{
 use foundation::{cmd_error, cmd_success};
 use std::time::Instant;
 
+#[allow(clippy::unnecessary_wraps)] // Returns Result for CLI command consistency
 pub fn cmd_drives(out: &Outputter) -> anyhow::Result<()> {
     let start = Instant::now();
 
@@ -144,6 +145,7 @@ pub fn cmd_drives(out: &Outputter) -> anyhow::Result<()> {
     Ok(())
 }
 
+#[allow(clippy::unnecessary_wraps)] // Returns Result for CLI command consistency
 pub fn cmd_disk(out: &Outputter, path: &std::path::Path) -> anyhow::Result<()> {
     let start = Instant::now();
 

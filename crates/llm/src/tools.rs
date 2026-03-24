@@ -59,8 +59,8 @@ fn add_search_files(index: SharedIndex, tools: &mut ToolSet) {
                     return Ok(json!({"result":
                         "Search index is still loading. Use list_directory to browse a specific folder."}));
                 };
-                let query = input["query"].as_str().unwrap_or("");
-                let limit = input["limit"].as_u64().unwrap_or(20).min(200) as usize;
+                let query = input.get("query").and_then(|v| v.as_str()).unwrap_or("");
+                let limit = input.get("limit").and_then(Value::as_u64).unwrap_or(20).min(200) as usize;
                 let results = mgr.search(query, limit);
                 debug!(query, results = results.len(), "search_files");
                 Ok(json!({"result": format_results(&results)}))
@@ -99,8 +99,8 @@ fn add_search_by_type(index: SharedIndex, tools: &mut ToolSet) {
                     return Ok(json!({"result":
                         "Search index is still loading. Use list_directory to browse a specific folder."}));
                 };
-                let file_type = input["file_type"].as_str().unwrap_or("");
-                let limit = input["limit"].as_u64().unwrap_or(20).min(200) as usize;
+                let file_type = input.get("file_type").and_then(|v| v.as_str()).unwrap_or("");
+                let limit = input.get("limit").and_then(Value::as_u64).unwrap_or(20).min(200) as usize;
                 let results = mgr.search_by_type(file_type, limit);
                 debug!(file_type, results = results.len(), "search_by_type");
                 Ok(json!({"result": format_results(&results)}))
@@ -127,7 +127,7 @@ fn add_list_directory(tools: &mut ToolSet) {
         )
         .with_execute(Arc::new(move |input: Value, _opts| {
             ToolExecutionOutput::Single(Box::pin(async move {
-                let path_str = input["path"].as_str().unwrap_or("");
+                let path_str = input.get("path").and_then(|v| v.as_str()).unwrap_or("");
                 let path = Path::new(path_str);
 
                 if !path.is_absolute() {
@@ -179,7 +179,7 @@ fn add_file_info(tools: &mut ToolSet) {
         .with_description("Get metadata for a specific file: size, type, modification time.")
         .with_execute(Arc::new(move |input: Value, _opts| {
             ToolExecutionOutput::Single(Box::pin(async move {
-                let path_str = input["path"].as_str().unwrap_or("");
+                let path_str = input.get("path").and_then(|v| v.as_str()).unwrap_or("");
                 let path = Path::new(path_str);
 
                 let meta = match std::fs::metadata(path) {
@@ -266,10 +266,10 @@ fn format_time(unix_ts: u64) -> String {
 
 fn days_to_ymd(days: u64) -> (u64, u64, u64) {
     // Algorithm from http://howardhinnant.github.io/date_algorithms.html
-    let z = days + 719468;
-    let era = z / 146097;
-    let doe = z - era * 146097;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let z = days + 719_468;
+    let era = z / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
     let y = yoe + era * 400;
     let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
     let mp = (5 * doy + 2) / 153;

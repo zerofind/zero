@@ -281,8 +281,7 @@ impl SettingsView {
                                                     .text_size(FONT_SIZE_CAPTION)
                                                     .text_color(hsla(0.08, 0.9, 0.55, 1.0))
                                                     .child(SharedString::from(format!(
-                                                        "Overlaps with {}",
-                                                        parent,
+                                                        "Overlaps with {parent}",
                                                     ))),
                                             )
                                         })
@@ -326,6 +325,7 @@ impl SettingsView {
         cx.notify();
     }
 
+    #[allow(clippy::needless_pass_by_value)] // path is used by reference then cloned into vec
     pub(super) fn add_root(&mut self, path: PathBuf, cx: &mut Context<Self>) {
         tracing::debug!(path = %path.display(), "settings: add root");
         if self.settings.search_roots.contains(&path) {

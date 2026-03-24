@@ -9,12 +9,12 @@ use super::render::TodoView;
 
 impl TodoView {
     /// Open a specific .todo file and reload tasks.
-    pub fn open_file(&mut self, path: std::path::PathBuf, cx: &mut Context<Self>) {
+    pub fn open_file(&mut self, path: &std::path::Path, cx: &mut Context<Self>) {
         tracing::debug!(path = %path.display(), "todo: open file");
-        match TodoManager::open_file(&path) {
+        match TodoManager::open_file(path) {
             Ok(manager) => {
                 self.lists = manager.list_names();
-                self.tasks = manager.all_tasks().to_vec();
+                self.tasks = manager.all_tasks();
                 self.manager = Some(manager);
                 self.error = None;
             }
@@ -35,7 +35,7 @@ impl TodoView {
         match TodoManager::open_file(&todo_path) {
             Ok(manager) => {
                 self.lists = manager.list_names();
-                self.tasks = manager.all_tasks().to_vec();
+                self.tasks = manager.all_tasks();
                 self.manager = Some(manager);
                 self.error = None;
             }
@@ -59,7 +59,7 @@ impl TodoView {
 
         let mut task = todo::Task::new(text);
         if self.current_list != "All" {
-            task.list = self.current_list.clone();
+            task.list.clone_from(&self.current_list);
         }
         let _ = manager.add_task(task);
         self.refresh_from_manager();
@@ -90,8 +90,7 @@ impl TodoView {
         // Check current status to decide: reopen or complete
         let is_closed = manager
             .get_task(task_id)
-            .map(|t| t.status.is_closed())
-            .unwrap_or(false);
+            .is_ok_and(|t| t.status.is_closed());
 
         if is_closed {
             let _ = manager.reopen(task_id);
@@ -188,7 +187,7 @@ impl TodoView {
 
     fn refresh_from_manager(&mut self) {
         if let Some(manager) = &self.manager {
-            self.tasks = manager.all_tasks().to_vec();
+            self.tasks = manager.all_tasks();
             self.lists = manager.list_names();
         }
     }
@@ -367,7 +366,7 @@ impl TodoView {
         };
         // Find the task before this one in the same list
         let task = self.tasks.iter().find(|t| t.id == task_id);
-        let list = task.map(|t| t.list.as_str()).unwrap_or("inbox");
+        let list = task.map_or("inbox", |t| t.list.as_str());
         let list_tasks: Vec<u64> = self
             .tasks
             .iter()
@@ -379,7 +378,7 @@ impl TodoView {
         {
             // Move after the task that's two positions before (or to top)
             let after_id = if pos >= 2 {
-                Some(list_tasks[pos - 2])
+                list_tasks.get(pos - 2).copied()
             } else {
                 None // Move to top
             };
@@ -395,7 +394,7 @@ impl TodoView {
             return;
         };
         let task = self.tasks.iter().find(|t| t.id == task_id);
-        let list = task.map(|t| t.list.as_str()).unwrap_or("inbox");
+        let list = task.map_or("inbox", |t| t.list.as_str());
         let list_tasks: Vec<u64> = self
             .tasks
             .iter()
@@ -405,7 +404,7 @@ impl TodoView {
         if let Some(pos) = list_tasks.iter().position(|&id| id == task_id)
             && pos + 1 < list_tasks.len()
         {
-            let after_id = Some(list_tasks[pos + 1]);
+            let after_id = list_tasks.get(pos + 1).copied();
             let _ = manager.move_task(task_id, Some(list), after_id);
             self.refresh_from_manager();
             cx.notify();
@@ -485,9 +484,9 @@ fn parse_date_str(s: &str) -> Option<i64> {
     if parts.len() != 3 {
         return None;
     }
-    let year: i64 = parts[0].parse().ok()?;
-    let month: i64 = parts[1].parse().ok()?;
-    let day: i64 = parts[2].parse().ok()?;
+    let year: i64 = parts.first()?.parse().ok()?;
+    let month: i64 = parts.get(1)?.parse().ok()?;
+    let day: i64 = parts.get(2)?.parse().ok()?;
 
     if !(1..=12).contains(&month) || !(1..=31).contains(&day) || year < 1970 {
         return None;
@@ -512,6 +511,8 @@ fn parse_date_str(s: &str) -> Option<i64> {
         30,
         31,
     ];
+    // month is validated 1..=12 above, so (month-1) is always in bounds
+    #[allow(clippy::indexing_slicing)]
     for d in &month_days[..(month - 1) as usize] {
         days += d;
     }

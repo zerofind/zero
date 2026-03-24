@@ -159,8 +159,10 @@ impl StageStream {
         let chunk_size = std::cmp::min(self.block_size as u64, remaining) as usize;
 
         // Generate data for random fills
-        if let StreamKind::Random { ref mut rng } = self.kind {
-            rng.fill_bytes(&mut self.buf.as_mut_slice()[..chunk_size]);
+        if let StreamKind::Random { ref mut rng } = self.kind
+            && let Some(slice) = self.buf.as_mut_slice().get_mut(..chunk_size)
+        {
+            rng.fill_bytes(slice);
         }
 
         self.current_chunk_size = chunk_size;
@@ -176,7 +178,7 @@ impl StageStream {
         if self.finished || self.current_chunk_size == 0 {
             None
         } else {
-            Some(&self.buf.as_slice()[..self.current_chunk_size])
+            self.buf.as_slice().get(..self.current_chunk_size)
         }
     }
 

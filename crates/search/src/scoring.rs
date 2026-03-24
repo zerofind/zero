@@ -72,6 +72,8 @@ impl<'a> NodeContext<'a> {
             depth += 1;
 
             // Hidden: starts with '.' and length > 1 (not just ".")
+            // Index 0 is valid: guarded by component.len() > 1 above
+            #[allow(clippy::indexing_slicing)]
             if component.len() > 1 && component.as_bytes()[0] == b'.' {
                 has_hidden = true;
             }

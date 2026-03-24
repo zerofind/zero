@@ -188,6 +188,7 @@ pub fn grid_point_and_side(
     )
 }
 
+#[allow(clippy::needless_pass_by_value)] // small enum consumed by match
 fn mouse_report(
     point: AlacPoint,
     button: AlacMouseButton,

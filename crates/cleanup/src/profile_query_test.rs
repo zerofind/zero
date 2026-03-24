@@ -25,7 +25,7 @@ fn load_index_manager() -> Option<IndexManager> {
             None
         }
         Err(e) => {
-            eprintln!("Failed to load index: {}", e);
+            eprintln!("Failed to load index: {e}");
             None
         }
     }
@@ -131,12 +131,11 @@ where
 #[test]
 #[ignore]
 fn bench_full_cleanup_scan() {
-    let manager = match load_index_manager() {
-        Some(m) => m,
-        None => {
-            println!("Skipping benchmark - no index available");
-            return;
-        }
+    let manager = if let Some(m) = load_index_manager() {
+        m
+    } else {
+        println!("Skipping benchmark - no index available");
+        return;
     };
 
     println!("\n{}", "=".repeat(60));
@@ -162,12 +161,11 @@ fn bench_full_cleanup_scan() {
 #[test]
 #[ignore]
 fn bench_category_queries() {
-    let manager = match load_index_manager() {
-        Some(m) => m,
-        None => {
-            println!("Skipping benchmark - no index available");
-            return;
-        }
+    let manager = if let Some(m) = load_index_manager() {
+        m
+    } else {
+        println!("Skipping benchmark - no index available");
+        return;
     };
 
     let profile = load_cleanup().expect("should load profile");
@@ -208,7 +206,7 @@ fn bench_category_queries() {
                 "other"
             };
 
-            let result = bench(&format!("{} ({})", cat_id, pattern_type), 10, 2, || {
+            let result = bench(&format!("{cat_id} ({pattern_type})"), 10, 2, || {
                 let r = ProfileCleanupQuery::from_category(category).execute(&manager);
                 (r.count, r.total_bytes)
             });
@@ -232,7 +230,7 @@ fn bench_category_queries() {
     }
 
     // Summary statistics
-    let total_time: Duration = results.iter().map(|r| r.avg_duration()).sum();
+    let total_time: Duration = results.iter().map(BenchResult::avg_duration).sum();
     let total_items: usize = results.iter().map(|r| r.items_found).sum();
 
     println!();
@@ -249,12 +247,11 @@ fn bench_category_queries() {
 #[test]
 #[ignore]
 fn bench_group_queries() {
-    let manager = match load_index_manager() {
-        Some(m) => m,
-        None => {
-            println!("Skipping benchmark - no index available");
-            return;
-        }
+    let manager = if let Some(m) = load_index_manager() {
+        m
+    } else {
+        println!("Skipping benchmark - no index available");
+        return;
     };
 
     println!("\n{}", "=".repeat(60));
@@ -271,15 +268,12 @@ fn bench_group_queries() {
     let mut results = Vec::new();
 
     for group in groups {
-        let result = bench(
-            &format!("{:?}", group),
-            5,
-            2,
-            || match execute_group_cleanup(&manager, group) {
-                Ok(summary) => (summary.total_count, summary.total_bytes),
-                Err(_) => (0, 0),
-            },
-        );
+        let result = bench(&format!("{group:?}"), 5, 2, || match execute_group_cleanup(
+            &manager, group,
+        ) {
+            Ok(summary) => (summary.total_count, summary.total_bytes),
+            Err(_) => (0, 0),
+        });
         results.push(result);
     }
 
@@ -311,10 +305,7 @@ fn bench_pattern_overhead() {
     let total_patterns: usize = profile.all_categories().map(|c| c.patterns.len()).sum();
     let total_categories = profile.all_categories().count();
 
-    println!(
-        "  Profile: {} categories, {} patterns\n",
-        total_categories, total_patterns
-    );
+    println!("  Profile: {total_categories} categories, {total_patterns} patterns\n");
 
     // Benchmark query construction
     let category = profile
@@ -329,8 +320,8 @@ fn bench_pattern_overhead() {
             .with_min_size(1024);
     }
     let construction_time = start.elapsed();
-    let construction_ns = construction_time.as_nanos() / iterations as u128;
-    println!("  Query construction: {} ns/query", construction_ns);
+    let construction_ns = construction_time.as_nanos() / u128::from(iterations);
+    println!("  Query construction: {construction_ns} ns/query");
 
     // Benchmark pattern type detection
     let start = Instant::now();
@@ -345,9 +336,10 @@ fn bench_pattern_overhead() {
         }
     }
     let pattern_time = start.elapsed();
-    let per_pattern_ns = pattern_time.as_nanos() / (iterations as u128 * total_patterns as u128);
+    let per_pattern_ns =
+        pattern_time.as_nanos() / (u128::from(iterations) * total_patterns as u128);
 
-    println!("  Pattern type detection: {} ns/pattern", per_pattern_ns);
+    println!("  Pattern type detection: {per_pattern_ns} ns/pattern");
     println!();
 }
 
@@ -355,12 +347,11 @@ fn bench_pattern_overhead() {
 #[test]
 #[ignore]
 fn bench_query_breakdown() {
-    let manager = match load_index_manager() {
-        Some(m) => m,
-        None => {
-            println!("Skipping benchmark - no index available");
-            return;
-        }
+    let manager = if let Some(m) = load_index_manager() {
+        m
+    } else {
+        println!("Skipping benchmark - no index available");
+        return;
     };
 
     println!("\n{}", "=".repeat(60));
@@ -416,12 +407,11 @@ fn bench_query_breakdown() {
 #[test]
 #[ignore]
 fn bench_search_comparison() {
-    let index = match load_search_index() {
-        Some(i) => i,
-        None => {
-            println!("Skipping benchmark - no index available");
-            return;
-        }
+    let index = if let Some(i) = load_search_index() {
+        i
+    } else {
+        println!("Skipping benchmark - no index available");
+        return;
     };
 
     println!("\n{}", "=".repeat(60));
@@ -473,7 +463,7 @@ fn test_cleanup_profile_loads() {
     let profile = profile.unwrap();
     let count = profile.all_categories().count();
     assert!(count > 0, "Should have categories");
-    println!("Loaded {} cleanup categories", count);
+    println!("Loaded {count} cleanup categories");
 }
 
 #[test]

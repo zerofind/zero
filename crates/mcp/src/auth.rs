@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::path::PathBuf;
 
 use rand::Rng as _;
@@ -6,7 +7,10 @@ use rand::Rng as _;
 pub fn generate_api_key() -> String {
     let mut bytes = [0u8; 32];
     rand::rng().fill(&mut bytes);
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
+    bytes.iter().fold(String::with_capacity(64), |mut acc, b| {
+        let _ = write!(acc, "{b:02x}");
+        acc
+    })
 }
 
 /// Path to the persisted API key file.

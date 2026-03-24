@@ -314,7 +314,7 @@ fn test_copy_error_display() {
         path: "/test/path".to_string(),
         source: std::io::Error::new(std::io::ErrorKind::NotFound, "not found"),
     };
-    let display = format!("{}", err);
+    let display = format!("{err}");
     assert!(display.contains("/test/path"));
 }
 
@@ -324,7 +324,7 @@ fn test_copy_error_read_error() {
         path: "/test/source".to_string(),
         source: std::io::Error::new(std::io::ErrorKind::PermissionDenied, "denied"),
     };
-    let display = format!("{}", err);
+    let display = format!("{err}");
     assert!(display.contains("/test/source"));
 }
 
@@ -334,7 +334,7 @@ fn test_copy_error_write_error() {
         path: "/test/dest".to_string(),
         source: std::io::Error::other("write failed"),
     };
-    let display = format!("{}", err);
+    let display = format!("{err}");
     assert!(display.contains("/test/dest"));
 }
 

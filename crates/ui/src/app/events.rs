@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::sync::Arc;
 
 use gpui::*;
@@ -105,7 +106,7 @@ impl ZeroApp {
                     }
                     n += 1;
                 };
-                self.create_workspace(name, window, cx);
+                self.create_workspace(&name, window, cx);
             }
             SidebarEvent::RenameWorkspace(idx, name) => {
                 tracing::debug!(idx, name = %name, "sidebar: rename workspace");
@@ -152,7 +153,7 @@ impl ZeroApp {
                         if let Some(sidebar) = sidebar {
                             _this
                                 .update(cx, |_app, cx| {
-                                    sidebar.update(cx, |s, cx| s.refresh_drives(cx));
+                                    sidebar.update(cx, AppSidebar::refresh_drives);
                                 })
                                 .ok();
                         }
@@ -220,7 +221,7 @@ impl ZeroApp {
                 self.todo = None;
                 let todo = self.ensure_todo(window, cx);
                 todo.update(cx, |view, cx| {
-                    view.open_file(path.clone(), cx);
+                    view.open_file(path, cx);
                 });
                 self.push_view(ActiveView::Todo, window, cx);
             }
@@ -240,7 +241,7 @@ impl ZeroApp {
                     }
                     self.split_browser = None;
                     if let Some(browser) = &self.file_browser {
-                        browser.update(cx, |view, cx| view.reload(cx));
+                        browser.update(cx, FileBrowserView::reload);
                     }
                     cx.notify();
                 }
@@ -447,8 +448,7 @@ impl ZeroApp {
                             return;
                         }
                         "action://go_up" => {
-                            if let Some(parent) =
-                                self.current_path.parent().map(|p| p.to_path_buf())
+                            if let Some(parent) = self.current_path.parent().map(Path::to_path_buf)
                             {
                                 self.navigate_to(parent, window, cx);
                             }
@@ -633,10 +633,10 @@ impl ZeroApp {
                         _this
                             .update(cx, |_app, cx| {
                                 if let Some(dp) = drives_popover {
-                                    dp.update(cx, |v, cx| v.refresh(cx));
+                                    dp.update(cx, DrivesPopover::refresh);
                                 }
                                 if let Some(sb) = sidebar {
-                                    sb.update(cx, |s, cx| s.refresh_drives(cx));
+                                    sb.update(cx, AppSidebar::refresh_drives);
                                 }
                             })
                             .ok();

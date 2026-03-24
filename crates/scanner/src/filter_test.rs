@@ -225,7 +225,7 @@ fn test_clone() {
 #[test]
 fn test_debug() {
     let filter = ScanFilter::new();
-    let debug_str = format!("{:?}", filter);
+    let debug_str = format!("{filter:?}");
     assert!(debug_str.contains("ScanFilter"));
     assert!(debug_str.contains("patterns"));
 }

@@ -64,9 +64,8 @@ pub fn compare_permissions(
         let entry_path = entry.path();
 
         // Get relative path
-        let rel_path = match entry_path.strip_prefix(source_root) {
-            Ok(p) => p,
-            Err(_) => continue,
+        let Ok(rel_path) = entry_path.strip_prefix(source_root) else {
+            continue;
         };
 
         // Skip the root directory itself
@@ -82,13 +81,11 @@ pub fn compare_permissions(
         }
 
         // Get permissions from both
-        let source_meta = match fs::metadata(&entry_path) {
-            Ok(m) => m,
-            Err(_) => continue,
+        let Ok(source_meta) = fs::metadata(&entry_path) else {
+            continue;
         };
-        let dest_meta = match fs::metadata(&dest_path) {
-            Ok(m) => m,
-            Err(_) => continue,
+        let Ok(dest_meta) = fs::metadata(&dest_path) else {
+            continue;
         };
 
         let source_mode = source_meta.permissions().mode();
@@ -157,9 +154,8 @@ pub fn sync_dir_permissions(
         let entry_path = entry.path();
 
         // Get relative path
-        let rel_path = match entry_path.strip_prefix(source_root) {
-            Ok(p) => p,
-            Err(_) => continue,
+        let Ok(rel_path) = entry_path.strip_prefix(source_root) else {
+            continue;
         };
 
         // Skip the root directory itself (empty relative path)

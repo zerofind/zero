@@ -9,13 +9,13 @@ fn test_file_entry_creation() {
         PathBuf::from("foo/bar.txt"),
         PathBuf::from("/root/foo/bar.txt"),
         1024,
-        1699900000,
+        1_699_900_000,
     );
 
     assert_eq!(entry.path, PathBuf::from("foo/bar.txt"));
     assert_eq!(entry.absolute_path, PathBuf::from("/root/foo/bar.txt"));
     assert_eq!(entry.size, 1024);
-    assert_eq!(entry.mtime, 1699900000);
+    assert_eq!(entry.mtime, 1_699_900_000);
     assert!(entry.hash.is_none());
     assert!(entry.hash_xxh3.is_none());
 }
@@ -26,7 +26,7 @@ fn test_with_hash() {
         PathBuf::from("foo.txt"),
         PathBuf::from("/root/foo.txt"),
         100,
-        1699900000,
+        1_699_900_000,
     )
     .with_hash([0u8; 32]);
 
@@ -40,7 +40,7 @@ fn test_with_hash_xxh3() {
         PathBuf::from("foo.txt"),
         PathBuf::from("/root/foo.txt"),
         100,
-        1699900000,
+        1_699_900_000,
     )
     .with_hash_xxh3([1u8; 16]);
 
@@ -54,7 +54,7 @@ fn test_with_both_hashes() {
         PathBuf::from("foo.txt"),
         PathBuf::from("/root/foo.txt"),
         100,
-        1699900000,
+        1_699_900_000,
     )
     .with_hash([2u8; 32])
     .with_hash_xxh3([3u8; 16]);
@@ -69,13 +69,13 @@ fn test_metadata_match() {
         PathBuf::from("file.txt"),
         PathBuf::from("/a/file.txt"),
         500,
-        1699900000,
+        1_699_900_000,
     );
     let b = FileEntry::new(
         PathBuf::from("file.txt"),
         PathBuf::from("/b/file.txt"),
         500,
-        1699900000,
+        1_699_900_000,
     );
 
     assert!(a.matches_metadata(&b));
@@ -87,13 +87,13 @@ fn test_metadata_no_match_size() {
         PathBuf::from("file.txt"),
         PathBuf::from("/a/file.txt"),
         500,
-        1699900000,
+        1_699_900_000,
     );
     let b = FileEntry::new(
         PathBuf::from("file.txt"),
         PathBuf::from("/b/file.txt"),
         600,
-        1699900000,
+        1_699_900_000,
     );
 
     assert!(!a.matches_metadata(&b));
@@ -105,13 +105,13 @@ fn test_metadata_no_match_mtime() {
         PathBuf::from("file.txt"),
         PathBuf::from("/a/file.txt"),
         500,
-        1699900000,
+        1_699_900_000,
     );
     let b = FileEntry::new(
         PathBuf::from("file.txt"),
         PathBuf::from("/b/file.txt"),
         500,
-        1699900001,
+        1_699_900_001,
     );
 
     assert!(!a.matches_metadata(&b));
@@ -209,7 +209,7 @@ fn test_clone() {
         PathBuf::from("test.txt"),
         PathBuf::from("/root/test.txt"),
         1024,
-        1699900000,
+        1_699_900_000,
     )
     .with_hash([5u8; 32]);
 
@@ -228,13 +228,13 @@ fn test_equality() {
         PathBuf::from("test.txt"),
         PathBuf::from("/root/test.txt"),
         1024,
-        1699900000,
+        1_699_900_000,
     );
     let b = FileEntry::new(
         PathBuf::from("test.txt"),
         PathBuf::from("/root/test.txt"),
         1024,
-        1699900000,
+        1_699_900_000,
     );
 
     assert_eq!(a, b);
@@ -246,13 +246,13 @@ fn test_inequality() {
         PathBuf::from("test.txt"),
         PathBuf::from("/root/test.txt"),
         1024,
-        1699900000,
+        1_699_900_000,
     );
     let b = FileEntry::new(
         PathBuf::from("other.txt"),
         PathBuf::from("/root/other.txt"),
         1024,
-        1699900000,
+        1_699_900_000,
     );
 
     assert_ne!(a, b);
@@ -264,10 +264,10 @@ fn test_debug() {
         PathBuf::from("test.txt"),
         PathBuf::from("/root/test.txt"),
         1024,
-        1699900000,
+        1_699_900_000,
     );
 
-    let debug_str = format!("{:?}", entry);
+    let debug_str = format!("{entry:?}");
     assert!(debug_str.contains("test.txt"));
     assert!(debug_str.contains("1024"));
 }

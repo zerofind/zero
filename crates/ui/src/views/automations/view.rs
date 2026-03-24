@@ -65,7 +65,7 @@ impl AutomationsView {
         cx.spawn(async move |this, cx| {
             let result = cx
                 .background_executor()
-                .spawn(async { Self::fetch_automations().await })
+                .spawn(async move { Self::fetch_automations() })
                 .await;
 
             this.update(cx, |view, cx| {
@@ -81,7 +81,7 @@ impl AutomationsView {
         .detach();
     }
 
-    async fn fetch_automations() -> Result<Vec<AutomationCard>, String> {
+    fn fetch_automations() -> Result<Vec<AutomationCard>, String> {
         let db = cache::CacheDb::open().map_err(|e| format!("Failed to open database: {e}"))?;
 
         let automations = db
@@ -220,11 +220,11 @@ impl Render for AutomationsView {
         let muted = cx.theme().muted_foreground;
         let modal_view = self.modal.clone();
 
-        let card_elements: Vec<AnyElement> = (0..self.automations.len())
-            .map(|i| {
-                let card = &self.automations[i];
-                self.render_card(i, card, muted, cx)
-            })
+        let card_elements: Vec<AnyElement> = self
+            .automations
+            .iter()
+            .enumerate()
+            .map(|(i, card)| self.render_card(i, card, muted, cx))
             .collect();
 
         v_flex()
@@ -303,11 +303,12 @@ impl Render for AutomationsView {
                     )
                     .children(card_elements),
             )
-            .when_some(modal_view, |el, modal| el.child(modal))
+            .when_some(modal_view, gpui::ParentElement::child)
     }
 }
 
 impl AutomationsView {
+    #[allow(clippy::unused_self)] // method for consistent API
     fn render_card(
         &self,
         idx: usize,

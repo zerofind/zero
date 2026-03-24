@@ -85,8 +85,7 @@ impl CleanupView {
     pub fn group_name(&self, idx: usize) -> &'static str {
         self.groups
             .get(idx)
-            .map(|g| g.group.display_name())
-            .unwrap_or("Detail")
+            .map_or("Detail", |g| g.group.display_name())
     }
 
     /// Called by ZeroApp when navigating to CleanupDetail(idx).
@@ -128,7 +127,7 @@ impl CleanupView {
             let Some(manager) = manager else { return };
 
             let active_groups: Vec<CleanupGroup> = profiles::load_cleanup()
-                .map(|p| p.active_groups())
+                .map(profiles::MergedCleanupProfile::active_groups)
                 .unwrap_or_default();
 
             for group in active_groups {
@@ -626,22 +625,19 @@ impl CleanupView {
     pub(super) fn detail_item_count(&self, cx: &App) -> usize {
         self.detail_table
             .as_ref()
-            .map(|t| t.read(cx).delegate().rows.len())
-            .unwrap_or(0)
+            .map_or(0, |t| t.read(cx).delegate().rows.len())
     }
 
     pub(super) fn detail_selected_count(&self, cx: &App) -> usize {
         self.detail_table
             .as_ref()
-            .map(|t| t.read(cx).delegate().selected.len())
-            .unwrap_or(0)
+            .map_or(0, |t| t.read(cx).delegate().selected.len())
     }
 
     pub(super) fn detail_selected_bytes(&self, cx: &App) -> u64 {
         self.detail_table
             .as_ref()
-            .map(|t| t.read(cx).delegate().selected_bytes())
-            .unwrap_or(0)
+            .map_or(0, |t| t.read(cx).delegate().selected_bytes())
     }
 
     /// Build CleanupRow list from already-loaded group data.

@@ -21,7 +21,7 @@ ignore = [
     { id = "RUSTSEC-2024-0384", reason = "instant unmaintained — gpui dep" },
     { id = "RUSTSEC-2024-0436", reason = "paste unmaintained — gpui dep" },
     { id = "RUSTSEC-2025-0134", reason = "rustls-pemfile unmaintained — gpui dep (zed-reqwest)" },
-    { id = "RUSTSEC-2026-0049", reason = "rustls-webpki CRL bug — gpui dep (zed-reqwest → rustls)" },
+    { id = "RUSTSEC-2023-0071", reason = "rsa timing sidechannel — opendal transitive dep (reqsign → rsa), no fix available" },
 ]
 
 # -- Licenses: allowlist of acceptable licenses ---

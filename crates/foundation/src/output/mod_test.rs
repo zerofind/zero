@@ -90,16 +90,16 @@ fn test_format_duration_milliseconds() {
 #[test]
 fn test_format_duration_seconds() {
     let result = format_duration(Duration::from_secs(5));
-    assert!(result.contains("s"));
+    assert!(result.contains('s'));
     assert!(!result.contains("ms"));
-    assert!(!result.contains("m"));
+    assert!(!result.contains('m'));
 }
 
 #[test]
 fn test_format_duration_minutes() {
     let result = format_duration(Duration::from_secs(90));
-    assert!(result.contains("m"));
-    assert!(result.contains("s"));
+    assert!(result.contains('m'));
+    assert!(result.contains('s'));
 }
 
 #[test]

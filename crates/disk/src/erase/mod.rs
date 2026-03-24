@@ -17,7 +17,7 @@
 //! let volume = VolumeInfo::for_path(Path::new("/Volumes/MyUSB")).unwrap();
 //! let options = EraseOptions::new(EraseLevel::Normal);
 //!
-//! erase_volume(&volume, options, |progress| {
+//! erase_volume(&volume, &options, |progress| {
 //!     println!("{}% complete", progress.percent());
 //! }).unwrap();
 //! ```
@@ -238,7 +238,7 @@ impl EraseTarget {
 /// let volume = VolumeInfo::for_path(Path::new("/Volumes/MyUSB")).unwrap();
 /// let options = EraseOptions::new(EraseLevel::Strong);
 ///
-/// erase_volume(&volume, options, |progress| {
+/// erase_volume(&volume, &options, |progress| {
 ///     println!("[{}/{}] Pass {}/{}: {}%",
 ///         progress.stage + 1,
 ///         progress.total_stages,
@@ -250,7 +250,7 @@ impl EraseTarget {
 /// ```
 pub fn erase_volume<F>(
     volume: &VolumeInfo,
-    options: EraseOptions,
+    options: &EraseOptions,
     progress: F,
 ) -> Result<EraseResult, EraseError>
 where
@@ -269,7 +269,7 @@ where
     let target = EraseTarget::from_volume(volume);
     let scheme = options.level.scheme();
 
-    wipe::run_wipe(&target, &scheme, &options, progress)
+    wipe::run_wipe(&target, &scheme, options, progress)
 }
 
 /// Prepare an erase operation and return target info for confirmation
@@ -299,7 +299,7 @@ pub fn prepare_erase(volume: &VolumeInfo) -> Result<EraseTarget, EraseError> {
 pub fn erase_device<P, F>(
     device_path: P,
     size_bytes: u64,
-    options: EraseOptions,
+    options: &EraseOptions,
     progress: F,
 ) -> Result<EraseResult, EraseError>
 where
@@ -319,7 +319,7 @@ where
     };
 
     let scheme = options.level.scheme();
-    wipe::run_wipe(&target, &scheme, &options, progress)
+    wipe::run_wipe(&target, &scheme, options, progress)
 }
 
 #[cfg(test)]

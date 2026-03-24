@@ -229,7 +229,7 @@ impl FileBrowserView {
                         div()
                             .text_size(FONT_SIZE_CAPTION)
                             .text_color(muted)
-                            .child(SharedString::from(format!("{} results", result_count))),
+                            .child(SharedString::from(format!("{result_count} results"))),
                     )
                 })
                 .child(

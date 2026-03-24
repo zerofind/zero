@@ -19,9 +19,9 @@ pub fn to_gpui_color(color: AnsiColor, cx: &gpui::App) -> Hsla {
     match color {
         AnsiColor::Named(named) => named_to_theme(named, cx),
         AnsiColor::Spec(rgb) => Rgba {
-            r: rgb.r as f32 / 255.0,
-            g: rgb.g as f32 / 255.0,
-            b: rgb.b as f32 / 255.0,
+            r: f32::from(rgb.r) / 255.0,
+            g: f32::from(rgb.g) / 255.0,
+            b: f32::from(rgb.b) / 255.0,
             a: 1.0,
         }
         .into(),
@@ -119,9 +119,9 @@ fn ansi(c: [u8; 3]) -> Hsla {
 
 fn rgb(r: u8, g: u8, b: u8) -> Hsla {
     Rgba {
-        r: r as f32 / 255.0,
-        g: g as f32 / 255.0,
-        b: b as f32 / 255.0,
+        r: f32::from(r) / 255.0,
+        g: f32::from(g) / 255.0,
+        b: f32::from(b) / 255.0,
         a: 1.0,
     }
     .into()

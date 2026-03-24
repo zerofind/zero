@@ -9,6 +9,7 @@ use super::ZeroApp;
 
 impl ZeroApp {
     /// Snapshot the current workspace state into `workspace_snapshots`.
+    #[allow(clippy::indexing_slicing)] // active_workspace_idx always valid
     fn snapshot_current_workspace(&mut self) {
         let snap = WorkspaceSnapshot {
             nav_stack: self.nav_stack.clone(),
@@ -22,6 +23,7 @@ impl ZeroApp {
     }
 
     /// Switch to the workspace at `idx`.
+    #[allow(clippy::indexing_slicing)] // idx bounds checked at entry
     pub fn switch_workspace(&mut self, idx: usize, window: &mut Window, cx: &mut Context<Self>) {
         let mut settings = crate::session::Settings::load();
         if idx >= settings.workspaces.len() || idx == self.active_workspace_idx {
@@ -65,7 +67,7 @@ impl ZeroApp {
             } else {
                 ViewMode::List
             };
-            self.current_path = start.clone();
+            self.current_path.clone_from(&start);
             self.active_view = ActiveView::FileBrowser(start.clone());
             self.nav_stack = vec![ActiveView::FileBrowser(start)];
             self.nav_idx = 0;
@@ -100,14 +102,12 @@ impl ZeroApp {
     }
 
     /// Create a new workspace and switch to it.
-    pub fn create_workspace(&mut self, name: String, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn create_workspace(&mut self, name: &str, window: &mut Window, cx: &mut Context<Self>) {
         let mut settings = crate::session::Settings::load();
         let pinned = crate::session::default_bookmarks();
         settings
             .workspaces
-            .push(crate::workspace::Workspace::new_with_defaults(
-                &name, pinned,
-            ));
+            .push(crate::workspace::Workspace::new_with_defaults(name, pinned));
         settings.save();
 
         // Grow snapshot storage
@@ -118,6 +118,7 @@ impl ZeroApp {
     }
 
     /// Rename a workspace.
+    #[allow(clippy::indexing_slicing)] // idx bounds checked before use
     pub fn rename_workspace(&mut self, idx: usize, name: String, cx: &mut Context<Self>) {
         let mut settings = crate::session::Settings::load();
         if idx < settings.workspaces.len() {
@@ -134,6 +135,7 @@ impl ZeroApp {
     }
 
     /// Delete a workspace (disabled if only 1 remains).
+    #[allow(clippy::indexing_slicing)] // idx bounds checked at entry
     pub fn delete_workspace(&mut self, idx: usize, window: &mut Window, cx: &mut Context<Self>) {
         let mut settings = crate::session::Settings::load();
         if settings.workspaces.len() <= 1 || idx >= settings.workspaces.len() {
@@ -170,7 +172,7 @@ impl ZeroApp {
             } else {
                 ViewMode::List
             };
-            self.current_path = start.clone();
+            self.current_path.clone_from(&start);
             self.active_view = ActiveView::FileBrowser(start.clone());
             self.nav_stack = vec![ActiveView::FileBrowser(start)];
             self.nav_idx = 0;

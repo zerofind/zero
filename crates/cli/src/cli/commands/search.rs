@@ -209,7 +209,10 @@ pub fn cmd_search(out: &Outputter, opts: &SearchOptions<'_>) -> anyhow::Result<(
 
     let index: &SearchIndex = match &source {
         IndexSource::Standalone(idx) => idx,
-        IndexSource::Manager(mgr) => mgr.indexes().next().unwrap(),
+        IndexSource::Manager(mgr) => mgr
+            .indexes()
+            .next()
+            .expect("manager has indexes since total_file_count > 0"),
     };
     let load_duration = load_start.elapsed();
 
@@ -277,8 +280,8 @@ pub fn cmd_search(out: &Outputter, opts: &SearchOptions<'_>) -> anyhow::Result<(
         } else {
             let mut q = SearchQuery::text(query_str, search_limit).with_type_opt(type_filter);
             // Handle extensions: single or multi
-            if extensions.len() == 1 {
-                q = q.with_extension(&extensions[0]);
+            if let [ext] = extensions {
+                q = q.with_extension(ext);
             } else if extensions.len() > 1 {
                 q = q.with_extensions(extensions.to_vec());
             }
@@ -319,8 +322,8 @@ pub fn cmd_search(out: &Outputter, opts: &SearchOptions<'_>) -> anyhow::Result<(
     };
 
     // Handle --open / --reveal for the first result
-    if (open || reveal) && !results.is_empty() {
-        let first_path = &results[0].node.path;
+    if let (true, Some(first_result)) = (open || reveal, results.first()) {
+        let first_path = &first_result.node.path;
         if reveal {
             let _ = std::process::Command::new("open")
                 .arg("-R")
@@ -342,7 +345,8 @@ pub fn cmd_search(out: &Outputter, opts: &SearchOptions<'_>) -> anyhow::Result<(
         let total_duration = total_start.elapsed();
         let search_duration = search_start.elapsed();
 
-        let display_query = build_display_query(query_str, type_filter, extensions, &path_prefix);
+        let display_query =
+            build_display_query(query_str, type_filter, extensions, path_prefix.as_ref());
 
         out.header(&format!(
             "Count: {} files matching '{}' (search: {:.2}ms, load: {:.0}ms)",
@@ -357,7 +361,8 @@ pub fn cmd_search(out: &Outputter, opts: &SearchOptions<'_>) -> anyhow::Result<(
     let search_duration = search_start.elapsed();
     let total_duration = total_start.elapsed();
 
-    let display_query = build_display_query(query_str, type_filter, extensions, &path_prefix);
+    let display_query =
+        build_display_query(query_str, type_filter, extensions, path_prefix.as_ref());
 
     if results.is_empty() {
         if !is_piped {
@@ -418,7 +423,7 @@ fn build_display_query(
     query_str: &str,
     type_filter: Option<FileTypeCategory>,
     extensions: &[String],
-    path_prefix: &Option<String>,
+    path_prefix: Option<&String>,
 ) -> String {
     let mut parts = Vec::new();
 
@@ -462,6 +467,7 @@ fn format_size(bytes: u64) -> String {
 }
 
 /// List available type filters
+#[allow(clippy::unnecessary_wraps)] // Returns Result for CLI command consistency
 pub fn cmd_search_types(out: &Outputter) -> anyhow::Result<()> {
     out.header("Available file type filters (powered by roaring bitmaps)");
     out.newline();
@@ -600,7 +606,7 @@ pub fn cmd_search_watch(
 
         // Only print if something changed
         if stats.events_processed != last_processed {
-            let idx = index.read().unwrap();
+            let idx = index.read().expect("index lock not poisoned");
             out.indented(&format!(
                 "Events: {} received, {} processed | Index: {} files | +{} -{} ~{}",
                 stats.events_received,

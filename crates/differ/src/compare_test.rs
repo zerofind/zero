@@ -8,7 +8,7 @@ use tempfile::TempDir;
 fn create_test_entry(path: &str, size: u64, mtime: u64) -> FileEntry {
     FileEntry {
         path: PathBuf::from(path),
-        absolute_path: PathBuf::from(format!("/tmp/{}", path)),
+        absolute_path: PathBuf::from(format!("/tmp/{path}")),
         size,
         mtime,
         hash: None,

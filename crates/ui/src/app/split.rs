@@ -33,8 +33,7 @@ impl ZeroApp {
         let path = self
             .split_pane
             .as_ref()
-            .map(|p| p.current_path.clone())
-            .unwrap_or_else(|| self.current_path.clone());
+            .map_or_else(|| self.current_path.clone(), |p| p.current_path.clone());
         let search = self.services.search.clone();
         let view = cx.new(|cx| FileBrowserView::new(path, search, window, cx));
 

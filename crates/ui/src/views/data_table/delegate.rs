@@ -47,7 +47,7 @@ impl DataFrameDelegate {
             .iter()
             .take(50)
             .filter_map(|r| r.get(col))
-            .map(|v| v.len())
+            .map(std::string::String::len)
             .max()
             .unwrap_or(0);
 
@@ -89,6 +89,7 @@ impl TableDelegate for DataFrameDelegate {
         self.frame.rows.len()
     }
 
+    #[allow(clippy::indexing_slicing)] // col_ix provided by table framework
     fn column(&self, col_ix: usize, _cx: &App) -> &Column {
         &self.columns[col_ix]
     }
@@ -111,8 +112,8 @@ impl TableDelegate for DataFrameDelegate {
         let ascending = self.sort_dir == SortDirection::Ascending;
 
         self.frame.rows.sort_by(|a, b| {
-            let va = a.get(col).map(|s| s.as_str()).unwrap_or("");
-            let vb = b.get(col).map(|s| s.as_str()).unwrap_or("");
+            let va = a.get(col).map_or("", std::string::String::as_str);
+            let vb = b.get(col).map_or("", std::string::String::as_str);
 
             // Try numeric comparison first
             let cmp = match (va.parse::<f64>(), vb.parse::<f64>()) {
@@ -142,8 +143,7 @@ impl TableDelegate for DataFrameDelegate {
             .rows
             .get(row_ix)
             .and_then(|r| r.get(col_ix))
-            .map(|s| s.as_str())
-            .unwrap_or("");
+            .map_or("", std::string::String::as_str);
 
         if value.is_empty() {
             return div()
@@ -164,7 +164,7 @@ impl TableDelegate for DataFrameDelegate {
             .h_full()
             .flex()
             .items_center()
-            .when(is_numeric, |el| el.justify_end())
+            .when(is_numeric, gpui::Styled::justify_end)
             .text_size(FONT_SIZE_BODY)
             .text_color(cx.theme().foreground)
             .text_ellipsis()

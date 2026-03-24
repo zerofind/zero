@@ -85,6 +85,7 @@ impl AutomationModal {
         }
     }
 
+    #[allow(clippy::unused_self)]
     pub(super) fn dismiss(&mut self, cx: &mut Context<Self>) {
         tracing::debug!("automations: modal dismiss");
         cx.emit(ModalEvent::Dismissed);
@@ -176,7 +177,7 @@ impl AutomationModal {
         cx.spawn(async move |this, cx| {
             let result = cx
                 .background_executor()
-                .spawn(async move { Self::save_to_db(editing_id, new_auto).await })
+                .spawn(async move { Self::save_to_db(editing_id, new_auto) })
                 .await;
 
             this.update(cx, |view, cx| {
@@ -245,7 +246,7 @@ impl AutomationModal {
         }
     }
 
-    async fn save_to_db(
+    fn save_to_db(
         editing_id: Option<i64>,
         new: cache::automations::NewAutomation,
     ) -> Result<(), String> {

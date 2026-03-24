@@ -28,8 +28,8 @@ pub(super) fn render_detail_view(
 ) -> impl IntoElement {
     let group_idx = view.detail_group.unwrap_or(0);
     let group = view.groups.get(group_idx);
-    let total_bytes = group.map(|g| g.total_bytes).unwrap_or(0);
-    let detail_loaded = group.map(|g| g.detail_loaded).unwrap_or(false);
+    let total_bytes = group.map_or(0, |g| g.total_bytes);
+    let detail_loaded = group.is_some_and(|g| g.detail_loaded);
     let item_count = view.detail_item_count(cx);
     let selected_count = view.detail_selected_count(cx);
     let all_selected = item_count > 0 && selected_count == item_count;

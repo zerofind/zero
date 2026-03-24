@@ -60,6 +60,7 @@ impl OnboardingView {
         cx.notify();
     }
 
+    #[allow(clippy::unused_self)]
     fn skip(&mut self, cx: &mut Context<Self>) {
         tracing::debug!("onboarding: skip");
         cx.emit(OnboardingEvent::Skip);
@@ -113,6 +114,7 @@ impl Render for OnboardingView {
 }
 
 impl OnboardingView {
+    #[allow(clippy::unused_self)]
     fn render_welcome(&mut self, muted: Hsla, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .gap_4()
@@ -269,6 +271,7 @@ impl OnboardingView {
             )
     }
 
+    #[allow(clippy::unused_self)]
     fn render_complete(&mut self, muted: Hsla, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .gap_4()

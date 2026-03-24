@@ -89,8 +89,7 @@ impl SecureEraseView {
                         let selected = self
                             .selected_volume
                             .as_ref()
-                            .map(|s| s.mount_point == vol.mount_point)
-                            .unwrap_or(false);
+                            .is_some_and(|s| s.mount_point == vol.mount_point);
 
                         let size_str = if vol.size_bytes > 0 {
                             format!(" \u{2022} {}", format_bytes(vol.size_bytes))
@@ -134,7 +133,7 @@ impl SecureEraseView {
                                     )
                                     .child(
                                         div().text_size(FONT_SIZE_CAPTION).text_color(muted).child(
-                                            SharedString::from(format!("{}{}", size_str, fs_str)),
+                                            SharedString::from(format!("{size_str}{fs_str}")),
                                         ),
                                     ),
                             )
@@ -192,8 +191,8 @@ impl SecureEraseView {
                                 .label(Self::level_name(i))
                                 .compact()
                                 .small()
-                                .when(selected, |b| b.primary())
-                                .when(!selected, |b| b.ghost())
+                                .when(selected, gpui_component::button::ButtonVariants::primary)
+                                .when(!selected, gpui_component::button::ButtonVariants::ghost)
                                 .on_click(cx.listener(move |this, _, _, cx| {
                                     this.selected_level = i;
                                     cx.notify();
@@ -276,7 +275,7 @@ impl SecureEraseView {
                 v_flex()
                     .gap_1()
                     .child(div().text_size(FONT_SIZE_CAPTION).text_color(muted).child(
-                        SharedString::from(format!("Type \"{}\" to confirm:", target_name)),
+                        SharedString::from(format!("Type \"{target_name}\" to confirm:")),
                     ))
                     .child(Input::new(&self.confirm_name_input)),
             )
@@ -371,7 +370,7 @@ impl SecureEraseView {
                             .h_full()
                             .rounded(px(4.0))
                             .bg(brand_color(cx))
-                            .w(relative(pct as f32 / 100.0)),
+                            .w(relative(f32::from(pct) / 100.0)),
                     ),
             )
             // Speed & ETA
@@ -494,6 +493,7 @@ impl SecureEraseView {
             )
     }
 
+    #[allow(clippy::unused_self)]
     pub(super) fn render_cancelled(
         &mut self,
         muted: Hsla,

@@ -206,11 +206,7 @@ fn test_device_has_new_label_no_original() {
 fn test_elapsed_seconds() {
     let state = create_test_state();
     let elapsed = state.elapsed_seconds();
-    assert!(
-        elapsed < 2,
-        "Elapsed seconds should be < 2, got {}",
-        elapsed
-    );
+    assert!(elapsed < 2, "Elapsed seconds should be < 2, got {elapsed}");
 }
 
 #[test]

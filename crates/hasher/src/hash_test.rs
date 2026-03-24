@@ -290,6 +290,6 @@ fn test_hash_error_display() {
         path: "/test/path".to_string(),
         source: std::io::Error::new(std::io::ErrorKind::NotFound, "not found"),
     };
-    let display = format!("{}", err);
+    let display = format!("{err}");
     assert!(display.contains("/test/path"));
 }

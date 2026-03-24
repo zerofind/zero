@@ -198,7 +198,7 @@ fn test_search_across_multiple_files() {
 fn test_search_with_limit() {
     let dir = TempDir::new().unwrap();
 
-    let tasks: Vec<Task> = (0..20).map(|i| Task::new(format!("Task {}", i))).collect();
+    let tasks: Vec<Task> = (0..20).map(|i| Task::new(format!("Task {i}"))).collect();
     let path = create_test_todo_dir(&dir, "project.todo", tasks);
 
     let options = TodoSearchOptions::default().with_limit(5);

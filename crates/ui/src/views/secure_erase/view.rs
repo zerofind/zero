@@ -180,7 +180,7 @@ impl SecureEraseView {
                     .find(|v| v.mount_point.to_string_lossy() == vol.mount_point)
                 {
                     entry.size_bytes = vol.size_bytes;
-                    entry.file_system = vol.file_system.clone();
+                    entry.file_system.clone_from(&vol.file_system);
                     entry.is_external = vol.is_external();
                 }
             }
@@ -336,6 +336,7 @@ impl SecureEraseView {
         .detach();
     }
 
+    #[allow(clippy::needless_pass_by_value)] // moved into spawn closure
     fn run_erase(
         mount_point: PathBuf,
         level_idx: usize,

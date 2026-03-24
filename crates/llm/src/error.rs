@@ -31,13 +31,21 @@ pub fn friendly_error(raw: &str) -> String {
         let json_str = &cleaned[json_start..];
         if let Ok(json) = serde_json::from_str::<serde_json::Value>(json_str) {
             // OpenAI / Anthropic format: { "error": { "message": "...", "code": "..." } }
-            if let Some(msg) = json["error"]["message"].as_str() {
-                let code = json["error"]["code"].as_str().unwrap_or("");
+            if let Some(msg) = json
+                .get("error")
+                .and_then(|e| e.get("message"))
+                .and_then(|m| m.as_str())
+            {
+                let code = json
+                    .get("error")
+                    .and_then(|e| e.get("code"))
+                    .and_then(|c| c.as_str())
+                    .unwrap_or("");
                 return classify_error(msg, code);
             }
             // Flat format: { "message": "...", "code": "..." }
-            if let Some(msg) = json["message"].as_str() {
-                let code = json["code"].as_str().unwrap_or("");
+            if let Some(msg) = json.get("message").and_then(|m| m.as_str()) {
+                let code = json.get("code").and_then(|c| c.as_str()).unwrap_or("");
                 return classify_error(msg, code);
             }
         }

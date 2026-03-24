@@ -239,11 +239,11 @@ fn get_usb_devices() -> Result<Vec<UsbDeviceInfo>, DiskError> {
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    parse_ioreg_output(&stdout)
+    Ok(parse_ioreg_output(&stdout))
 }
 
 /// Parse ioreg output to extract USB device info
-fn parse_ioreg_output(output: &str) -> Result<Vec<UsbDeviceInfo>, DiskError> {
+fn parse_ioreg_output(output: &str) -> Vec<UsbDeviceInfo> {
     let mut devices = Vec::new();
     let mut current_device: Option<UsbDeviceBuilder> = None;
 
@@ -350,7 +350,7 @@ fn parse_ioreg_output(output: &str) -> Result<Vec<UsbDeviceInfo>, DiskError> {
         })
         .collect();
 
-    Ok(storage_devices)
+    storage_devices
 }
 
 /// Parse a single ioreg property line
@@ -362,13 +362,10 @@ fn parse_ioreg_property(line: &str) -> Option<(&str, &str)> {
         return None;
     }
 
-    let parts: Vec<&str> = line.splitn(2, " = ").collect();
-    if parts.len() != 2 {
-        return None;
-    }
+    let (key_part, value_part) = line.split_once(" = ")?;
 
-    let key = parts[0].trim_matches('"');
-    let value = parts[1].trim_matches('"').trim();
+    let key = key_part.trim_matches('"');
+    let value = value_part.trim_matches('"').trim();
 
     Some((key, value))
 }

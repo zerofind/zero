@@ -85,7 +85,7 @@ impl SyncJob {
                 })?;
 
                 let source_storage = control
-                    .get_or_create_storage(&canonical_source, None)
+                    .get_or_create_storage(&canonical_source, &None)
                     .map_err(|e| {
                         SyncError::IoError(std::io::Error::other(format!(
                             "Failed to create source storage: {e}"
@@ -93,7 +93,7 @@ impl SyncJob {
                     })?;
 
                 let dest_storage = control
-                    .get_or_create_storage(&canonical_dest, None)
+                    .get_or_create_storage(&canonical_dest, &None)
                     .map_err(|e| {
                         SyncError::IoError(std::io::Error::other(format!(
                             "Failed to create dest storage: {e}"
@@ -172,7 +172,7 @@ impl SyncJob {
     #[instrument(skip(self, sync_atomic_progress), fields(source = %self.source.display(), dest = %self.dest.display()))]
     pub fn run_with_atomic_progress(
         &self,
-        sync_atomic_progress: Arc<SyncAtomicProgress>,
+        sync_atomic_progress: &Arc<SyncAtomicProgress>,
     ) -> Result<SyncResult, SyncError> {
         self.run_internal(Some(sync_atomic_progress), None)
     }
@@ -190,7 +190,7 @@ impl SyncJob {
     /// Internal run implementation with atomic progress only (for FFI)
     fn run_internal(
         &self,
-        sync_progress: Option<Arc<SyncAtomicProgress>>,
+        sync_progress: Option<&Arc<SyncAtomicProgress>>,
         _on_progress: Option<()>, // Placeholder to keep signature similar
     ) -> Result<SyncResult, SyncError> {
         self.run_internal_with_callback(sync_progress, &mut |_| {})
@@ -199,7 +199,7 @@ impl SyncJob {
     /// Internal run implementation that supports both atomic progress and callbacks
     fn run_internal_with_callback(
         &self,
-        sync_progress: Option<Arc<SyncAtomicProgress>>,
+        sync_progress: Option<&Arc<SyncAtomicProgress>>,
         on_progress: &mut impl FnMut(&SyncProgress),
     ) -> Result<SyncResult, SyncError> {
         let start_time = Instant::now();
@@ -220,7 +220,7 @@ impl SyncJob {
         on_progress(&progress);
 
         // Update atomic progress if provided
-        if let Some(ref sp) = sync_progress {
+        if let Some(sp) = sync_progress {
             sp.set_phase(SyncPhaseAtomic::Scanning);
         }
 
@@ -241,7 +241,7 @@ impl SyncJob {
         let dest_is_empty = self.is_dest_empty();
 
         // Check for cancellation
-        if let Some(ref sp) = sync_progress
+        if let Some(sp) = sync_progress
             && sp.is_cancelled()
         {
             return Err(SyncError::IoError(std::io::Error::new(
@@ -254,9 +254,9 @@ impl SyncJob {
         let scan = crate::phases::phase_scan(
             &self.source,
             &self.dest,
-            scan_options,
+            &scan_options,
             dest_is_empty,
-            &sync_progress,
+            sync_progress,
         )?;
         let source_files = scan.source_files;
         let dest_files = scan.dest_files;
@@ -265,7 +265,7 @@ impl SyncJob {
 
         progress.phase = SyncPhase::Diffing;
         on_progress(&progress);
-        if let Some(ref sp) = sync_progress {
+        if let Some(sp) = sync_progress {
             sp.set_phase(SyncPhaseAtomic::Diffing);
             sp.set_status(&format!(
                 "Comparing {} vs {} files...",
@@ -275,7 +275,7 @@ impl SyncJob {
         }
 
         // Check for cancellation
-        if let Some(ref sp) = sync_progress
+        if let Some(sp) = sync_progress
             && sp.is_cancelled()
         {
             return Err(SyncError::IoError(std::io::Error::new(
@@ -512,7 +512,7 @@ impl SyncJob {
                 .start();
 
             // Spawn a thread to forward diff progress to sync progress for FFI polling
-            let diff_progress_forwarder = if let Some(ref sp) = sync_progress {
+            let diff_progress_forwarder = if let Some(sp) = sync_progress {
                 let sp_clone = Arc::clone(sp);
                 let diff_progress_clone = Arc::clone(&diff_progress);
                 let files_to_compare = pairs_count;
@@ -614,7 +614,7 @@ impl SyncJob {
             result
         } else {
             // Metadata comparison is fast, but update status for FFI progress
-            if let Some(ref sp) = sync_progress {
+            if let Some(sp) = sync_progress {
                 sp.set_files_to_compare(source_files.len());
                 sp.set_status(&format!(
                     "Comparing {} source files with {} dest files...",
@@ -641,7 +641,7 @@ impl SyncJob {
         };
 
         // Update status for building transfer list (can be slow with many files)
-        if let Some(ref sp) = sync_progress {
+        if let Some(sp) = sync_progress {
             sp.set_status("Building transfer list...");
         }
 
@@ -698,7 +698,7 @@ impl SyncJob {
         on_progress(&progress);
 
         // Update atomic progress with transfer totals and skipped info
-        if let Some(ref sp) = sync_progress {
+        if let Some(sp) = sync_progress {
             sp.set_phase(SyncPhaseAtomic::Transferring);
             sp.set_transfer_totals(files_to_transfer.len(), diff_result.bytes_to_transfer);
             sp.set_skipped(diff_result.identical_count, identical_bytes);
@@ -706,7 +706,7 @@ impl SyncJob {
         }
 
         // Check for cancellation
-        if let Some(ref sp) = sync_progress
+        if let Some(sp) = sync_progress
             && sp.is_cancelled()
         {
             return Err(SyncError::IoError(std::io::Error::new(
@@ -744,7 +744,7 @@ impl SyncJob {
             chunk_threshold: self.options.chunk_threshold,
             verify: self.options.verify,
             parallel_copies: self.options.parallel_copies,
-            sync_progress: sync_progress.clone(),
+            sync_progress: sync_progress.cloned(),
         };
 
         let transfer = crate::phases::phase_transfer(&transfer_ctx, &files_to_copy);
@@ -787,7 +787,7 @@ impl SyncJob {
             on_progress(&progress);
 
             let (deleted, delete_errors) =
-                crate::phases::phase_delete(&self.dest, &files_to_delete, &sync_progress);
+                crate::phases::phase_delete(&self.dest, &files_to_delete, sync_progress);
             files_deleted = deleted;
             progress.errors += delete_errors;
             progress.files_deleted = files_deleted;
@@ -800,7 +800,7 @@ impl SyncJob {
         progress.phase = SyncPhase::Complete;
         progress.current_file = None;
         on_progress(&progress);
-        if let Some(ref sp) = sync_progress {
+        if let Some(sp) = sync_progress {
             sp.set_phase(SyncPhaseAtomic::Complete);
         }
 

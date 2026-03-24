@@ -147,7 +147,7 @@ impl PaletteView {
         // "Show All {Label}" action at index 0
         let type_label = match &self.mode {
             PaletteMode::DrilledIn { label, .. } => label.clone(),
-            _ => String::new(),
+            PaletteMode::Root => String::new(),
         };
         let show_all_selected = self.selected_idx == 0;
         let show_all_label = SharedString::from(format!("Show All {type_label}"));
@@ -361,10 +361,10 @@ impl PaletteView {
             .map(|(fi, &(_, path))| {
                 let item_idx = idx_offset + fi;
                 let selected = self.selected_idx == item_idx;
-                let name = path
-                    .file_name()
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_else(|| path.to_string_lossy().to_string());
+                let name = path.file_name().map_or_else(
+                    || path.to_string_lossy().to_string(),
+                    |n| n.to_string_lossy().to_string(),
+                );
                 div()
                     .id(SharedString::from(format!("click-fbm-{fi}")))
                     .on_click(cx.listener(move |this, _, window, cx| {
@@ -585,10 +585,10 @@ impl PaletteView {
             .map(|(bi, path)| {
                 let item_idx = bi;
                 let selected = self.selected_idx == item_idx;
-                let name = path
-                    .file_name()
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_else(|| path.to_string_lossy().to_string());
+                let name = path.file_name().map_or_else(
+                    || path.to_string_lossy().to_string(),
+                    |n| n.to_string_lossy().to_string(),
+                );
 
                 div()
                     .id(SharedString::from(format!("click-bm-{bi}")))

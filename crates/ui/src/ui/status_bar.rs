@@ -80,14 +80,14 @@ impl RenderOnce for StatusBar {
                         .child(
                             div()
                                 .text_color(muted)
-                                .child(SharedString::from(format!("results for \"{}\"", query))),
+                                .child(SharedString::from(format!("results for \"{query}\""))),
                         ),
                 )
                 .child(
                     div()
                         .text_size(FONT_SIZE_CAPTION)
                         .text_color(muted)
-                        .child(SharedString::from(format_size(total_size).to_string())),
+                        .child(SharedString::from(format_size(total_size).clone())),
                 ),
 
             StatusBarMode::Cleanup {
@@ -115,7 +115,7 @@ impl RenderOnce for StatusBar {
                         .child(
                             div()
                                 .text_color(muted)
-                                .child(SharedString::from(format_size(selected_size).to_string())),
+                                .child(SharedString::from(format_size(selected_size).clone())),
                         )
                 } else {
                     h_flex()
@@ -173,7 +173,7 @@ impl RenderOnce for StatusBar {
                     .items_center()
                     .justify_between()
                     .child(left)
-                    .when_some(right, |el, r| el.child(r))
+                    .when_some(right, gpui::ParentElement::child)
             }
 
             StatusBarMode::Directory {
@@ -205,7 +205,7 @@ impl RenderOnce for StatusBar {
                         .child(
                             div()
                                 .text_color(muted)
-                                .child(SharedString::from(format_size(selected_size).to_string())),
+                                .child(SharedString::from(format_size(selected_size).clone())),
                         )
                 } else {
                     h_flex()

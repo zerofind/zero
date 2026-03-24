@@ -147,7 +147,7 @@ async fn test_recover_interrupted_runs() {
     assert_eq!(run.status, RunStatus::Running);
 
     // Recover interrupted runs
-    let count = executor.recover_interrupted_runs().await.unwrap();
+    let count = executor.recover_interrupted_runs().unwrap();
     assert_eq!(count, 1);
 
     // Check run is now partial
@@ -178,7 +178,7 @@ async fn test_manual_trigger() {
             triggers: Triggers::default(),
             paths: vec![PathMapping {
                 source: source_dir.to_string_lossy().to_string(),
-                dest: "".to_string(),
+                dest: String::new(),
                 exclude: vec![],
             }],
             settings: Settings {

@@ -200,7 +200,7 @@ pub fn cmd_delete(out: &Outputter, args: &DeleteArgs) -> anyhow::Result<()> {
         }
     }
 
-    let result = delete_paths(&path_refs, options);
+    let result = delete_paths(&path_refs, &options);
     let duration_ms = start.elapsed().as_millis() as u64;
 
     match result {
@@ -260,6 +260,7 @@ pub fn cmd_delete(out: &Outputter, args: &DeleteArgs) -> anyhow::Result<()> {
     Ok(())
 }
 
+#[allow(clippy::unnecessary_wraps)] // Returns Result for consistency with cmd_delete call site
 fn cmd_delete_preview(
     out: &Outputter,
     paths: &[&std::path::Path],

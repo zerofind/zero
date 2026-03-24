@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.7.1
+
+Fix:
+- ai: safer handling of malformed API responses prevents potential crashes
+- app: case-insensitive .app bundle detection catches more installed apps on macOS
+- app: reduced unnecessary cloning and memory allocations across all modules
+- app: removed redundant unsafe Send/Sync impls on progress tracker
+- ci: Linux builds now install required X11 system dependencies
+- ci: clippy checks split into lib and test targets for better lint coverage
+
 ## v0.8.0
 
 - app: reorganized into 28 independent crates for faster builds and modular composition

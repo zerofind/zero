@@ -33,6 +33,7 @@ impl AppService {
         }
     }
 
+    #[allow(clippy::unused_self)] // method for API consistency
     pub fn load(&mut self, cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| {
             let apps = cx.background_executor().spawn(async { Self::scan() }).await;
@@ -75,8 +76,8 @@ impl AppService {
             let path = entry.path();
             let name = entry.file_name().to_string_lossy().to_string();
 
-            if name.ends_with(".app") {
-                let display_name = name.trim_end_matches(".app").to_string();
+            if name.to_ascii_lowercase().ends_with(".app") {
+                let display_name = name[..name.len() - 4].to_string();
                 out.push(AppEntry {
                     name: display_name,
                     path,

@@ -13,7 +13,7 @@ pub struct FileIcon {
 impl FileIcon {
     pub fn new(extension: Option<&str>, is_dir: bool) -> Self {
         Self {
-            extension: extension.map(|e| e.to_string()),
+            extension: extension.map(std::string::ToString::to_string),
             is_dir,
         }
     }
@@ -38,26 +38,24 @@ impl FileIcon {
             return t.blue;
         }
         match self.ext_lower().as_deref() {
-            Some("rs") | Some("swift") => t.yellow,
+            Some("rs" | "swift") => t.yellow,
             Some("py") => t.cyan,
-            Some("js") | Some("ts") => t.yellow_light,
+            Some("js" | "ts") => t.yellow_light,
             Some("go") => t.cyan_light,
-            Some("c") | Some("cpp") | Some("h") => t.blue,
-            Some("java") | Some("rb") => t.red,
-            Some("json") | Some("yaml") | Some("yml") | Some("toml") | Some("xml")
-            | Some("csv") => t.muted_foreground,
-            Some("jpg") | Some("jpeg") | Some("png") | Some("gif") | Some("svg") | Some("webp")
-            | Some("bmp") | Some("ico") | Some("heic") | Some("tiff") | Some("tif") => t.magenta,
-            Some("mp4") | Some("mov") | Some("avi") | Some("mkv") | Some("webm") | Some("m4v")
-            | Some("wmv") | Some("flv") | Some("3gp") => t.red,
-            Some("mp3") | Some("wav") | Some("flac") | Some("aac") | Some("ogg") | Some("m4a")
-            | Some("wma") | Some("aiff") | Some("alac") => t.green,
-            Some("pdf") => t.red_light,
-            Some("md") | Some("txt") | Some("rtf") | Some("doc") | Some("docx") => {
-                t.muted_foreground
+            Some("c" | "cpp" | "h") => t.blue,
+            Some("java" | "rb") => t.red,
+            Some("json" | "yaml" | "yml" | "toml" | "xml" | "csv") => t.muted_foreground,
+            Some(
+                "jpg" | "jpeg" | "png" | "gif" | "svg" | "webp" | "bmp" | "ico" | "heic" | "tiff"
+                | "tif",
+            ) => t.magenta,
+            Some("mp4" | "mov" | "avi" | "mkv" | "webm" | "m4v" | "wmv" | "flv" | "3gp") => t.red,
+            Some("mp3" | "wav" | "flac" | "aac" | "ogg" | "m4a" | "wma" | "aiff" | "alac") => {
+                t.green
             }
-            Some("zip") | Some("tar") | Some("gz") | Some("bz2") | Some("xz") | Some("7z")
-            | Some("rar") | Some("dmg") | Some("iso") => t.yellow,
+            Some("pdf") => t.red_light,
+            Some("md" | "txt" | "rtf" | "doc" | "docx") => t.muted_foreground,
+            Some("zip" | "tar" | "gz" | "bz2" | "xz" | "7z" | "rar" | "dmg" | "iso") => t.yellow,
             _ => t.muted_foreground,
         }
     }

@@ -41,7 +41,7 @@ impl Executor {
         }
 
         // Build initial progress
-        let initial_progress = self.build_initial_progress(automation, mount_point)?;
+        let initial_progress = Self::build_initial_progress(automation, mount_point)?;
 
         // Create run record
         let run = self
@@ -122,7 +122,6 @@ impl Executor {
 
     /// Build initial progress for all paths in an automation
     pub(super) fn build_initial_progress(
-        &self,
         automation: &Automation,
         mount_point: &Path,
     ) -> Result<Progress, ExecutorError> {
@@ -133,7 +132,7 @@ impl Executor {
 
             // Get file count and size from source
             let (files_total, bytes_total) = if source.exists() {
-                let entries = scan_collect(&source, ScanOptions::default())
+                let entries = scan_collect(&source, &ScanOptions::default())
                     .map_err(|e| ExecutorError::Sync(format!("Scan error: {e}")))?;
                 (
                     entries.len() as u64,
@@ -185,8 +184,11 @@ impl Executor {
             }
 
             // Update progress status
-            progress[idx].status = PathStatus::Running;
-            self.update_progress(run_id, &progress).await?;
+            let Some(path_progress) = progress.get_mut(idx) else {
+                continue;
+            };
+            path_progress.status = PathStatus::Running;
+            self.update_progress(run_id, &progress)?;
 
             // Run sync for this path
             let source = PathBuf::from(&path_mapping.source);
@@ -209,11 +211,12 @@ impl Executor {
                 .await
             {
                 Ok(result) => {
-                    // Update progress
-                    progress[idx].status = PathStatus::Complete;
-                    progress[idx].files_done = progress[idx].files_total;
-                    progress[idx].bytes_done = progress[idx].bytes_total;
-                    self.update_progress(run_id, &progress).await?;
+                    if let Some(p) = progress.get_mut(idx) {
+                        p.status = PathStatus::Complete;
+                        p.files_done = p.files_total;
+                        p.bytes_done = p.bytes_total;
+                    }
+                    self.update_progress(run_id, &progress)?;
 
                     // Accumulate results
                     total_result.summary.files_added += result.files_transferred as u64;
@@ -222,9 +225,11 @@ impl Executor {
                     total_result.summary.bytes_transferred += result.bytes_transferred;
                 }
                 Err(e) => {
-                    progress[idx].status = PathStatus::Failed;
-                    progress[idx].error = Some(e.to_string());
-                    self.update_progress(run_id, &progress).await?;
+                    if let Some(p) = progress.get_mut(idx) {
+                        p.status = PathStatus::Failed;
+                        p.error = Some(e.to_string());
+                    }
+                    self.update_progress(run_id, &progress)?;
 
                     total_result
                         .errors
@@ -295,7 +300,7 @@ impl Executor {
     }
 
     /// Update progress in database and call callback
-    pub(super) async fn update_progress(
+    pub(super) fn update_progress(
         &self,
         run_id: i64,
         progress: &Progress,

@@ -72,7 +72,7 @@ fn test_display_updates_while_running() {
     // Simulate some work
     for i in 0..5 {
         progress_clone.add_bytes(100);
-        progress_clone.set_current_file(&format!("file_{}.txt", i));
+        progress_clone.set_current_file(&format!("file_{i}.txt"));
         thread::sleep(Duration::from_millis(20));
     }
 

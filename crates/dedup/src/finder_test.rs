@@ -32,7 +32,7 @@ fn test_find_no_duplicates() {
     create_file(dir.path(), "b.txt", b"content b");
     create_file(dir.path(), "c.txt", b"content c");
 
-    let result = find_duplicates(dir.path(), test_options()).unwrap();
+    let result = find_duplicates(dir.path(), &test_options()).unwrap();
 
     assert!(!result.has_duplicates());
     assert_eq!(result.groups.len(), 0);
@@ -46,7 +46,7 @@ fn test_find_duplicates() {
     create_file(dir.path(), "b.txt", b"same content");
     create_file(dir.path(), "c.txt", b"different");
 
-    let result = find_duplicates(dir.path(), test_options()).unwrap();
+    let result = find_duplicates(dir.path(), &test_options()).unwrap();
 
     assert!(result.has_duplicates());
     assert_eq!(result.groups.len(), 1);
@@ -64,7 +64,7 @@ fn test_find_multiple_duplicate_groups() {
     create_file(dir.path(), "b2.txt", b"content B");
     create_file(dir.path(), "unique.txt", b"unique");
 
-    let result = find_duplicates(dir.path(), test_options()).unwrap();
+    let result = find_duplicates(dir.path(), &test_options()).unwrap();
 
     assert!(result.has_duplicates());
     assert_eq!(result.groups.len(), 2);
@@ -77,7 +77,7 @@ fn test_keeper_shortest_path() {
     create_file(dir.path(), "a.txt", b"content");
     create_file(dir.path(), "subdir/longer/path/a.txt", b"content");
 
-    let result = find_duplicates(dir.path(), test_options()).unwrap();
+    let result = find_duplicates(dir.path(), &test_options()).unwrap();
 
     assert_eq!(result.groups.len(), 1);
     let keeper = result.groups[0].keeper().unwrap();
@@ -91,7 +91,7 @@ fn test_delete_duplicates() {
     let keep = create_file(dir.path(), "a.txt", b"content");
     let dup = create_file(dir.path(), "subdir/duplicate.txt", b"content");
 
-    let result = find_duplicates(dir.path(), test_options()).unwrap();
+    let result = find_duplicates(dir.path(), &test_options()).unwrap();
     assert_eq!(result.duplicate_count, 1);
 
     let delete_result = delete_duplicates(&result);
@@ -114,7 +114,7 @@ fn test_min_size_filter() {
         min_size: 10, // Skip files < 10 bytes
         ..Default::default()
     };
-    let result = find_duplicates(dir.path(), options).unwrap();
+    let result = find_duplicates(dir.path(), &options).unwrap();
 
     // Should only find the "big" duplicates, not the tiny ones
     assert_eq!(result.groups.len(), 1);
@@ -148,7 +148,7 @@ fn test_verify_mode() {
         verify: true,
         ..Default::default()
     };
-    let result = find_duplicates(dir.path(), options).unwrap();
+    let result = find_duplicates(dir.path(), &options).unwrap();
 
     assert!(result.has_duplicates());
     assert_eq!(result.groups.len(), 1);

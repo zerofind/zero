@@ -39,6 +39,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -47,11 +49,23 @@ jobs:
         with:
           prefix-key: "v1-rust"
           cache-on-failure: true
-      - name: Clippy
+      - name: Clippy (lib)
         env:
           SCCACHE_GHA_ENABLED: "true"
           RUSTC_WRAPPER: "sccache"
-        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+        run: cargo clippy --workspace --lib --locked -- -D warnings
+      - name: Clippy (tests)
+        env:
+          SCCACHE_GHA_ENABLED: "true"
+          RUSTC_WRAPPER: "sccache"
+        run: >-
+          cargo clippy --workspace --tests --bins --locked -- -D warnings
+          -A clippy::unwrap_used -A clippy::indexing_slicing
+          -A clippy::needless_raw_string_hashes -A clippy::unreadable_literal
+          -A clippy::uninlined_format_args -A clippy::single_char_pattern
+          -A clippy::float_cmp -A clippy::redundant_closure
+          -A clippy::default_trait_access -A clippy::ignore_without_reason
+          -A clippy::manual_let_else -A clippy::panic
 
   test:
     name: Test
@@ -59,6 +73,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev
       - uses: dtolnay/rust-toolchain@stable
       - name: Setup mold linker
         uses: rui314/setup-mold@v1

@@ -46,19 +46,13 @@ pub fn parse_source(source: &str, file_path: &str) -> Result<Vec<CodeElement>, P
 fn extract_item(item: &Item, file_path: &str, elements: &mut Vec<CodeElement>) {
     match item {
         Item::Fn(item_fn) => {
-            if let Some(elem) = extract_function(item_fn, file_path) {
-                elements.push(elem);
-            }
+            elements.push(extract_function(item_fn, file_path));
         }
         Item::Struct(item_struct) => {
-            if let Some(elem) = extract_struct(item_struct, file_path) {
-                elements.push(elem);
-            }
+            elements.push(extract_struct(item_struct, file_path));
         }
         Item::Enum(item_enum) => {
-            if let Some(elem) = extract_enum(item_enum, file_path) {
-                elements.push(elem);
-            }
+            elements.push(extract_enum(item_enum, file_path));
         }
         Item::Trait(item_trait) => {
             extract_trait(item_trait, file_path, elements);
@@ -67,37 +61,29 @@ fn extract_item(item: &Item, file_path: &str, elements: &mut Vec<CodeElement>) {
             extract_impl(item_impl, file_path, elements);
         }
         Item::Const(item_const) => {
-            if let Some(elem) = extract_const(item_const, file_path) {
-                elements.push(elem);
-            }
+            elements.push(extract_const(item_const, file_path));
         }
         Item::Static(item_static) => {
-            if let Some(elem) = extract_static(item_static, file_path) {
-                elements.push(elem);
-            }
+            elements.push(extract_static(item_static, file_path));
         }
         Item::Type(item_type) => {
-            if let Some(elem) = extract_type_alias(item_type, file_path) {
-                elements.push(elem);
-            }
+            elements.push(extract_type_alias(item_type, file_path));
         }
         Item::Mod(item_mod) => {
-            if let Some(elem) = extract_module(item_mod, file_path) {
-                elements.push(elem);
-            }
+            elements.push(extract_module(item_mod, file_path));
         }
         _ => {}
     }
 }
 
-fn extract_function(item: &ItemFn, file_path: &str) -> Option<CodeElement> {
+fn extract_function(item: &ItemFn, file_path: &str) -> CodeElement {
     let visibility = convert_visibility(&item.vis);
     let name = item.sig.ident.to_string();
     let doc = extract_doc_comment(&item.attrs);
     let line_number = get_line_number(&item.sig.fn_token.span);
     let signature = format_function_signature(item);
 
-    Some(CodeElement {
+    CodeElement {
         language: Language::Rust,
         kind: ElementKind::Function,
         name,
@@ -106,17 +92,17 @@ fn extract_function(item: &ItemFn, file_path: &str) -> Option<CodeElement> {
         line_number,
         doc,
         visibility,
-    })
+    }
 }
 
-fn extract_struct(item: &ItemStruct, file_path: &str) -> Option<CodeElement> {
+fn extract_struct(item: &ItemStruct, file_path: &str) -> CodeElement {
     let visibility = convert_visibility(&item.vis);
     let name = item.ident.to_string();
     let doc = extract_doc_comment(&item.attrs);
     let line_number = get_line_number(&item.struct_token.span);
     let signature = format_struct_signature(item);
 
-    Some(CodeElement {
+    CodeElement {
         language: Language::Rust,
         kind: ElementKind::Struct,
         name,
@@ -125,17 +111,17 @@ fn extract_struct(item: &ItemStruct, file_path: &str) -> Option<CodeElement> {
         line_number,
         doc,
         visibility,
-    })
+    }
 }
 
-fn extract_enum(item: &ItemEnum, file_path: &str) -> Option<CodeElement> {
+fn extract_enum(item: &ItemEnum, file_path: &str) -> CodeElement {
     let visibility = convert_visibility(&item.vis);
     let name = item.ident.to_string();
     let doc = extract_doc_comment(&item.attrs);
     let line_number = get_line_number(&item.enum_token.span);
     let signature = format_enum_signature(item);
 
-    Some(CodeElement {
+    CodeElement {
         language: Language::Rust,
         kind: ElementKind::Enum,
         name,
@@ -144,7 +130,7 @@ fn extract_enum(item: &ItemEnum, file_path: &str) -> Option<CodeElement> {
         line_number,
         doc,
         visibility,
-    })
+    }
 }
 
 fn extract_trait(item: &ItemTrait, file_path: &str, elements: &mut Vec<CodeElement>) {
@@ -184,14 +170,10 @@ fn extract_trait(item: &ItemTrait, file_path: &str, elements: &mut Vec<CodeEleme
                 });
             }
             TraitItem::Type(assoc_type) => {
-                if let Some(elem) = extract_trait_assoc_type(assoc_type, &name, file_path) {
-                    elements.push(elem);
-                }
+                elements.push(extract_trait_assoc_type(assoc_type, &name, file_path));
             }
             TraitItem::Const(assoc_const) => {
-                if let Some(elem) = extract_trait_assoc_const(assoc_const, &name, file_path) {
-                    elements.push(elem);
-                }
+                elements.push(extract_trait_assoc_const(assoc_const, &name, file_path));
             }
             _ => {}
         }
@@ -249,7 +231,7 @@ fn extract_impl(item: &ItemImpl, file_path: &str, elements: &mut Vec<CodeElement
     }
 }
 
-fn extract_const(item: &ItemConst, file_path: &str) -> Option<CodeElement> {
+fn extract_const(item: &ItemConst, file_path: &str) -> CodeElement {
     let visibility = convert_visibility(&item.vis);
     let name = item.ident.to_string();
     let doc = extract_doc_comment(&item.attrs);
@@ -258,7 +240,7 @@ fn extract_const(item: &ItemConst, file_path: &str) -> Option<CodeElement> {
     let type_str = format_type(&item.ty);
     let signature = format!("const {name}: {type_str}");
 
-    Some(CodeElement {
+    CodeElement {
         language: Language::Rust,
         kind: ElementKind::Const,
         name,
@@ -267,10 +249,10 @@ fn extract_const(item: &ItemConst, file_path: &str) -> Option<CodeElement> {
         line_number,
         doc,
         visibility,
-    })
+    }
 }
 
-fn extract_static(item: &ItemStatic, file_path: &str) -> Option<CodeElement> {
+fn extract_static(item: &ItemStatic, file_path: &str) -> CodeElement {
     let visibility = convert_visibility(&item.vis);
     let name = item.ident.to_string();
     let doc = extract_doc_comment(&item.attrs);
@@ -283,7 +265,7 @@ fn extract_static(item: &ItemStatic, file_path: &str) -> Option<CodeElement> {
     let type_str = format_type(&item.ty);
     let signature = format!("static {mutability}{name}: {type_str}");
 
-    Some(CodeElement {
+    CodeElement {
         language: Language::Rust,
         kind: ElementKind::Static,
         name,
@@ -292,10 +274,10 @@ fn extract_static(item: &ItemStatic, file_path: &str) -> Option<CodeElement> {
         line_number,
         doc,
         visibility,
-    })
+    }
 }
 
-fn extract_type_alias(item: &ItemType, file_path: &str) -> Option<CodeElement> {
+fn extract_type_alias(item: &ItemType, file_path: &str) -> CodeElement {
     let visibility = convert_visibility(&item.vis);
     let name = item.ident.to_string();
     let doc = extract_doc_comment(&item.attrs);
@@ -305,7 +287,7 @@ fn extract_type_alias(item: &ItemType, file_path: &str) -> Option<CodeElement> {
     let type_str = format_type(&item.ty);
     let signature = format!("type {name}{generics} = {type_str}");
 
-    Some(CodeElement {
+    CodeElement {
         language: Language::Rust,
         kind: ElementKind::TypeAlias,
         name,
@@ -314,14 +296,14 @@ fn extract_type_alias(item: &ItemType, file_path: &str) -> Option<CodeElement> {
         line_number,
         doc,
         visibility,
-    })
+    }
 }
 
 fn extract_trait_assoc_type(
     item: &TraitItemType,
     trait_name: &str,
     file_path: &str,
-) -> Option<CodeElement> {
+) -> CodeElement {
     let name = item.ident.to_string();
     let doc = extract_doc_comment(&item.attrs);
     let line_number = get_line_number(&item.type_token.span);
@@ -341,7 +323,7 @@ fn extract_trait_assoc_type(
 
     let signature = format!("{trait_name}::type {name}{bounds}{default}");
 
-    Some(CodeElement {
+    CodeElement {
         language: Language::Rust,
         kind: ElementKind::TypeAlias,
         name,
@@ -350,14 +332,14 @@ fn extract_trait_assoc_type(
         line_number,
         doc,
         visibility: Visibility::Public,
-    })
+    }
 }
 
 fn extract_trait_assoc_const(
     item: &TraitItemConst,
     trait_name: &str,
     file_path: &str,
-) -> Option<CodeElement> {
+) -> CodeElement {
     let name = item.ident.to_string();
     let doc = extract_doc_comment(&item.attrs);
     let line_number = get_line_number(&item.const_token.span);
@@ -365,7 +347,7 @@ fn extract_trait_assoc_const(
     let type_str = format_type(&item.ty);
     let signature = format!("{trait_name}::const {name}: {type_str}");
 
-    Some(CodeElement {
+    CodeElement {
         language: Language::Rust,
         kind: ElementKind::Const,
         name,
@@ -374,10 +356,10 @@ fn extract_trait_assoc_const(
         line_number,
         doc,
         visibility: Visibility::Public,
-    })
+    }
 }
 
-fn extract_module(item: &ItemMod, file_path: &str) -> Option<CodeElement> {
+fn extract_module(item: &ItemMod, file_path: &str) -> CodeElement {
     let visibility = convert_visibility(&item.vis);
     let name = item.ident.to_string();
     let doc = extract_doc_comment(&item.attrs);
@@ -385,7 +367,7 @@ fn extract_module(item: &ItemMod, file_path: &str) -> Option<CodeElement> {
 
     let signature = format!("mod {name}");
 
-    Some(CodeElement {
+    CodeElement {
         language: Language::Rust,
         kind: ElementKind::Module,
         name,
@@ -394,7 +376,7 @@ fn extract_module(item: &ItemMod, file_path: &str) -> Option<CodeElement> {
         line_number,
         doc,
         visibility,
-    })
+    }
 }
 
 // ============================================================================

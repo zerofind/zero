@@ -48,7 +48,7 @@ pub struct Executor {
 
 impl Executor {
     /// Create a new executor
-    pub async fn new(config: ExecutorConfig) -> Result<Self, ExecutorError> {
+    pub fn new(config: ExecutorConfig) -> Result<Self, ExecutorError> {
         let db = CacheDb::open().map_err(ExecutorError::Database)?;
 
         Ok(Self {
@@ -233,9 +233,7 @@ impl Executor {
             }
 
             // Check destination is available
-            let dest_mount = if let Some(m) = self.get_destination_mount(&automation).await {
-                m
-            } else {
+            let Some(dest_mount) = self.get_destination_mount(&automation).await else {
                 tracing::debug!(automation_id = automation.id, "Destination not available");
                 continue;
             };
@@ -338,7 +336,7 @@ impl Executor {
     }
 
     /// Mark interrupted runs on startup
-    pub async fn recover_interrupted_runs(&self) -> Result<u64, ExecutorError> {
+    pub fn recover_interrupted_runs(&self) -> Result<u64, ExecutorError> {
         let count = self.db.mark_interrupted_on_startup()?;
 
         if count > 0 {
@@ -349,7 +347,7 @@ impl Executor {
     }
 
     /// Get resumable runs
-    pub async fn get_resumable_runs(&self) -> Result<Vec<Run>, ExecutorError> {
+    pub fn get_resumable_runs(&self) -> Result<Vec<Run>, ExecutorError> {
         self.db
             .find_resumable_runs()
             .map_err(ExecutorError::Database)

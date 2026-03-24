@@ -335,8 +335,8 @@ fn bench_profile_load_time() {
     let cleanup_time = start.elapsed();
 
     println!("\n=== Profile Loading Performance ===");
-    println!("1000x load_file_types(): {:?}", file_types_time);
-    println!("1000x load_cleanup(): {:?}", cleanup_time);
+    println!("1000x load_file_types(): {file_types_time:?}");
+    println!("1000x load_cleanup(): {cleanup_time:?}");
     println!(
         "Average per call: {:?} (file_types), {:?} (cleanup)",
         file_types_time / 1000,
@@ -346,13 +346,11 @@ fn bench_profile_load_time() {
     // Should be sub-microsecond since it's cached
     assert!(
         file_types_time.as_micros() < 1000,
-        "file_types loading too slow: {:?}",
-        file_types_time
+        "file_types loading too slow: {file_types_time:?}"
     );
     assert!(
         cleanup_time.as_micros() < 1000,
-        "cleanup loading too slow: {:?}",
-        cleanup_time
+        "cleanup loading too slow: {cleanup_time:?}"
     );
 }
 
@@ -374,16 +372,15 @@ fn bench_category_iteration() {
 
     let category_count = profile.categories.len();
     println!("\n=== Category Iteration Performance ===");
-    println!("Categories: {}", category_count);
+    println!("Categories: {category_count}");
     println!("Total patterns (per iteration): {}", total_patterns / 10000);
-    println!("10000x full iteration: {:?}", iter_time);
+    println!("10000x full iteration: {iter_time:?}");
     println!("Average per iteration: {:?}", iter_time / 10000);
 
     // Should be very fast - microseconds
     assert!(
         iter_time.as_millis() < 100,
-        "category iteration too slow: {:?}",
-        iter_time
+        "category iteration too slow: {iter_time:?}"
     );
 }
 
@@ -403,14 +400,13 @@ fn bench_group_lookup() {
     let lookup_time = start.elapsed();
 
     println!("\n=== Group Lookup Performance ===");
-    println!("30000 group lookups (3 groups x 10000): {:?}", lookup_time);
+    println!("30000 group lookups (3 groups x 10000): {lookup_time:?}");
     println!("Average per lookup: {:?}", lookup_time / 30000);
 
     // Should be sub-millisecond total
     assert!(
         lookup_time.as_millis() < 500,
-        "group lookup too slow: {:?}",
-        lookup_time
+        "group lookup too slow: {lookup_time:?}"
     );
 }
 
@@ -435,7 +431,7 @@ fn bench_category_by_id_lookup() {
     let total_lookups = 10000 * ids.len();
     println!("\n=== Category ID Lookup Performance ===");
     println!("Category IDs: {}", ids.len());
-    println!("{} lookups: {:?}", total_lookups, lookup_time);
+    println!("{total_lookups} lookups: {lookup_time:?}");
     println!(
         "Average per lookup: {:?}",
         lookup_time / total_lookups as u32
@@ -444,8 +440,7 @@ fn bench_category_by_id_lookup() {
     // HashMap lookup should be O(1), very fast
     assert!(
         lookup_time.as_millis() < 100,
-        "ID lookup too slow: {:?}",
-        lookup_time
+        "ID lookup too slow: {lookup_time:?}"
     );
 }
 
@@ -562,7 +557,7 @@ fn test_new_developer_categories_exist() {
 
     for id in &expected {
         let cat = profile.get(id);
-        assert!(cat.is_some(), "category '{}' should exist", id);
+        assert!(cat.is_some(), "category '{id}' should exist");
         let cat = cat.unwrap();
         assert_eq!(cat.group, CleanupGroup::Developer);
         assert_eq!(cat.aggregate, AggregateMode::Directory);

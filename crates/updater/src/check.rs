@@ -28,8 +28,9 @@ pub fn check_latest() -> Result<UpdateStatus, UpdateError> {
     let json: serde_json::Value =
         serde_json::from_str(&body).map_err(|e| UpdateError::Parse(e.to_string()))?;
 
-    let tag = json["tag_name"]
-        .as_str()
+    let tag = json
+        .get("tag_name")
+        .and_then(|v| v.as_str())
         .ok_or_else(|| UpdateError::Parse("missing tag_name in response".into()))?;
 
     // Strip leading 'v' from tag (e.g. "v0.7.0" → "0.7.0")
@@ -64,9 +65,9 @@ fn parse_semver(v: &str) -> Option<(u32, u32, u32)> {
         return None;
     }
     Some((
-        parts[0].parse().ok()?,
-        parts[1].parse().ok()?,
-        parts[2].parse().ok()?,
+        parts.first()?.parse().ok()?,
+        parts.get(1)?.parse().ok()?,
+        parts.get(2)?.parse().ok()?,
     ))
 }
 

@@ -60,26 +60,21 @@ impl BrowserEntry {
         };
 
         // If the symlink is broken, metadata will be None
-        let (is_dir, size, mtime) = match &metadata {
-            Some(m) => {
-                let mt = m
-                    .modified()
-                    .ok()
-                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                    .map(|d| d.as_secs())
-                    .unwrap_or(0);
-                (m.is_dir(), if m.is_dir() { 0 } else { m.len() }, mt)
-            }
-            None => {
-                // Broken symlink: use symlink_metadata for mtime
-                let mt = symlink_meta
-                    .modified()
-                    .ok()
-                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                    .map(|d| d.as_secs())
-                    .unwrap_or(0);
-                (false, 0, mt)
-            }
+        let (is_dir, size, mtime) = if let Some(m) = &metadata {
+            let mt = m
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map_or(0, |d| d.as_secs());
+            (m.is_dir(), if m.is_dir() { 0 } else { m.len() }, mt)
+        } else {
+            // Broken symlink: use symlink_metadata for mtime
+            let mt = symlink_meta
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map_or(0, |d| d.as_secs());
+            (false, 0, mt)
         };
 
         let name = path
@@ -132,7 +127,7 @@ impl BrowserEntry {
             Some("ts") => "TypeScript",
             Some("swift") => "Swift Source",
             Some("go") => "Go Source",
-            Some("jpg") | Some("jpeg") => "JPEG Image",
+            Some("jpg" | "jpeg") => "JPEG Image",
             Some("png") => "PNG Image",
             Some("gif") => "GIF Image",
             Some("svg") => "SVG Image",
@@ -142,7 +137,7 @@ impl BrowserEntry {
             Some("zip") => "ZIP Archive",
             Some("json") => "JSON",
             Some("toml") => "TOML",
-            Some("yaml") | Some("yml") => "YAML",
+            Some("yaml" | "yml") => "YAML",
             Some("md") => "Markdown",
             Some("txt") => "Plain Text",
             Some(ext) => ext, // fallback to raw extension
@@ -188,8 +183,16 @@ pub fn sort_entries(entries: &mut [BrowserEntry], field: SortField, direction: S
         let cmp = match field {
             SortField::Name => compare_ignore_case(&a.name, &b.name),
             SortField::Location => {
-                let ap = a.path.parent().map(|p| p.as_os_str()).unwrap_or_default();
-                let bp = b.path.parent().map(|p| p.as_os_str()).unwrap_or_default();
+                let ap = a
+                    .path
+                    .parent()
+                    .map(std::path::Path::as_os_str)
+                    .unwrap_or_default();
+                let bp = b
+                    .path
+                    .parent()
+                    .map(std::path::Path::as_os_str)
+                    .unwrap_or_default();
                 ap.cmp(bp)
             }
             SortField::DateModified => a.mtime.cmp(&b.mtime),
@@ -201,8 +204,8 @@ pub fn sort_entries(entries: &mut [BrowserEntry], field: SortField, direction: S
             }
             SortField::Permissions => a.mode.unwrap_or(0).cmp(&b.mode.unwrap_or(0)),
             SortField::Owner => {
-                let au = a.owner.as_ref().map(|o| o.user.as_str()).unwrap_or("");
-                let bu = b.owner.as_ref().map(|o| o.user.as_str()).unwrap_or("");
+                let au = a.owner.as_ref().map_or("", |o| o.user.as_str());
+                let bu = b.owner.as_ref().map_or("", |o| o.user.as_str());
                 au.cmp(bu)
             }
         };
@@ -216,6 +219,7 @@ pub fn sort_entries(entries: &mut [BrowserEntry], field: SortField, direction: S
 
 /// Toggle expansion of a directory in the flat entries list.
 /// Returns the number of children inserted.
+#[allow(clippy::indexing_slicing)]
 pub fn toggle_expand(entries: &mut Vec<BrowserEntry>, idx: usize) -> usize {
     if !entries[idx].is_dir {
         return 0;
@@ -264,7 +268,7 @@ fn extract_unix_metadata(
 
     let mode = Some(meta.mode());
 
-    let owner = resolve_owner(meta.uid(), meta.gid());
+    let owner = Some(resolve_owner(meta.uid(), meta.gid()));
 
     let flags = extract_bsd_flags(meta);
 
@@ -280,34 +284,50 @@ fn extract_unix_metadata(
 
 /// Resolve uid/gid to user:group names via libc.
 #[cfg(unix)]
-fn resolve_owner(uid: u32, gid: u32) -> Option<OwnerInfo> {
-    // SAFETY: getpwuid/getgrgid return a pointer to a static struct or null.
-    // We check both the outer struct pointer and inner name pointer for null.
-    let user = unsafe {
-        let pw = libc::getpwuid(uid);
-        if pw.is_null() || (*pw).pw_name.is_null() {
+#[allow(unsafe_code)]
+fn resolve_owner(uid: u32, gid: u32) -> OwnerInfo {
+    let user = {
+        // SAFETY: getpwuid returns a pointer to a static struct or null.
+        let pw = unsafe { libc::getpwuid(uid) };
+        if pw.is_null() {
             uid.to_string()
         } else {
-            std::ffi::CStr::from_ptr((*pw).pw_name)
-                .to_string_lossy()
-                .into_owned()
+            // SAFETY: pw is non-null, checked above.
+            let pw_name = unsafe { (*pw).pw_name };
+            if pw_name.is_null() {
+                uid.to_string()
+            } else {
+                // SAFETY: pw_name is non-null, checked above; points to a valid C string.
+                unsafe { std::ffi::CStr::from_ptr(pw_name) }
+                    .to_string_lossy()
+                    .into_owned()
+            }
         }
     };
-    let group = unsafe {
-        let gr = libc::getgrgid(gid);
-        if gr.is_null() || (*gr).gr_name.is_null() {
+    let group = {
+        // SAFETY: getgrgid returns a pointer to a static struct or null.
+        let gr = unsafe { libc::getgrgid(gid) };
+        if gr.is_null() {
             gid.to_string()
         } else {
-            std::ffi::CStr::from_ptr((*gr).gr_name)
-                .to_string_lossy()
-                .into_owned()
+            // SAFETY: gr is non-null, checked above.
+            let gr_name = unsafe { (*gr).gr_name };
+            if gr_name.is_null() {
+                gid.to_string()
+            } else {
+                // SAFETY: gr_name is non-null, checked above; points to a valid C string.
+                unsafe { std::ffi::CStr::from_ptr(gr_name) }
+                    .to_string_lossy()
+                    .into_owned()
+            }
         }
     };
-    Some(OwnerInfo { user, group })
+    OwnerInfo { user, group }
 }
 
 /// Extract BSD file flags via fflagstostr (macOS/BSD).
 #[cfg(target_os = "macos")]
+#[allow(unsafe_code)]
 fn extract_bsd_flags(meta: &std::fs::Metadata) -> Option<String> {
     use std::os::macos::fs::MetadataExt;
 
@@ -324,7 +344,7 @@ fn extract_bsd_flags(meta: &std::fs::Metadata) -> Option<String> {
         }
     }
 
-    let st_flags = meta.st_flags() as libc::c_ulong;
+    let st_flags = libc::c_ulong::from(meta.st_flags());
     if st_flags == 0 {
         return None;
     }
@@ -359,6 +379,7 @@ fn extract_bsd_flags(_meta: &std::fs::Metadata) -> Option<String> {
 
 /// Check if a path has extended attributes (lightweight — no value retrieval).
 #[cfg(target_os = "macos")]
+#[allow(unsafe_code)]
 fn has_extended_attrs(path: &Path) -> bool {
     use std::os::unix::ffi::OsStrExt;
     let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {
@@ -379,6 +400,7 @@ fn has_extended_attrs(path: &Path) -> bool {
 }
 
 #[cfg(all(unix, not(target_os = "macos")))]
+#[allow(unsafe_code)]
 fn has_extended_attrs(path: &Path) -> bool {
     use std::os::unix::ffi::OsStrExt;
     let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {
@@ -402,8 +424,7 @@ fn resolve_symlink(path: &Path) -> SymlinkInfo {
             // Check if target exists (resolve relative to parent)
             let absolute_target = if target.is_relative() {
                 path.parent()
-                    .map(|p| p.join(&target))
-                    .unwrap_or_else(|| target.clone())
+                    .map_or_else(|| target.clone(), |p| p.join(&target))
             } else {
                 target.clone()
             };
@@ -419,6 +440,7 @@ fn resolve_symlink(path: &Path) -> SymlinkInfo {
 }
 
 /// Format a Unix mode as `drwxr-xr-x` (10 characters).
+#[allow(clippy::unreadable_literal)]
 pub fn format_mode(mode: u32, is_dir: bool, is_symlink: bool) -> String {
     let mut s = String::with_capacity(10);
 

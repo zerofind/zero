@@ -129,7 +129,7 @@ impl RenderOnce for SidebarRow {
             .text_size(FONT_SIZE_BODY)
             .text_color(text_color)
             .cursor_pointer()
-            .when_some(active_bg, |el, bg| el.bg(bg))
+            .when_some(active_bg, gpui::Styled::bg)
             .hover(|s| s.bg(hover_bg))
             .when_some(on_click, |el, handler| {
                 el.on_click(move |event, window, cx| {

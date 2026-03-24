@@ -378,7 +378,7 @@ impl RenderOnce for PaletteItem {
                                     .bg(cx.theme().muted)
                                     .text_size(FONT_SIZE_CAPTION)
                                     .text_color(muted)
-                                    .child(self.action_label.unwrap()),
+                                    .child(self.action_label.expect("guarded by is_some() check")),
                             )
                         },
                     ),

@@ -42,7 +42,7 @@ pub fn run_service(verbose: bool) -> anyhow::Result<()> {
 
     // Set up shutdown signal handling
     let shutdown = Arc::new(AtomicBool::new(false));
-    setup_signal_handlers(Arc::clone(&shutdown), logger.clone());
+    setup_signal_handlers(&shutdown, &logger);
 
     // Run the async runtime
     let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -53,9 +53,9 @@ pub fn run_service(verbose: bool) -> anyhow::Result<()> {
 }
 
 /// Set up signal handlers for graceful shutdown
-fn setup_signal_handlers(shutdown: Arc<AtomicBool>, logger: ServiceLogger) {
+fn setup_signal_handlers(shutdown: &Arc<AtomicBool>, logger: &ServiceLogger) {
     // Handle SIGTERM and SIGINT for graceful shutdown
-    let shutdown_clone = Arc::clone(&shutdown);
+    let shutdown_clone = Arc::clone(shutdown);
     let logger_clone = logger.clone();
 
     ctrlc::set_handler(move || {
@@ -80,7 +80,7 @@ async fn async_service_loop(
     logger.info("service", "Initializing automation executor");
     let executor = Executor::with_db(CacheDb::open()?, ExecutorConfig::default());
 
-    let recovered = executor.recover_interrupted_runs().await?;
+    let recovered = executor.recover_interrupted_runs()?;
     if recovered > 0 {
         logger.info(
             "service",
@@ -116,9 +116,8 @@ async fn async_service_loop(
 
     // Start watchers
     let (event_tx, event_rx) = crossfire::mpsc::bounded_blocking_async::<ServiceEvent>(100);
-    let watchers_active = start_watchers(Arc::clone(&executor), event_tx.clone(), logger.clone())
-        .await
-        .is_ok();
+    start_watchers(Arc::clone(&executor), event_tx.clone(), &logger);
+    let watchers_active = true;
 
     // Send service ready notification
     let ready_params = ServiceReadyParams {
@@ -151,8 +150,8 @@ async fn async_service_loop(
                         break;
                     }
                 }
-                Ok(_) => continue, // Empty line
-                Err(_) => break,   // EOF or error
+                Ok(_) => {}      // Empty line
+                Err(_) => break, // EOF or error
             }
         }
     });
@@ -255,11 +254,11 @@ enum ServiceEvent {
 }
 
 /// Start file and USB watchers
-async fn start_watchers(
+fn start_watchers(
     executor: Arc<Executor>,
     event_tx: crossfire::MTx<crossfire::mpsc::Array<ServiceEvent>>,
-    logger: ServiceLogger,
-) -> anyhow::Result<()> {
+    logger: &ServiceLogger,
+) {
     // Start USB watcher (macOS only - uses DiskArbitration framework)
     #[cfg(target_os = "macos")]
     {
@@ -445,7 +444,6 @@ async fn start_watchers(
     });
 
     logger.info("service", "Watchers started");
-    Ok(())
 }
 
 /// Handle a service event by sending notification

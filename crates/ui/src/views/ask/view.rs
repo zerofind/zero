@@ -139,6 +139,8 @@ impl AskView {
             return;
         }
 
+        // selected_provider is always a valid index into PROVIDERS
+        #[allow(clippy::indexing_slicing)]
         let (provider_id, _) = PROVIDERS[self.selected_provider];
         self.setup_error = None;
 
@@ -159,13 +161,13 @@ impl AskView {
 
         self.input
             .update(cx, |state, cx| state.set_value("", window, cx));
-        self.submit_text(text, cx);
+        self.submit_text(&text, cx);
     }
 
-    fn submit_text(&mut self, text: String, cx: &mut Context<Self>) {
+    fn submit_text(&mut self, text: &str, cx: &mut Context<Self>) {
         self.messages.push(Message {
             role: Role::User,
-            text: text.clone(),
+            text: text.to_string(),
             thinking: String::new(),
             tools: Vec::new(),
         });
@@ -177,7 +179,7 @@ impl AskView {
         });
         self.loading = true;
 
-        let rx = self.llm.update(cx, |llm, _| llm.ask(&text));
+        let rx = self.llm.update(cx, |llm, _| llm.ask(text));
 
         let Some(rx) = rx else {
             if let Some(last) = self.messages.last_mut() {
@@ -249,7 +251,7 @@ impl Render for AskView {
         if let Some(text) = self.pending_send.take() {
             self.input
                 .update(cx, |state, cx| state.set_value("", window, cx));
-            self.submit_text(text, cx);
+            self.submit_text(&text, cx);
         }
 
         let ready = self.is_ready(cx);
@@ -376,7 +378,7 @@ impl AskView {
         let current_thinking = llm.thinking();
 
         let active_key = if current_thinking {
-            format!("{}:thinking", current_model)
+            format!("{current_model}:thinking")
         } else {
             current_model
         };
@@ -423,7 +425,7 @@ impl AskView {
                                 let thinking = m.thinking;
 
                                 div()
-                                    .id(SharedString::from(format!("model-{}", picker_key)))
+                                    .id(SharedString::from(format!("model-{picker_key}")))
                                     .flex()
                                     .flex_row()
                                     .items_center()
@@ -557,6 +559,7 @@ impl AskView {
         )
     }
 
+    #[allow(clippy::unused_self)] // method for consistent API
     fn render_empty_state(&self, cx: &App) -> impl IntoElement {
         let muted = cx.theme().muted_foreground;
 

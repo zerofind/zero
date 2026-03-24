@@ -2,7 +2,7 @@
 
 use anyhow::Result;
 use foundation::output::Outputter;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use zero_watcher::{FileWatchConfig, FileWatcher, UsbWatcher};
 
@@ -15,20 +15,20 @@ pub fn cmd_watch(out: &Outputter, watch_cmd: WatchCommands) -> Result<()> {
             debounce_ms,
             no_recursive,
         } => {
-            cmd_watch_files(out, paths, debounce_ms, !no_recursive)?;
+            cmd_watch_files(out, &paths, debounce_ms, !no_recursive)?;
         }
         WatchCommands::Usb { filter } => {
             cmd_watch_usb(out, filter)?;
         }
         WatchCommands::Latency { path, iterations } => {
-            cmd_watch_latency(out, path, iterations)?;
+            cmd_watch_latency(out, &path, iterations)?;
         }
     }
     Ok(())
 }
 fn cmd_watch_files(
     out: &Outputter,
-    paths: Vec<PathBuf>,
+    paths: &[PathBuf],
     debounce_ms: u64,
     recursive: bool,
 ) -> anyhow::Result<()> {
@@ -40,7 +40,7 @@ fn cmd_watch_files(
 
     let mut watcher = FileWatcher::with_config(config)?;
 
-    for path in &paths {
+    for path in paths {
         watcher.watch(path)?;
         out.info(&format!("Watching: {}", path.display()));
     }
@@ -102,7 +102,7 @@ fn cmd_watch_usb(out: &Outputter, filter: Vec<String>) -> anyhow::Result<()> {
     }
 }
 
-fn cmd_watch_latency(out: &Outputter, path: PathBuf, iterations: usize) -> anyhow::Result<()> {
+fn cmd_watch_latency(out: &Outputter, path: &Path, iterations: usize) -> anyhow::Result<()> {
     use std::fs;
 
     out.header("Measuring file watcher latency");
@@ -116,7 +116,7 @@ fn cmd_watch_latency(out: &Outputter, path: PathBuf, iterations: usize) -> anyho
 
     // Ensure the path exists
     if !path.exists() {
-        fs::create_dir_all(&path)?;
+        fs::create_dir_all(path)?;
     }
 
     let config = FileWatchConfig {
@@ -126,7 +126,7 @@ fn cmd_watch_latency(out: &Outputter, path: PathBuf, iterations: usize) -> anyho
     };
 
     let mut watcher = FileWatcher::with_config(config)?;
-    watcher.watch(&path)?;
+    watcher.watch(path)?;
 
     // Wait for watcher to be ready
     std::thread::sleep(Duration::from_millis(100));
@@ -186,15 +186,19 @@ fn cmd_watch_latency(out: &Outputter, path: PathBuf, iterations: usize) -> anyho
         out.newline();
         out.header("Results");
 
-        let min = latencies.iter().min().unwrap();
-        let max = latencies.iter().max().unwrap();
+        let min = latencies.iter().min().expect("latencies is non-empty");
+        let max = latencies.iter().max().expect("latencies is non-empty");
         let sum: Duration = latencies.iter().sum();
         let avg = sum / latencies.len() as u32;
 
         let mut sorted = latencies.clone();
         sorted.sort();
+        // latencies is non-empty (else branch only entered when len > 0)
+        #[allow(clippy::indexing_slicing)]
         let median = sorted[sorted.len() / 2];
+        #[allow(clippy::indexing_slicing)]
         let p95_idx = ((sorted.len() as f64 * 0.95) as usize).min(sorted.len() - 1);
+        #[allow(clippy::indexing_slicing)]
         let p95 = sorted[p95_idx];
 
         out.info(&format!("  Min:    {:>6.2}ms", min.as_secs_f64() * 1000.0));

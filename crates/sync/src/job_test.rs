@@ -187,9 +187,9 @@ fn test_sync_parallel_copies() {
     // Create many small files to test parallel copying
     fs::create_dir_all(&source).unwrap();
     for i in 0..20 {
-        fs::File::create(source.join(format!("file{}.txt", i)))
+        fs::File::create(source.join(format!("file{i}.txt")))
             .unwrap()
-            .write_all(format!("content {}", i).as_bytes())
+            .write_all(format!("content {i}").as_bytes())
             .unwrap();
     }
 
@@ -206,7 +206,7 @@ fn test_sync_parallel_copies() {
 
     // Verify all files exist
     for i in 0..20 {
-        assert!(dest.join(format!("file{}.txt", i)).exists());
+        assert!(dest.join(format!("file{i}.txt")).exists());
     }
 }
 

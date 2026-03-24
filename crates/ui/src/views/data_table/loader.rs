@@ -39,7 +39,7 @@ pub fn load_delimited(path: &Path) -> Result<DataFrame, String> {
         .headers()
         .map_err(|e| e.to_string())?
         .iter()
-        .map(|h| h.to_string())
+        .map(std::string::ToString::to_string)
         .collect();
 
     if headers.is_empty() {
@@ -55,7 +55,10 @@ pub fn load_delimited(path: &Path) -> Result<DataFrame, String> {
         total_rows += 1;
 
         if rows.len() < MAX_ROWS {
-            let mut row: Vec<String> = record.iter().map(|f| f.to_string()).collect();
+            let mut row: Vec<String> = record
+                .iter()
+                .map(std::string::ToString::to_string)
+                .collect();
             // Pad short rows
             row.resize(col_count, String::new());
             rows.push(row);

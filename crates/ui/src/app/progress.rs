@@ -140,7 +140,7 @@ impl ZeroApp {
                         if files > 0 {
                             let files_str = crate::ui::format_number(files);
                             let bytes_str = crate::ui::format_bytes(bytes);
-                            banner.phase = Some(format!("{} files · {}", files_str, bytes_str));
+                            banner.phase = Some(format!("{files_str} files · {bytes_str}"));
                         }
 
                         // Log every ~3s (20 ticks × 150ms)
@@ -312,10 +312,12 @@ impl ZeroApp {
                                 crate::ui::format_number(total),
                             );
                             if failed > 0 {
-                                phase.push_str(&format!(
+                                use std::fmt::Write;
+                                let _ = write!(
+                                    phase,
                                     " ({} failed)",
                                     crate::ui::format_number(failed),
-                                ));
+                                );
                             }
                             banner.phase = Some(phase);
                         }

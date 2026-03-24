@@ -141,9 +141,8 @@ impl TodoFile {
     /// true if the task was moved successfully
     pub fn move_task(&mut self, id: u64, to_list: Option<&str>, after_id: Option<u64>) -> bool {
         // Find and remove the task
-        let task_pos = match self.tasks.iter().position(|t| t.id == id) {
-            Some(pos) => pos,
-            None => return false,
+        let Some(task_pos) = self.tasks.iter().position(|t| t.id == id) else {
+            return false;
         };
 
         let mut task = self.tasks.remove(task_pos);
@@ -272,8 +271,8 @@ impl TodoFile {
     /// If a task with the same ID exists, it is replaced in-place.
     /// Otherwise the task is appended and `next_id` is bumped if needed.
     pub fn upsert_task(&mut self, id: u64, task: Task) {
-        if let Some(pos) = self.tasks.iter().position(|t| t.id == id) {
-            self.tasks[pos] = task;
+        if let Some(existing) = self.tasks.iter_mut().find(|t| t.id == id) {
+            *existing = task;
         } else {
             self.tasks.push(task);
             if id >= self.next_id {

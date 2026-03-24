@@ -107,6 +107,7 @@ impl DataTableView {
         }
     }
 
+    #[allow(clippy::unused_self)]
     fn close(&mut self, cx: &mut Context<Self>) {
         tracing::debug!("data_table: close");
         cx.emit(DataTableEvent::Close);
@@ -117,10 +118,10 @@ impl DataTableView {
     }
 
     pub fn file_name(&self) -> String {
-        self.path
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| self.path.to_string_lossy().to_string())
+        self.path.file_name().map_or_else(
+            || self.path.to_string_lossy().to_string(),
+            |n| n.to_string_lossy().to_string(),
+        )
     }
 
     pub fn info(&self) -> Option<&str> {

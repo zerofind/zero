@@ -154,7 +154,7 @@ fn test_resolved_sources_have_paths() {
 #[test]
 fn test_template_display() {
     let template = get_template("mac-essentials").unwrap();
-    let display = format!("{}", template);
+    let display = format!("{template}");
     assert!(display.contains("Mac Essentials"));
     assert!(display.contains("Documents"));
 }
@@ -162,7 +162,7 @@ fn test_template_display() {
 #[test]
 fn test_template_display_includes_description() {
     let template = get_template("mac-essentials").unwrap();
-    let display = format!("{}", template);
+    let display = format!("{template}");
     // Display should include some indication of what the template does
     assert!(!display.is_empty());
 }
@@ -171,7 +171,7 @@ fn test_template_display_includes_description() {
 fn test_resolved_template_display() {
     let template = get_template("mac-essentials").unwrap();
     let resolved = template.resolve();
-    let display = format!("{}", resolved);
+    let display = format!("{resolved}");
     assert!(!display.is_empty());
 }
 
@@ -281,7 +281,7 @@ fn test_template_clone() {
 #[test]
 fn test_template_debug() {
     let template = get_template("mac-essentials").unwrap();
-    let debug = format!("{:?}", template);
+    let debug = format!("{template:?}");
     assert!(debug.contains("mac-essentials"));
 }
 
@@ -296,6 +296,6 @@ fn test_template_source_clone() {
 #[test]
 fn test_template_source_debug() {
     let source = TemplateSource::required("Documents", "Docs");
-    let debug = format!("{:?}", source);
+    let debug = format!("{source:?}");
     assert!(debug.contains("Documents"));
 }

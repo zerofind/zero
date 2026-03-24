@@ -120,7 +120,7 @@ fn test_search_after_build() {
 
     // Search for .rs files by extension (empty query with filter = list all matching)
     let options = SearchOptions::default().with_extension("rs");
-    let results = index.search_with_options("", options);
+    let results = index.search_with_options("", &options);
     // Empty query with extension filter lists all files with that extension
     assert_eq!(results.len(), 3); // main.rs, lib.rs, config.rs
 
@@ -213,9 +213,9 @@ fn test_large_index() {
     for i in 0..1000 {
         let subdir = root.join(format!("dir{}", i % 10));
         fs::create_dir_all(&subdir).ok();
-        File::create(subdir.join(format!("file{}.txt", i)))
+        File::create(subdir.join(format!("file{i}.txt")))
             .unwrap()
-            .write_all(format!("content {}", i).as_bytes())
+            .write_all(format!("content {i}").as_bytes())
             .unwrap();
     }
 
@@ -232,8 +232,7 @@ fn test_large_index() {
     assert_eq!(results.len(), 100);
     assert!(
         elapsed.as_millis() < 100,
-        "Search took too long: {:?}",
-        elapsed
+        "Search took too long: {elapsed:?}"
     );
 }
 

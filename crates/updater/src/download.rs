@@ -95,7 +95,7 @@ fn sha512_file(path: &PathBuf) -> Result<String, UpdateError> {
         if n == 0 {
             break;
         }
-        hasher.update(&buf[..n]);
+        hasher.update(buf.get(..n).unwrap_or(&[]));
     }
 
     Ok(hex::encode(hasher.finalize()))

@@ -44,7 +44,7 @@ impl DedupView {
                     None
                 };
                 if let Err(e) =
-                    dedup::find_duplicates_streaming(&path, options, progress_bg, tx, mgr_ref)
+                    dedup::find_duplicates_streaming(&path, &options, &progress_bg, &tx, mgr_ref)
                 {
                     tracing::error!(error = %e, "dedup: streaming scan failed");
                 }
@@ -186,29 +186,25 @@ impl DedupView {
     pub(super) fn selected_count(&self, cx: &App) -> usize {
         self.table
             .as_ref()
-            .map(|t| t.read(cx).delegate().selected.len())
-            .unwrap_or(0)
+            .map_or(0, |t| t.read(cx).delegate().selected.len())
     }
 
     pub(super) fn selected_bytes(&self, cx: &App) -> u64 {
         self.table
             .as_ref()
-            .map(|t| t.read(cx).delegate().selected_bytes())
-            .unwrap_or(0)
+            .map_or(0, |t| t.read(cx).delegate().selected_bytes())
     }
 
     pub(super) fn total_wasted(&self, cx: &App) -> u64 {
         self.table
             .as_ref()
-            .map(|t| t.read(cx).delegate().total_wasted())
-            .unwrap_or(0)
+            .map_or(0, |t| t.read(cx).delegate().total_wasted())
     }
 
     pub(super) fn group_count(&self, cx: &App) -> usize {
         self.table
             .as_ref()
-            .map(|t| t.read(cx).delegate().groups.len())
-            .unwrap_or(0)
+            .map_or(0, |t| t.read(cx).delegate().groups.len())
     }
 
     pub(super) fn delete_selected(&mut self, cx: &mut Context<Self>) {

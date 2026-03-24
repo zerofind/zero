@@ -22,6 +22,7 @@ pub fn fstype_for_path(path: &Path) -> Option<&'static str> {
 }
 
 #[cfg(target_os = "macos")]
+#[allow(unsafe_code)]
 fn load_mounts() -> HashMap<PathBuf, MountInfo> {
     use std::ffi::CStr;
     use std::os::raw::c_char;
@@ -49,10 +50,10 @@ fn load_mounts() -> HashMap<PathBuf, MountInfo> {
     buf.truncate(actual as usize);
 
     for mnt in &buf {
-        // SAFETY: f_mntonname and f_fstypename are fixed-size char arrays in the
-        // statfs struct, guaranteed null-terminated by the kernel (POSIX).
+        // SAFETY: f_mntonname is a fixed-size char array in statfs, null-terminated by the kernel.
         let mount_point =
             unsafe { CStr::from_ptr(mnt.f_mntonname.as_ptr().cast::<c_char>()) }.to_string_lossy();
+        // SAFETY: f_fstypename is a fixed-size char array in statfs, null-terminated by the kernel.
         let fstype = unsafe { CStr::from_ptr(mnt.f_fstypename.as_ptr().cast::<c_char>()) }
             .to_string_lossy()
             .into_owned();

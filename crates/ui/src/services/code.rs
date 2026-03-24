@@ -37,6 +37,7 @@ impl CodeService {
     }
 
     /// Get a fresh CodeIndex (for passing to MCP server)
+    #[allow(clippy::unused_self)] // method for API consistency
     pub fn code_index(&self) -> Option<CodeIndex> {
         CodeIndex::new().ok()
     }

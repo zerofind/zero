@@ -221,7 +221,7 @@ pub fn copy_file_with_hash_progress(
     let mut reader = BufReader::with_capacity(128 * 1024, src_file);
     let mut writer = BufWriter::with_capacity(128 * 1024, dst_file);
     let mut hasher = Xxh3::new();
-    let mut buffer = [0u8; 128 * 1024];
+    let mut buffer = vec![0u8; 128 * 1024];
     let mut bytes_copied = 0u64;
 
     // Copy while hashing
@@ -235,13 +235,14 @@ pub fn copy_file_with_hash_progress(
             break;
         }
 
-        hasher.update(&buffer[..n]);
-        writer
-            .write_all(&buffer[..n])
-            .map_err(|e| CopyError::WriteError {
-                path: dest_str.clone(),
-                source: e,
-            })?;
+        // SAFETY: `n` is bounded by `buffer.len()` per the `Read::read` contract
+        #[allow(clippy::indexing_slicing)]
+        let chunk = &buffer[..n];
+        hasher.update(chunk);
+        writer.write_all(chunk).map_err(|e| CopyError::WriteError {
+            path: dest_str.clone(),
+            source: e,
+        })?;
 
         bytes_copied += n as u64;
 
@@ -299,7 +300,7 @@ pub fn copy_file_with_hash_progress(
 fn bytes_to_hex(bytes: &[u8]) -> String {
     bytes.iter().fold(String::new(), |mut acc, b| {
         use std::fmt::Write;
-        write!(acc, "{b:02x}").unwrap();
+        write!(acc, "{b:02x}").expect("write to String is infallible");
         acc
     })
 }

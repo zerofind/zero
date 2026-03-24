@@ -72,11 +72,11 @@ impl TodoView {
             .children(tabs.into_iter().map(|list_name| {
                 let active = self.current_list == list_name;
                 let name = list_name.clone();
-                Button::new(SharedString::from(format!("tab-{}", list_name)))
+                Button::new(SharedString::from(format!("tab-{list_name}")))
                     .label(SharedString::from(list_name))
                     .compact()
                     .xsmall()
-                    .when(active, |b| b.primary())
+                    .when(active, gpui_component::button::ButtonVariants::primary)
                     .when(!active, |b| b.ghost().text_color(muted))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.set_current_list(name.clone(), cx);
@@ -413,8 +413,8 @@ impl TodoView {
                             .label(SharedString::from(list.clone()))
                             .compact()
                             .xsmall()
-                            .when(is_current, |b| b.primary())
-                            .when(!is_current, |b| b.ghost())
+                            .when(is_current, gpui_component::button::ButtonVariants::primary)
+                            .when(!is_current, gpui_component::button::ButtonVariants::ghost)
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 this.move_to_list(task_id, &list_name, cx);
                             }))
@@ -488,15 +488,14 @@ impl Render for TodoView {
                 .tasks
                 .iter()
                 .find(|t| t.id == task_id)
-                .map(|t| t.text.clone())
-                .unwrap_or_else(|| format!("Task #{task_id}"));
+                .map_or_else(|| format!("Task #{task_id}"), |t| t.text.clone());
 
             let confirm_entity = cx.entity().clone();
             let cancel_entity = cx.entity().clone();
 
             ConfirmDialog::new(
                 "Delete Task",
-                format!("Delete \"{}\"? This cannot be undone.", task_text),
+                format!("Delete \"{task_text}\"? This cannot be undone."),
                 move |_window, cx| {
                     confirm_entity.update(cx, |this, cx| this.delete_task(task_id, cx));
                 },
@@ -605,7 +604,7 @@ impl Render for TodoView {
                     ),
             )
             // Delete confirm dialog
-            .when_some(delete_dialog, |el, dialog| el.child(dialog))
+            .when_some(delete_dialog, gpui::ParentElement::child)
     }
 }
 

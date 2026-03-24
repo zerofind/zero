@@ -96,10 +96,14 @@ impl CompletedEntry {
             return None;
         }
 
+        let path_str = parts.first()?;
+        let size_str = parts.get(1)?;
+        let hash_str = parts.get(2)?;
+
         Some(Self {
-            path: PathBuf::from(parts[0]),
-            size: parts[1].parse().ok()?,
-            hash: parts[2].to_string(),
+            path: PathBuf::from(path_str),
+            size: size_str.parse().ok()?,
+            hash: hash_str.to_string(),
         })
     }
 

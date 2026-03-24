@@ -69,8 +69,7 @@ impl GitService {
     ) {
         let stale = self
             .last_refresh
-            .map(|t| t.elapsed() >= min_interval)
-            .unwrap_or(true);
+            .is_none_or(|t| t.elapsed() >= min_interval);
         if stale {
             self.refresh(paths, cx);
         }
@@ -94,11 +93,8 @@ fn check_paths(paths: &[PathBuf]) -> HashMap<PathBuf, RepoStatus> {
             .ok()
             .and_then(|h| h.shorthand().map(String::from))
             .unwrap_or_default();
-        let dirty = repo
-            .statuses(Some(&mut opts))
-            .map(|s| !s.is_empty())
-            .unwrap_or(false);
-        out.insert(path.to_path_buf(), RepoStatus { dirty, branch });
+        let dirty = repo.statuses(Some(&mut opts)).is_ok_and(|s| !s.is_empty());
+        out.insert(path.clone(), RepoStatus { dirty, branch });
     }
     out
 }

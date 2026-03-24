@@ -1,10 +1,9 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, AppContext, Application, Bounds, Context, Div, Element, Entity, FocusHandle,
-    Focusable, FontWeight, Hsla, InteractiveElement, IntoElement, IsEmpty, KeyBinding,
-    ParentElement, PlatformDisplay, PlatformKeyboardLayout, Render, SharedString,
-    StatefulInteractiveElement, StyleRefinement, Styled, Window, WindowBounds, WindowOptions,
-    actions, div, hsla, point, px, size,
+    AnyElement, App, AppContext, Application, Bounds, Context, Div, Entity, FocusHandle, Focusable,
+    FontWeight, Hsla, InteractiveElement, IntoElement, KeyBinding, ParentElement, Render,
+    SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window, WindowBounds,
+    WindowOptions, actions, div, hsla, point, px, size,
 };
 use gpui_component::{
     ActiveTheme, Icon, IconName, Root, Sizable as _, TitleBar,
@@ -262,6 +261,7 @@ impl DesignSystem {
 
     // -- File Browser section -------------------------------------------------
 
+    #[allow(clippy::unused_self)]
     fn render_file_browser(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let fg = cx.theme().foreground;
         let muted = cx.theme().muted_foreground;
@@ -368,6 +368,7 @@ impl DesignSystem {
 
     // -- Navigation section ---------------------------------------------------
 
+    #[allow(clippy::unused_self)]
     fn render_navigation(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let fg = cx.theme().foreground;
 

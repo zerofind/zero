@@ -49,7 +49,7 @@ pub fn cmd_index(out: &Outputter, opts: &IndexOptions<'_>) -> anyhow::Result<()>
             ..Default::default()
         };
 
-        let entries = scan_collect(path, options)?;
+        let entries = scan_collect(path, &options)?;
 
         out.info(&format!("Found {} files", entries.len()));
         out.newline();
@@ -150,7 +150,7 @@ pub fn cmd_index(out: &Outputter, opts: &IndexOptions<'_>) -> anyhow::Result<()>
     };
 
     let storage = control_db
-        .get_or_create_storage(&canonical_path, device_info)
+        .get_or_create_storage(&canonical_path, &device_info)
         .map_err(|e| anyhow::anyhow!("Failed to get storage: {e}"))?;
 
     let storage_db = control_db
@@ -284,7 +284,7 @@ pub fn cmd_index(out: &Outputter, opts: &IndexOptions<'_>) -> anyhow::Result<()>
             max_depth: max_depth.unwrap_or(usize::MAX),
             ..Default::default()
         };
-        let files = scan_collect(path, scan_options)?;
+        let files = scan_collect(path, &scan_options)?;
 
         if files.is_empty() {
             out.warn("No files found to benchmark");
@@ -405,7 +405,7 @@ pub fn cmd_index(out: &Outputter, opts: &IndexOptions<'_>) -> anyhow::Result<()>
         max_depth: max_depth.unwrap_or(usize::MAX),
         ..Default::default()
     };
-    let files = scan_collect(path, scan_options)?;
+    let files = scan_collect(path, &scan_options)?;
 
     if files.is_empty() {
         out.warn("No files found");

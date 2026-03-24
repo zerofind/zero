@@ -149,9 +149,7 @@ impl SettingsView {
                                     .text_size(FONT_SIZE_BODY)
                                     .text_color(muted)
                                     .child(SharedString::from(
-                                        foundation::dirs::data_dir()
-                                            .map(|d| d.to_string_lossy().to_string())
-                                            .unwrap_or_else(|| "~/.zero".to_string()),
+                                        foundation::dirs::data_dir().map_or_else(|| "~/.zero".to_string(), |d| d.to_string_lossy().to_string()),
                                     ))
                                     .into_any_element(),
                                 muted,
@@ -192,7 +190,7 @@ impl SettingsView {
                                                 mcp.start(manager, port, cx);
                                             });
                                         } else {
-                                            this.mcp.update(cx, |mcp, cx| mcp.stop(cx));
+                                            this.mcp.update(cx, crate::services::mcp::McpService::stop);
                                         }
                                         cx.notify();
                                     }))
@@ -371,7 +369,7 @@ impl SettingsView {
                     "Clear Search Index",
                     "Remove all indexed data? You will need to rebuild the index afterwards.",
                     move |_window, cx| {
-                        confirm_entity.update(cx, |this, cx| this.confirm_clear_index(cx));
+                        confirm_entity.update(cx, super::SettingsView::confirm_clear_index);
                     },
                     move |_window, cx| {
                         cancel_entity.update(cx, |this, cx| {
@@ -396,7 +394,7 @@ impl SettingsView {
                     "Reset All Settings",
                     "Restore all settings to their defaults? This cannot be undone.",
                     move |_window, cx| {
-                        confirm_entity.update(cx, |this, cx| this.confirm_reset_settings(cx));
+                        confirm_entity.update(cx, super::SettingsView::confirm_reset_settings);
                     },
                     move |_window, cx| {
                         cancel_entity.update(cx, |this, cx| {
@@ -417,7 +415,7 @@ impl SettingsView {
             .relative()
             .w_full()
             .child(content)
-            .when_some(clear_dialog, |el, d| el.child(d))
-            .when_some(reset_dialog, |el, d| el.child(d))
+            .when_some(clear_dialog, gpui::ParentElement::child)
+            .when_some(reset_dialog, gpui::ParentElement::child)
     }
 }

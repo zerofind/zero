@@ -222,8 +222,7 @@ fn diff_with_metadata(
     options: &DiffOptions,
 ) -> DiffResult {
     // Build HashMap of dest paths for O(1) lookup
-    let dest_map: HashMap<&Path, &FileEntry> =
-        HashMap::from_iter(dest.iter().map(|e| (e.path.as_path(), e)));
+    let dest_map: HashMap<&Path, &FileEntry> = dest.iter().map(|e| (e.path.as_path(), e)).collect();
 
     let mut result = DiffResult::new();
 
@@ -265,7 +264,7 @@ fn diff_with_metadata(
 
     // Find files only in destination (removed/orphans)
     let source_map: HashMap<&Path, &FileEntry> =
-        HashMap::from_iter(source.iter().map(|e| (e.path.as_path(), e)));
+        source.iter().map(|e| (e.path.as_path(), e)).collect();
 
     for dest_entry in dest {
         if !source_map.contains_key(dest_entry.path.as_path()) {

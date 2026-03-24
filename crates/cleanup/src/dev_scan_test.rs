@@ -152,7 +152,7 @@ fn test_cancellation() {
     // Cancel immediately
     progress.cancelled.store(true, Ordering::Relaxed);
 
-    let result = scan_dev_garbage(root, Some("rust_target"), None, Some(progress)).unwrap();
+    let result = scan_dev_garbage(root, Some("rust_target"), None, Some(&progress)).unwrap();
 
     // Should find fewer items than available (cancelled early)
     assert!(result.items.len() < 5);

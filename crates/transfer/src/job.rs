@@ -156,7 +156,7 @@ impl TransferJob {
             max_depth: self.options.max_depth.unwrap_or(usize::MAX),
             ..Default::default()
         };
-        let source_files = scan_collect(&self.source, scan_options)?;
+        let source_files = scan_collect(&self.source, &scan_options)?;
 
         let total_files = source_files.len();
         let total_bytes: u64 = source_files.iter().map(|f| f.size).sum();

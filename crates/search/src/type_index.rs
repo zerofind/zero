@@ -517,6 +517,8 @@ impl TypeIndex {
             }
 
             // Hidden: starts with '.' and length > 1
+            // Index 0 is valid: guarded by component.len() > 1 above
+            #[allow(clippy::indexing_slicing)]
             if !is_hidden && component.len() > 1 && component.as_bytes()[0] == b'.' {
                 is_hidden = true;
             }
@@ -891,11 +893,11 @@ mod tests {
 
         for i in 0..1000 {
             if i % 3 == 0 {
-                index.add_file(i, &format!("/path/file{}.jpg", i), Some("jpg"), false);
+                index.add_file(i, &format!("/path/file{i}.jpg"), Some("jpg"), false);
             } else if i % 3 == 1 {
-                index.add_file(i, &format!("/path/file{}.mp4", i), Some("mp4"), false);
+                index.add_file(i, &format!("/path/file{i}.mp4"), Some("mp4"), false);
             } else {
-                index.add_file(i, &format!("/path/file{}.rs", i), Some("rs"), false);
+                index.add_file(i, &format!("/path/file{i}.rs"), Some("rs"), false);
             }
         }
 

@@ -57,11 +57,17 @@ fn hash_chunk_at(
     // Read up to chunk_size bytes
     while bytes_read_total < chunk_size {
         let to_read = std::cmp::min(buffer.len(), chunk_size - bytes_read_total);
-        let n = file.read(&mut buffer[..to_read])?;
+        // SAFETY: `to_read` is clamped to `buffer.len()` by `min` above;
+        // `n` is bounded by `to_read` per the `Read::read` contract.
+        #[allow(clippy::indexing_slicing)]
+        let read_slice = &mut buffer[..to_read];
+        let n = file.read(read_slice)?;
         if n == 0 {
             break; // EOF
         }
-        hasher.update(&buffer[..n]);
+        #[allow(clippy::indexing_slicing)]
+        let data = &buffer[..n];
+        hasher.update(data);
         bytes_read_total += n;
     }
 
@@ -309,8 +315,11 @@ pub fn copy_chunked_with_resume(
             break;
         }
 
+        // SAFETY: `bytes_read` is bounded by `buffer.len()` per the `Read::read` contract
+        #[allow(clippy::indexing_slicing)]
+        let data = &buffer[..bytes_read];
         writer
-            .write_all(&buffer[..bytes_read])
+            .write_all(data)
             .map_err(|e| ChunkedCopyError::WriteError {
                 path: dest_str.clone(),
                 source: e,
@@ -407,7 +416,10 @@ fn hash_file(path: &Path, buffer: &mut [u8]) -> Result<u128, std::io::Error> {
         if n == 0 {
             break;
         }
-        hasher.update(&buffer[..n]);
+        // SAFETY: `n` is bounded by `buffer.len()` per the `Read::read` contract
+        #[allow(clippy::indexing_slicing)]
+        let data = &buffer[..n];
+        hasher.update(data);
     }
 
     Ok(hasher.digest128())

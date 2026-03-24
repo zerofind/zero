@@ -534,7 +534,7 @@ impl Render for FileBrowserView {
                         cx.notify();
                     }))
                     // Search bar
-                    .when_some(self.render_search_bar(cx), |el, bar| el.child(bar))
+                    .when_some(self.render_search_bar(cx), gpui::ParentElement::child)
                     .when(self.loading, |el| {
                         el.child(
                             EmptyState::new(IconName::FolderOpen, "Loading...")
@@ -584,17 +584,17 @@ impl Render for FileBrowserView {
                 )
             })
             // Column menu overlay (rendered after backdrop so it's on top)
-            .when_some(self.render_column_menu(cx), |el, menu| el.child(menu))
+            .when_some(self.render_column_menu(cx), gpui::ParentElement::child)
     }
 }
 
 /// Format load timing: <1ms → "0.54ms", 1-10ms → "5.8ms", 10ms+ → "156ms"
 fn format_load_time(ms: f64) -> String {
     if ms < 1.0 {
-        format!("{:.2}ms", ms)
+        format!("{ms:.2}ms")
     } else if ms < 10.0 {
-        format!("{:.1}ms", ms)
+        format!("{ms:.1}ms")
     } else {
-        format!("{:.0}ms", ms)
+        format!("{ms:.0}ms")
     }
 }

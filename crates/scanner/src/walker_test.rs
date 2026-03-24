@@ -43,10 +43,13 @@ fn create_test_tree() -> TempDir {
 fn test_scan_basic() {
     let dir = create_test_tree();
 
-    let entries: Vec<_> = scan(dir.path(), ScanOptions::default()).unwrap().collect();
+    let entries: Vec<_> = scan(dir.path(), &ScanOptions::default()).unwrap().collect();
 
     // Should have 3 files (excluding .DS_Store)
-    let ok_entries: Vec<_> = entries.into_iter().filter_map(|r| r.ok()).collect();
+    let ok_entries: Vec<_> = entries
+        .into_iter()
+        .filter_map(std::result::Result::ok)
+        .collect();
     assert_eq!(ok_entries.len(), 3);
 }
 
@@ -54,14 +57,14 @@ fn test_scan_basic() {
 fn test_scan_collect() {
     let dir = create_test_tree();
 
-    let entries = scan_collect(dir.path(), ScanOptions::default()).unwrap();
+    let entries = scan_collect(dir.path(), &ScanOptions::default()).unwrap();
     assert_eq!(entries.len(), 3);
 }
 
 #[test]
 fn test_scan_empty_directory() {
     let dir = TempDir::new().unwrap();
-    let entries = scan_collect(dir.path(), ScanOptions::default()).unwrap();
+    let entries = scan_collect(dir.path(), &ScanOptions::default()).unwrap();
     assert!(entries.is_empty());
 }
 
@@ -71,7 +74,7 @@ fn test_scan_empty_directory() {
 
 #[test]
 fn test_scan_nonexistent() {
-    let result = scan(Path::new("/nonexistent/path/xyz"), ScanOptions::default());
+    let result = scan(Path::new("/nonexistent/path/xyz"), &ScanOptions::default());
     assert!(matches!(result, Err(ScanError::RootNotFound(_))));
 }
 
@@ -84,7 +87,7 @@ fn test_scan_file_not_directory() {
         .write_all(b"test")
         .unwrap();
 
-    let result = scan(&file_path, ScanOptions::default());
+    let result = scan(&file_path, &ScanOptions::default());
     assert!(matches!(result, Err(ScanError::NotADirectory(_))));
 }
 
@@ -96,7 +99,7 @@ fn test_scan_file_not_directory() {
 fn test_relative_paths() {
     let dir = create_test_tree();
 
-    let entries = scan_collect(dir.path(), ScanOptions::default()).unwrap();
+    let entries = scan_collect(dir.path(), &ScanOptions::default()).unwrap();
 
     for entry in entries {
         // All relative paths should not be absolute
@@ -110,7 +113,7 @@ fn test_relative_paths() {
 fn test_file_sizes() {
     let dir = create_test_tree();
 
-    let entries = scan_collect(dir.path(), ScanOptions::default()).unwrap();
+    let entries = scan_collect(dir.path(), &ScanOptions::default()).unwrap();
 
     let file1 = entries.iter().find(|e| e.path.ends_with("file1.txt"));
     assert!(file1.is_some());
@@ -121,7 +124,7 @@ fn test_file_sizes() {
 fn test_file_mtime() {
     let dir = create_test_tree();
 
-    let entries = scan_collect(dir.path(), ScanOptions::default()).unwrap();
+    let entries = scan_collect(dir.path(), &ScanOptions::default()).unwrap();
 
     for entry in entries {
         // mtime should be set to something reasonable (not 0)
@@ -156,7 +159,7 @@ fn test_hidden_directories_included() {
         filter: ScanFilter::empty(),
         ..Default::default()
     };
-    let entries = scan_collect(dir.path(), options).unwrap();
+    let entries = scan_collect(dir.path(), &options).unwrap();
 
     // Should find file in hidden directory
     let has_hidden = entries
@@ -184,7 +187,7 @@ fn test_hidden_files_included_by_default() {
         filter: ScanFilter::empty(),
         ..Default::default()
     };
-    let entries = scan_collect(dir.path(), options).unwrap();
+    let entries = scan_collect(dir.path(), &options).unwrap();
 
     assert_eq!(entries.len(), 2);
     assert!(
@@ -208,7 +211,7 @@ fn test_custom_filter() {
         ..Default::default()
     };
 
-    let entries = scan_collect(dir.path(), options).unwrap();
+    let entries = scan_collect(dir.path(), &options).unwrap();
 
     // Should have 1 file (.DS_Store) - all .txt files filtered out
     assert_eq!(
@@ -229,7 +232,7 @@ fn test_filter_partial_match() {
         ..Default::default()
     };
 
-    let entries = scan_collect(dir.path(), options).unwrap();
+    let entries = scan_collect(dir.path(), &options).unwrap();
 
     // Should have 3 files (file2.txt, subdir/file3.txt, .DS_Store)
     assert_eq!(entries.len(), 3);
@@ -240,7 +243,7 @@ fn test_filter_partial_match() {
 fn test_default_filter_excludes_ds_store() {
     let dir = create_test_tree();
 
-    let entries = scan_collect(dir.path(), ScanOptions::default()).unwrap();
+    let entries = scan_collect(dir.path(), &ScanOptions::default()).unwrap();
 
     // .DS_Store should be excluded
     assert!(
@@ -292,7 +295,7 @@ fn test_scan_options_max_depth() {
         filter: ScanFilter::empty(),
         ..Default::default()
     };
-    let entries = scan_collect(dir.path(), options).unwrap();
+    let entries = scan_collect(dir.path(), &options).unwrap();
 
     // Should find level0.txt and level1.txt, but not level2.txt or level3.txt
     assert!(
@@ -338,7 +341,7 @@ fn test_deeply_nested_structure() {
         filter: ScanFilter::empty(),
         ..Default::default()
     };
-    let entries = scan_collect(dir.path(), options).unwrap();
+    let entries = scan_collect(dir.path(), &options).unwrap();
 
     assert_eq!(entries.len(), 1);
     assert!(entries[0].path.to_string_lossy().contains("deep.txt"));
@@ -352,7 +355,7 @@ fn test_multiple_subdirectories() {
     // Create multiple subdirectories with files
     for subdir in ["dir1", "dir2", "dir3"] {
         fs::create_dir(root.join(subdir)).unwrap();
-        File::create(root.join(format!("{}/file.txt", subdir)))
+        File::create(root.join(format!("{subdir}/file.txt")))
             .unwrap()
             .write_all(b"content")
             .unwrap();
@@ -362,7 +365,7 @@ fn test_multiple_subdirectories() {
         filter: ScanFilter::empty(),
         ..Default::default()
     };
-    let entries = scan_collect(dir.path(), options).unwrap();
+    let entries = scan_collect(dir.path(), &options).unwrap();
 
     assert_eq!(entries.len(), 3);
 }
@@ -374,11 +377,11 @@ fn test_multiple_subdirectories() {
 #[test]
 fn test_scan_error_display() {
     let err = ScanError::RootNotFound(PathBuf::from("/test/path"));
-    let display = format!("{}", err);
+    let display = format!("{err}");
     assert!(display.contains("/test/path"));
 
     let err2 = ScanError::NotADirectory(PathBuf::from("/test/file.txt"));
-    let display2 = format!("{}", err2);
+    let display2 = format!("{err2}");
     assert!(display2.contains("/test/file.txt"));
 }
 
@@ -411,7 +414,7 @@ fn test_various_file_sizes() {
         filter: ScanFilter::empty(),
         ..Default::default()
     };
-    let entries = scan_collect(dir.path(), options).unwrap();
+    let entries = scan_collect(dir.path(), &options).unwrap();
 
     assert_eq!(entries.len(), 3);
 
@@ -469,7 +472,7 @@ fn test_scan_with_progress_counts() {
 
     let entries = scan_with_progress(
         dir.path(),
-        ScanOptions::default(),
+        &ScanOptions::default(),
         Some(Arc::clone(&progress)),
     )
     .unwrap()
@@ -505,7 +508,7 @@ fn test_scan_with_progress_bytes() {
     let progress = Arc::new(CrawlProgress::new());
     let entries = scan_collect_with_progress(
         root,
-        ScanOptions {
+        &ScanOptions {
             filter: ScanFilter::empty(),
             ..Default::default()
         },
@@ -525,7 +528,7 @@ fn test_scan_with_progress_cancellation() {
 
     // Create many files
     for i in 0..100 {
-        File::create(root.join(format!("file{}.txt", i)))
+        File::create(root.join(format!("file{i}.txt")))
             .unwrap()
             .write_all(b"x")
             .unwrap();
@@ -538,7 +541,7 @@ fn test_scan_with_progress_cancellation() {
 
     let entries = scan_collect_with_progress(
         root,
-        ScanOptions {
+        &ScanOptions {
             filter: ScanFilter::empty(),
             ..Default::default()
         },
@@ -558,7 +561,7 @@ fn test_scan_with_progress_none() {
     // Ensure scan works fine without progress tracking
     let dir = create_test_tree();
 
-    let entries = scan_with_progress(dir.path(), ScanOptions::default(), None)
+    let entries = scan_with_progress(dir.path(), &ScanOptions::default(), None)
         .unwrap()
         .collect::<Vec<_>>();
 
@@ -573,7 +576,7 @@ fn test_scan_collect_with_progress() {
 
     let entries = scan_collect_with_progress(
         dir.path(),
-        ScanOptions::default(),
+        &ScanOptions::default(),
         Some(Arc::clone(&progress)),
     )
     .unwrap();

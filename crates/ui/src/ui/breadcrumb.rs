@@ -44,10 +44,10 @@ impl RenderOnce for Breadcrumb {
             let name = if current == Path::new("/") {
                 "/".to_string()
             } else {
-                current
-                    .file_name()
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_else(|| current.to_string_lossy().to_string())
+                current.file_name().map_or_else(
+                    || current.to_string_lossy().to_string(),
+                    |n| n.to_string_lossy().to_string(),
+                )
             };
             segments.push((name, current.to_path_buf()));
             match current.parent() {

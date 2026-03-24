@@ -336,7 +336,7 @@ impl<'a> ProfileCleanupQuery<'a> {
         for result in results {
             // Filter to only files under the target path
             if result.node.path.starts_with(&full_path)
-                && self.matches_filters(&result.node, cutoff_time, min_size)
+                && Self::matches_filters(&result.node, cutoff_time, min_size)
                 && !self.is_excluded(&result.node.path)
             {
                 let reason: Arc<str> = Arc::from(self.generate_reason(&result.node));
@@ -432,7 +432,7 @@ impl<'a> ProfileCleanupQuery<'a> {
 
         for result in results {
             if result.node.name() == filename
-                && self.matches_filters(&result.node, cutoff_time, min_size)
+                && Self::matches_filters(&result.node, cutoff_time, min_size)
                 && !self.is_excluded(&result.node.path)
             {
                 let reason: Arc<str> = Arc::from(self.generate_reason(&result.node));
@@ -471,7 +471,7 @@ impl<'a> ProfileCleanupQuery<'a> {
 
         for result in results {
             // No need to verify extension - bitmap already guarantees it matches
-            if self.matches_filters(&result.node, cutoff_time, min_size)
+            if Self::matches_filters(&result.node, cutoff_time, min_size)
                 && !self.is_excluded(&result.node.path)
             {
                 let reason: Arc<str> = Arc::from(self.generate_reason(&result.node));
@@ -507,7 +507,7 @@ impl<'a> ProfileCleanupQuery<'a> {
         for result in results {
             // Check if path contains the directory
             if result.node.path.contains(&format!("/{dir_name}/"))
-                && self.matches_filters(&result.node, cutoff_time, min_size)
+                && Self::matches_filters(&result.node, cutoff_time, min_size)
                 && !self.is_excluded(&result.node.path)
             {
                 let reason: Arc<str> = Arc::from(self.generate_reason(&result.node));
@@ -559,7 +559,7 @@ impl<'a> ProfileCleanupQuery<'a> {
         }
 
         for result in results {
-            if self.matches_filters(&result.node, cutoff_time, min_size)
+            if Self::matches_filters(&result.node, cutoff_time, min_size)
                 && !self.is_excluded(&result.node.path)
             {
                 let reason: Arc<str> = Arc::from(self.generate_reason(&result.node));
@@ -592,7 +592,7 @@ impl<'a> ProfileCleanupQuery<'a> {
         let results = manager.search(term, self.limit.saturating_mul(10));
 
         for result in results {
-            if self.matches_filters(&result.node, cutoff_time, min_size)
+            if Self::matches_filters(&result.node, cutoff_time, min_size)
                 && !self.is_excluded(&result.node.path)
             {
                 let reason: Arc<str> = Arc::from(self.generate_reason(&result.node));
@@ -612,12 +612,7 @@ impl<'a> ProfileCleanupQuery<'a> {
     }
 
     /// Check if a node matches size and age filters
-    fn matches_filters(
-        &self,
-        node: &FileNode,
-        cutoff_time: Option<u64>,
-        min_size: Option<u64>,
-    ) -> bool {
+    fn matches_filters(node: &FileNode, cutoff_time: Option<u64>, min_size: Option<u64>) -> bool {
         // Size filter
         if let Some(min) = min_size
             && node.size < min
@@ -670,7 +665,7 @@ impl<'a> ProfileCleanupQuery<'a> {
         }
 
         if self.category.min_age_secs.is_some() {
-            let age_days = self.get_age_days(node.mtime);
+            let age_days = Self::get_age_days(node.mtime);
             return format!("{} ({} days old)", self.category.name, age_days);
         }
 
@@ -678,7 +673,7 @@ impl<'a> ProfileCleanupQuery<'a> {
     }
 
     /// Calculate age in days from mtime
-    fn get_age_days(&self, mtime: u64) -> u64 {
+    fn get_age_days(mtime: u64) -> u64 {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or(Duration::ZERO)
@@ -843,12 +838,6 @@ mod tests {
 
     #[test]
     fn test_matches_filters_size() {
-        let profile = load_cleanup().expect("should load profile");
-        let category = profile
-            .get("node_modules")
-            .expect("should have node_modules");
-        let query = ProfileCleanupQuery::from_category(category);
-
         let small_node = FileNode {
             path: "/test/small.txt".into(),
             size: 100,
@@ -864,12 +853,28 @@ mod tests {
         };
 
         // No size filter - both should match
-        assert!(query.matches_filters(&small_node, None, None));
-        assert!(query.matches_filters(&large_node, None, None));
+        assert!(ProfileCleanupQuery::matches_filters(
+            &small_node,
+            None,
+            None
+        ));
+        assert!(ProfileCleanupQuery::matches_filters(
+            &large_node,
+            None,
+            None
+        ));
 
         // With size filter - only large should match
-        assert!(!query.matches_filters(&small_node, None, Some(1000)));
-        assert!(query.matches_filters(&large_node, None, Some(1000)));
+        assert!(!ProfileCleanupQuery::matches_filters(
+            &small_node,
+            None,
+            Some(1000)
+        ));
+        assert!(ProfileCleanupQuery::matches_filters(
+            &large_node,
+            None,
+            Some(1000)
+        ));
     }
 
     // =============================================================================
@@ -894,14 +899,13 @@ mod tests {
         let construction_time = start.elapsed();
 
         println!("\n=== Cleanup Query Construction Performance ===");
-        println!("10000 query constructions: {:?}", construction_time);
+        println!("10000 query constructions: {construction_time:?}");
         println!("Average per construction: {:?}", construction_time / 10000);
 
         // Should be very fast - sub-millisecond
         assert!(
             construction_time.as_millis() < 10,
-            "query construction too slow: {:?}",
-            construction_time
+            "query construction too slow: {construction_time:?}"
         );
     }
 
@@ -928,7 +932,7 @@ mod tests {
         let parse_time = start.elapsed();
 
         println!("\n=== Pattern Parsing Performance ===");
-        println!("Total patterns: {}", total_patterns);
+        println!("Total patterns: {total_patterns}");
         println!(
             "10000 iterations ({} pattern checks): {:?}",
             total_patterns * 10000,
@@ -942,20 +946,13 @@ mod tests {
         // Should be extremely fast
         assert!(
             parse_time.as_millis() < 50,
-            "pattern parsing too slow: {:?}",
-            parse_time
+            "pattern parsing too slow: {parse_time:?}"
         );
     }
 
     #[test]
     fn bench_filter_matching() {
         use std::time::Instant;
-
-        let profile = load_cleanup().expect("should load profile");
-        let category = profile
-            .get("node_modules")
-            .expect("should have node_modules");
-        let query = ProfileCleanupQuery::from_category(category);
 
         // Create test nodes
         let small_node = FileNode {
@@ -975,20 +972,19 @@ mod tests {
         // Measure filter matching
         let start = Instant::now();
         for _ in 0..100000 {
-            let _ = query.matches_filters(&small_node, None, None);
-            let _ = query.matches_filters(&large_node, Some(1000), Some(500));
+            let _ = ProfileCleanupQuery::matches_filters(&small_node, None, None);
+            let _ = ProfileCleanupQuery::matches_filters(&large_node, Some(1000), Some(500));
         }
         let filter_time = start.elapsed();
 
         println!("\n=== Filter Matching Performance ===");
-        println!("200000 filter checks: {:?}", filter_time);
+        println!("200000 filter checks: {filter_time:?}");
         println!("Average per check: {:?}", filter_time / 200000);
 
         // Should be nanoseconds per check
         assert!(
             filter_time.as_millis() < 50,
-            "filter matching too slow: {:?}",
-            filter_time
+            "filter matching too slow: {filter_time:?}"
         );
     }
 
@@ -1024,26 +1020,19 @@ mod tests {
 
             println!("\n=== Exclude Checking Performance ===");
             println!("Excludes in category: {}", cat.exclude.len());
-            println!("40000 exclude checks: {:?}", exclude_time);
+            println!("40000 exclude checks: {exclude_time:?}");
             println!("Average per check: {:?}", exclude_time / 40000);
 
             // Should be fast even with exclude checking
             assert!(
                 exclude_time.as_millis() < 100,
-                "exclude checking too slow: {:?}",
-                exclude_time
+                "exclude checking too slow: {exclude_time:?}"
             );
         }
     }
 
     #[test]
     fn test_matches_filters_age() {
-        let profile = load_cleanup().expect("should load profile");
-        let category = profile
-            .get("node_modules")
-            .expect("should have node_modules");
-        let query = ProfileCleanupQuery::from_category(category);
-
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -1067,9 +1056,17 @@ mod tests {
         let cutoff = now - (30 * 24 * 60 * 60);
 
         // Old file should match (mtime < cutoff)
-        assert!(query.matches_filters(&old_node, Some(cutoff), None));
+        assert!(ProfileCleanupQuery::matches_filters(
+            &old_node,
+            Some(cutoff),
+            None
+        ));
 
         // New file should not match (mtime > cutoff)
-        assert!(!query.matches_filters(&new_node, Some(cutoff), None));
+        assert!(!ProfileCleanupQuery::matches_filters(
+            &new_node,
+            Some(cutoff),
+            None
+        ));
     }
 }

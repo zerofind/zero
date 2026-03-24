@@ -209,7 +209,7 @@ impl Render for DedupView {
                                 .subtitle("Finding identical copies across your files"),
                         )
                     })
-                    .when_some(self.table.as_ref().cloned(), |el, table_state| {
+                    .when_some(self.table.clone(), |el, table_state| {
                         el.child(
                             div()
                                 .flex_1()
@@ -219,6 +219,6 @@ impl Render for DedupView {
                         )
                     }),
             )
-            .when_some(confirm_dialog, |el, dialog| el.child(dialog))
+            .when_some(confirm_dialog, gpui::ParentElement::child)
     }
 }

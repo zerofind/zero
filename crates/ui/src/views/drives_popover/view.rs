@@ -195,16 +195,11 @@ impl DrivesPopover {
                 };
 
                 // Extract file count and bytes from result summary if available
-                let (file_count, bytes_transferred) = run
-                    .result
-                    .as_ref()
-                    .map(|r| {
-                        let files = r.summary.files_added
-                            + r.summary.files_modified
-                            + r.summary.files_deleted;
-                        (files, r.summary.bytes_transferred)
-                    })
-                    .unwrap_or((0, 0));
+                let (file_count, bytes_transferred) = run.result.as_ref().map_or((0, 0), |r| {
+                    let files =
+                        r.summary.files_added + r.summary.files_modified + r.summary.files_deleted;
+                    (files, r.summary.bytes_transferred)
+                });
 
                 history.push(RunInfo {
                     automation_name: auto_name.clone(),
@@ -304,8 +299,14 @@ impl Render for DrivesPopover {
                             .label("Drives")
                             .compact()
                             .small()
-                            .when(self.active_tab == DriveTab::Drives, |b| b.primary())
-                            .when(self.active_tab != DriveTab::Drives, |b| b.ghost())
+                            .when(
+                                self.active_tab == DriveTab::Drives,
+                                gpui_component::button::ButtonVariants::primary,
+                            )
+                            .when(
+                                self.active_tab != DriveTab::Drives,
+                                gpui_component::button::ButtonVariants::ghost,
+                            )
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.active_tab = DriveTab::Drives;
                                 cx.notify();
@@ -316,8 +317,14 @@ impl Render for DrivesPopover {
                             .label("History")
                             .compact()
                             .small()
-                            .when(self.active_tab == DriveTab::History, |b| b.primary())
-                            .when(self.active_tab != DriveTab::History, |b| b.ghost())
+                            .when(
+                                self.active_tab == DriveTab::History,
+                                gpui_component::button::ButtonVariants::primary,
+                            )
+                            .when(
+                                self.active_tab != DriveTab::History,
+                                gpui_component::button::ButtonVariants::ghost,
+                            )
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.active_tab = DriveTab::History;
                                 cx.notify();

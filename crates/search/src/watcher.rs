@@ -234,7 +234,7 @@ impl IndexWatcher {
                         match node.node_type {
                             NodeType::File => self.stats.files_added += 1,
                             NodeType::Directory => self.stats.dirs_added += 1,
-                            _ => {}
+                            NodeType::Symlink => {}
                         }
                         index.insert(node);
                     }
@@ -278,10 +278,8 @@ impl IndexWatcher {
             }
             FileChangeKind::Renamed => {
                 // Rename events typically have two paths: [old, new]
-                if event.paths.len() >= 2 {
-                    let old_path = &event.paths[0];
-                    let new_path = &event.paths[1];
-
+                if let (Some(old_path), Some(new_path)) = (event.paths.first(), event.paths.get(1))
+                {
                     // Remove old
                     if let Some(old_str) = old_path.to_str() {
                         index.remove(old_str);
@@ -301,13 +299,11 @@ impl IndexWatcher {
                                 self.stats.files_added += 1;
                                 index.insert(node);
                             }
-                        } else {
+                        } else if let Some(path_str) = path.to_str()
+                            && index.remove(path_str)
+                        {
                             // File was renamed FROM this path (deleted)
-                            if let Some(path_str) = path.to_str() {
-                                if index.remove(path_str) {
-                                    self.stats.files_removed += 1;
-                                }
-                            }
+                            self.stats.files_removed += 1;
                         }
                     }
                 }
@@ -322,17 +318,14 @@ impl IndexWatcher {
     ///
     /// Returns `None` for non-UTF-8 paths (index requires UTF-8).
     fn create_node_from_path(path: &Path) -> Option<FileNode> {
-        let metadata = match path.metadata() {
-            Ok(m) => m,
-            Err(_) => return None,
+        let Ok(metadata) = path.metadata() else {
+            return None;
         };
 
         // Reject non-UTF-8 paths — index stores UTF-8 strings
         let path_str = path.to_str()?;
 
-        if path.file_name().is_none() {
-            return None;
-        }
+        path.file_name()?;
 
         let path_str = path_str.to_string();
 

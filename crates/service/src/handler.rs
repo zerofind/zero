@@ -34,7 +34,7 @@ pub struct ServiceHandler {
 
 impl ServiceHandler {
     /// Create a new service handler
-    pub async fn new(db: CacheDb, logger: ServiceLogger) -> Result<Self, cache::CacheError> {
+    pub fn new(db: CacheDb, logger: ServiceLogger) -> Result<Self, cache::CacheError> {
         let db = Arc::new(db);
         let executor_db = CacheDb::open()?;
         let executor = Executor::with_db(executor_db, ExecutorConfig::default());
@@ -116,7 +116,7 @@ impl ServiceHandler {
         // Route to handler
         let result = match request.method.as_str() {
             // Health/status
-            "ping" => self.handle_ping(request).await,
+            "ping" => self.handle_ping(request),
             "status" => self.handle_status(request).await,
 
             // Search
@@ -125,15 +125,15 @@ impl ServiceHandler {
             "search.reload" => self.handle_search_reload(request).await,
 
             // Drives
-            "drives" => self.handle_drives(request).await,
+            "drives" => self.handle_drives(request),
 
             // Automations
-            "automation.list" => self.handle_automation_list(request).await,
-            "automation.get" => self.handle_automation_get(request).await,
-            "automation.create" => self.handle_automation_create(request).await,
-            "automation.delete" => self.handle_automation_delete(request).await,
+            "automation.list" => self.handle_automation_list(request),
+            "automation.get" => self.handle_automation_get(request),
+            "automation.create" => self.handle_automation_create(request),
+            "automation.delete" => self.handle_automation_delete(request),
             "automation.run" => self.handle_automation_run(request).await,
-            "automation.history" => self.handle_automation_history(request).await,
+            "automation.history" => self.handle_automation_history(request),
 
             // Unknown method
             _ => Err(JsonRpcError::method_not_found(&request.method)),
@@ -160,7 +160,8 @@ impl ServiceHandler {
     // Request handlers
     // =========================================================================
 
-    async fn handle_ping(&self, _request: &JsonRpcRequest) -> Result<Value, JsonRpcError> {
+    #[allow(clippy::unused_self, clippy::unnecessary_wraps)]
+    fn handle_ping(&self, _request: &JsonRpcRequest) -> Result<Value, JsonRpcError> {
         Ok(serde_json::json!({
             "alive": true,
             "version": env!("CARGO_PKG_VERSION"),
@@ -280,7 +281,8 @@ impl ServiceHandler {
         }))
     }
 
-    async fn handle_drives(&self, _request: &JsonRpcRequest) -> Result<Value, JsonRpcError> {
+    #[allow(clippy::unused_self)]
+    fn handle_drives(&self, _request: &JsonRpcRequest) -> Result<Value, JsonRpcError> {
         use disk::{DiskInfo, VolumeInfo};
         use std::path::Path;
 
@@ -321,10 +323,7 @@ impl ServiceHandler {
         }))
     }
 
-    async fn handle_automation_list(
-        &self,
-        _request: &JsonRpcRequest,
-    ) -> Result<Value, JsonRpcError> {
+    fn handle_automation_list(&self, _request: &JsonRpcRequest) -> Result<Value, JsonRpcError> {
         let list = self
             .db
             .list_automations()
@@ -358,7 +357,7 @@ impl ServiceHandler {
         }))
     }
 
-    async fn handle_automation_get(&self, request: &JsonRpcRequest) -> Result<Value, JsonRpcError> {
+    fn handle_automation_get(&self, request: &JsonRpcRequest) -> Result<Value, JsonRpcError> {
         let id: i64 = request
             .require_param("id")
             .map_err(JsonRpcError::invalid_params)?;
@@ -397,10 +396,7 @@ impl ServiceHandler {
         }))
     }
 
-    async fn handle_automation_create(
-        &self,
-        request: &JsonRpcRequest,
-    ) -> Result<Value, JsonRpcError> {
+    fn handle_automation_create(&self, request: &JsonRpcRequest) -> Result<Value, JsonRpcError> {
         use cache::{NewAutomation, PathMapping, Settings, Triggers};
 
         let name: String = request
@@ -460,10 +456,7 @@ impl ServiceHandler {
         }))
     }
 
-    async fn handle_automation_delete(
-        &self,
-        request: &JsonRpcRequest,
-    ) -> Result<Value, JsonRpcError> {
+    fn handle_automation_delete(&self, request: &JsonRpcRequest) -> Result<Value, JsonRpcError> {
         let id: i64 = request
             .require_param("id")
             .map_err(JsonRpcError::invalid_params)?;
@@ -519,10 +512,7 @@ impl ServiceHandler {
         }))
     }
 
-    async fn handle_automation_history(
-        &self,
-        request: &JsonRpcRequest,
-    ) -> Result<Value, JsonRpcError> {
+    fn handle_automation_history(&self, request: &JsonRpcRequest) -> Result<Value, JsonRpcError> {
         let id: i64 = request
             .require_param("id")
             .map_err(JsonRpcError::invalid_params)?;

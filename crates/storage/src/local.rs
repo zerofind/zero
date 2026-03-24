@@ -54,7 +54,7 @@ impl LocalStorage {
     }
 
     /// Convert `std::fs::Metadata` to `StorageMetadata`
-    fn to_storage_metadata(meta: fs::Metadata) -> StorageMetadata {
+    fn to_storage_metadata(meta: &fs::Metadata) -> StorageMetadata {
         let mut storage_meta = if meta.is_dir() {
             StorageMetadata::directory()
         } else {
@@ -113,7 +113,7 @@ impl StorageBackend for LocalStorage {
         Box::pin(async move {
             let full_path = self.full_path(path);
             let meta = fs::metadata(&full_path).map_err(|e| Self::with_path(e.into(), path))?;
-            Ok(Self::to_storage_metadata(meta))
+            Ok(Self::to_storage_metadata(&meta))
         })
     }
 
@@ -156,10 +156,21 @@ impl StorageBackend for LocalStorage {
             // Read in chunks for progress reporting
             const CHUNK_SIZE: usize = 64 * 1024; // 64KB chunks
 
+            let buf_len = buffer.len();
             while bytes_read < length {
                 let chunk_len = std::cmp::min(CHUNK_SIZE, length - bytes_read);
+                let chunk = buffer
+                    .get_mut(bytes_read..bytes_read + chunk_len)
+                    .ok_or_else(|| StorageError::Io {
+                        message: format!(
+                            "buffer slice out of bounds: {}..{} (len {buf_len})",
+                            bytes_read,
+                            bytes_read + chunk_len,
+                        ),
+                        source: None,
+                    })?;
                 let n = file
-                    .read(&mut buffer[bytes_read..bytes_read + chunk_len])
+                    .read(chunk)
                     .map_err(|e| Self::with_path(e.into(), path))?;
 
                 if n == 0 {
@@ -197,7 +208,7 @@ impl StorageBackend for LocalStorage {
 
             // Return metadata
             let meta = fs::metadata(&full_path).map_err(|e| Self::with_path(e.into(), path))?;
-            Ok(Self::to_storage_metadata(meta))
+            Ok(Self::to_storage_metadata(&meta))
         })
     }
 
@@ -232,7 +243,7 @@ impl StorageBackend for LocalStorage {
 
             // Return metadata
             let meta = fs::metadata(&full_path).map_err(|e| Self::with_path(e.into(), path))?;
-            Ok(Self::to_storage_metadata(meta))
+            Ok(Self::to_storage_metadata(&meta))
         })
     }
 
@@ -288,9 +299,9 @@ impl StorageBackend for LocalStorage {
             let mut entries = Vec::new();
 
             if options.recursive {
-                self.list_recursive(&full_path, &full_path, &options, &mut entries)?;
+                Self::list_recursive(&full_path, &full_path, &options, &mut entries)?;
             } else {
-                self.list_single_dir(&full_path, &full_path, &options, &mut entries)?;
+                Self::list_single_dir(&full_path, &full_path, &options, &mut entries)?;
             }
 
             // Apply limit if specified
@@ -321,7 +332,7 @@ impl StorageBackend for LocalStorage {
 
             // Return metadata of the new file
             let meta = fs::metadata(&to_path).map_err(|e| Self::with_path(e.into(), to))?;
-            Ok(Self::to_storage_metadata(meta))
+            Ok(Self::to_storage_metadata(&meta))
         })
     }
 
@@ -343,7 +354,6 @@ impl StorageBackend for LocalStorage {
 impl LocalStorage {
     /// List entries in a single directory (non-recursive)
     fn list_single_dir(
-        &self,
         dir_path: &Path,
         root: &Path,
         options: &ListOptions,
@@ -387,7 +397,7 @@ impl LocalStorage {
                 .unwrap_or(&entry.path())
                 .to_path_buf();
 
-            let storage_meta = Self::to_storage_metadata(metadata);
+            let storage_meta = Self::to_storage_metadata(&metadata);
             entries.push(StorageEntry::new(rel_path, storage_meta));
         }
 
@@ -396,7 +406,6 @@ impl LocalStorage {
 
     /// List entries recursively
     fn list_recursive(
-        &self,
         dir_path: &Path,
         root: &Path,
         options: &ListOptions,
@@ -442,13 +451,13 @@ impl LocalStorage {
                     .unwrap_or(&entry.path())
                     .to_path_buf();
 
-                let storage_meta = Self::to_storage_metadata(metadata);
+                let storage_meta = Self::to_storage_metadata(&metadata);
                 entries.push(StorageEntry::new(rel_path, storage_meta));
             }
 
             // Recurse into directories
             if is_dir {
-                self.list_recursive(&entry.path(), root, options, entries)?;
+                Self::list_recursive(&entry.path(), root, options, entries)?;
             }
         }
 

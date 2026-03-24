@@ -1,6 +1,10 @@
 //! macOS-specific storage access for disk wiping
 //!
 //! Uses the raw device (/dev/rdisk*) with `F_NOCACHE` for direct I/O.
+//! This module is inherently unsafe as it interacts with macOS kernel
+//! via libc FFI (fcntl, ioctl, unmount).
+
+#![allow(unsafe_code)]
 
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Result, Seek, SeekFrom, Write};
@@ -115,8 +119,8 @@ pub fn unmount(path: &Path) -> Result<()> {
 pub fn get_block_device_size(file: &File) -> Result<u64> {
     // DKIOCGETBLOCKSIZE = _IOR('d', 24, u32)
     // DKIOCGETBLOCKCOUNT = _IOR('d', 25, u64)
-    const DKIOCGETBLOCKSIZE: libc::c_ulong = 0x40046418;
-    const DKIOCGETBLOCKCOUNT: libc::c_ulong = 0x40086419;
+    const DKIOCGETBLOCKSIZE: libc::c_ulong = 0x4004_6418;
+    const DKIOCGETBLOCKCOUNT: libc::c_ulong = 0x4008_6419;
 
     let fd = file.as_raw_fd();
 
@@ -124,11 +128,16 @@ pub fn get_block_device_size(file: &File) -> Result<u64> {
     let mut block_count: u64 = 0;
 
     // SAFETY: fd is a valid file descriptor (from File). ioctl writes into
-    // the provided pointers; we check for -1 (error) before using the values.
+    // the provided pointer; we check for -1 (error) before using the value.
     unsafe {
         if libc::ioctl(fd, DKIOCGETBLOCKSIZE, &mut block_size) == -1 {
             return Err(std::io::Error::last_os_error());
         }
+    }
+
+    // SAFETY: fd is a valid file descriptor (from File). ioctl writes into
+    // the provided pointer; we check for -1 (error) before using the value.
+    unsafe {
         if libc::ioctl(fd, DKIOCGETBLOCKCOUNT, &mut block_count) == -1 {
             return Err(std::io::Error::last_os_error());
         }

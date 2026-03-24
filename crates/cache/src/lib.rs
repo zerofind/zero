@@ -39,7 +39,7 @@
 //! let device_info = DeviceInfo::usb("ABC123", Some("My USB Drive".to_string()));
 //! let (storage, db) = manager.get_or_create_storage(
 //!     Path::new("/Volumes/MyDrive"),
-//!     Some(device_info)
+//!     &Some(device_info)
 //! )?;
 //!
 //! // Lookup a cached file (instant if metadata matches)

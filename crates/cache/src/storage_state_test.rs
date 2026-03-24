@@ -15,8 +15,8 @@ fn test_entry(
         path: path.to_string(),
         size,
         mtime: 1700000000,
-        hash_xxh3: xxh3.map(|h| h.to_vec()),
-        hash_blake3: blake3.map(|h| h.to_vec()),
+        hash_xxh3: xxh3.map(<[u8]>::to_vec),
+        hash_blake3: blake3.map(<[u8]>::to_vec),
         indexed_at: 1700000000,
     }
 }

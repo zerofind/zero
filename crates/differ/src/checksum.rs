@@ -68,8 +68,7 @@ where
     let dest_tx = dest_hash_tx;
 
     // Build HashMap of dest paths for O(1) lookup
-    let dest_map: HashMap<&Path, &FileEntry> =
-        HashMap::from_iter(dest.iter().map(|e| (e.path.as_path(), e)));
+    let dest_map: HashMap<&Path, &FileEntry> = dest.iter().map(|e| (e.path.as_path(), e)).collect();
 
     // Find files that exist in both and need checksum comparison
     // (same size, so we can't tell from metadata alone)
@@ -97,17 +96,17 @@ where
             callback,
             &source_hashes,
             &dest_hashes,
-            &source_tx,
-            &dest_tx,
+            source_tx.as_ref(),
+            dest_tx.as_ref(),
         ),
         ProgressMode::Atomic(progress) => hash_pairs_with_atomic_progress(
             &pairs_to_compare,
             options.hash_algorithm,
-            progress,
+            &progress,
             &source_hashes,
             &dest_hashes,
-            &source_tx,
-            &dest_tx,
+            source_tx.as_ref(),
+            dest_tx.as_ref(),
         ),
     };
 
@@ -134,8 +133,7 @@ pub(crate) fn diff_with_checksums_simple(
     options: &DiffOptions,
 ) -> DiffResult {
     // Build HashMap of dest paths for O(1) lookup
-    let dest_map: HashMap<&Path, &FileEntry> =
-        HashMap::from_iter(dest.iter().map(|e| (e.path.as_path(), e)));
+    let dest_map: HashMap<&Path, &FileEntry> = dest.iter().map(|e| (e.path.as_path(), e)).collect();
 
     // Find files that need checksum comparison
     let pairs_to_compare: Vec<(&FileEntry, &FileEntry)> = source
@@ -196,8 +194,8 @@ fn hash_pairs_with_callback<'a, F>(
     callback: &F,
     source_hashes: &Arc<Mutex<Vec<ComputedHash>>>,
     dest_hashes: &Arc<Mutex<Vec<ComputedHash>>>,
-    source_tx: &Option<HashSender>,
-    dest_tx: &Option<HashSender>,
+    source_tx: Option<&HashSender>,
+    dest_tx: Option<&HashSender>,
 ) -> Vec<(&'a FileEntry, &'a FileEntry, bool)>
 where
     F: Fn(DiffProgress) + Send + Sync,
@@ -216,7 +214,7 @@ where
             .map(|(src_entry, dest_entry)| {
                 // Update current file info
                 {
-                    let mut cf = current_file.lock().unwrap();
+                    let mut cf = current_file.lock().expect("current_file mutex poisoned");
                     *cf = src_entry.path.to_string_lossy().to_string();
                 }
                 current_file_size.store(src_entry.size + dest_entry.size, Ordering::Relaxed);
@@ -264,11 +262,11 @@ where
 fn hash_pairs_with_atomic_progress<'a>(
     pairs: &[(&'a FileEntry, &'a FileEntry)],
     algorithm: HashAlgorithm,
-    progress: Arc<AtomicProgress>,
+    progress: &Arc<AtomicProgress>,
     source_hashes: &Arc<Mutex<Vec<ComputedHash>>>,
     dest_hashes: &Arc<Mutex<Vec<ComputedHash>>>,
-    source_tx: &Option<HashSender>,
-    dest_tx: &Option<HashSender>,
+    source_tx: Option<&HashSender>,
+    dest_tx: Option<&HashSender>,
 ) -> Vec<(&'a FileEntry, &'a FileEntry, bool)> {
     // Set up progress tracker with totals
     let files_total = pairs.len();
@@ -284,9 +282,8 @@ fn hash_pairs_with_atomic_progress<'a>(
                 progress.set_current_file(&src_entry.path.to_string_lossy());
 
                 // Compare files with per-chunk progress updates
-                let (is_same, src_hash, dest_hash) = compare_files_by_hash_with_progress(
-                    src_entry, dest_entry, algorithm, &progress,
-                );
+                let (is_same, src_hash, dest_hash) =
+                    compare_files_by_hash_with_progress(src_entry, dest_entry, algorithm, progress);
 
                 // Send hashes to channels or collect them
                 send_or_collect_hash(src_hash, source_tx, source_hashes);
@@ -372,7 +369,7 @@ fn build_diff_result(
 
     // Find files only in destination (removed/orphans)
     let source_map: HashMap<&Path, &FileEntry> =
-        HashMap::from_iter(source.iter().map(|e| (e.path.as_path(), e)));
+        source.iter().map(|e| (e.path.as_path(), e)).collect();
 
     for dest_entry in dest {
         if !source_map.contains_key(dest_entry.path.as_path()) {
@@ -390,7 +387,7 @@ fn build_diff_result(
 /// Send hash to channel or collect in vec as fallback
 fn send_or_collect_hash(
     hash: Option<ComputedHash>,
-    tx: &Option<HashSender>,
+    tx: Option<&HashSender>,
     hashes: &Arc<Mutex<Vec<ComputedHash>>>,
 ) {
     if let Some(h) = hash {
@@ -405,7 +402,7 @@ fn send_or_collect_hash(
 fn extract_hashes(hashes: Arc<Mutex<Vec<ComputedHash>>>) -> Vec<ComputedHash> {
     match Arc::try_unwrap(hashes) {
         Ok(mutex) => mutex.into_inner().unwrap_or_default(),
-        Err(arc) => arc.lock().unwrap().clone(),
+        Err(arc) => arc.lock().expect("hash collection mutex poisoned").clone(),
     }
 }
 

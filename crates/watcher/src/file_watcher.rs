@@ -202,28 +202,29 @@ impl FileWatcher {
         };
 
         // Find the watch root for this event
+        let first_path = event.paths.first()?;
         let watch_root = self
-            .find_watch_root(&event.paths[0])
-            .unwrap_or_else(|| event.paths[0].clone());
+            .find_watch_root(first_path)
+            .unwrap_or_else(|| first_path.clone());
 
         // Apply debouncing
-        let first_path = &event.paths[0];
         let now = Instant::now();
         let debounce_duration = Duration::from_millis(self.config.debounce_ms);
 
-        if let Some((last_kind, last_time)) = self.debounce_state.get(first_path) {
-            if *last_kind == kind && now.duration_since(*last_time) < debounce_duration {
-                // Skip this event (debounced)
-                return None;
-            }
+        if let Some((last_kind, last_time)) = self.debounce_state.get(first_path)
+            && *last_kind == kind
+            && now.duration_since(*last_time) < debounce_duration
+        {
+            return None;
         }
 
         // Update debounce state
         self.debounce_state.insert(first_path.clone(), (kind, now));
 
         // Clean up old debounce entries periodically
-        if self.debounce_state.len() > 1000 {
-            let cutoff = now.checked_sub(debounce_duration * 10).unwrap();
+        if self.debounce_state.len() > 1000
+            && let Some(cutoff) = now.checked_sub(debounce_duration * 10)
+        {
             self.debounce_state.retain(|_, (_, time)| *time > cutoff);
         }
 
@@ -347,10 +348,10 @@ impl AsyncFileWatcher {
 
         tokio::spawn(async move {
             loop {
-                if let Some(event) = self.watcher.next_event_timeout(Duration::from_millis(100)) {
-                    if tx.send(event).await.is_err() {
-                        break;
-                    }
+                if let Some(event) = self.watcher.next_event_timeout(Duration::from_millis(100))
+                    && tx.send(event).await.is_err()
+                {
+                    break;
                 }
             }
         });

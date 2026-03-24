@@ -149,8 +149,7 @@ impl SearchService {
     pub fn indexing_files(&self) -> u64 {
         self.indexing_progress
             .as_ref()
-            .map(|p| p.files() as u64)
-            .unwrap_or(0)
+            .map_or(0, |p| p.files() as u64)
     }
 
     /// Number of in-memory indexes currently loaded.
@@ -184,7 +183,7 @@ impl SearchService {
 
     pub fn rebuild(
         &mut self,
-        settings_roots: Vec<PathBuf>,
+        settings_roots: &[PathBuf],
         cx: &mut Context<Self>,
     ) -> Arc<CrawlProgress> {
         tracing::info!(roots = settings_roots.len(), "rebuild requested");
@@ -199,7 +198,7 @@ impl SearchService {
             .collect();
 
         let path_label = if roots_strings.len() == 1 {
-            roots_strings[0].clone()
+            roots_strings.first().cloned().unwrap_or_default()
         } else if roots_strings.is_empty() {
             "search roots".to_string()
         } else {
@@ -381,6 +380,7 @@ impl SearchService {
 
     // -- Internal -------------------------------------------------------------
 
+    #[allow(clippy::unused_self)] // method for API consistency
     fn async_load(&mut self, cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| {
             // 1. Gather root metadata (already cached from IndexManager::new())
@@ -622,8 +622,7 @@ impl SearchService {
                 // If we have dirty roots and 2s have passed since last event, rebuild
                 if !dirty_roots.is_empty() {
                     let elapsed = last_event_time
-                        .map(|t| t.elapsed())
-                        .unwrap_or(Duration::ZERO);
+                        .map_or(Duration::ZERO, |t| t.elapsed());
 
                     if elapsed >= Duration::from_secs(2) {
                         let roots_to_rebuild: Vec<String> = dirty_roots.drain().collect();

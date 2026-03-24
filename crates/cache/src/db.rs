@@ -142,9 +142,10 @@ impl ControlDb {
     pub fn get_or_create_storage(
         &self,
         path: &Path,
-        device_info: Option<DeviceInfo>,
+        device_info: &Option<DeviceInfo>,
     ) -> Result<Storage, CacheError> {
         let path = path.to_path_buf();
+        let device_info = device_info.clone();
         let storage = self
             .store
             .write(|tx| {
@@ -268,7 +269,7 @@ impl ControlDb {
     pub fn get_or_create_storage_db(
         &self,
         path: &Path,
-        device_info: Option<DeviceInfo>,
+        device_info: &Option<DeviceInfo>,
     ) -> Result<(Storage, StorageDb), CacheError> {
         let storage = self.get_or_create_storage(path, device_info)?;
         let db = self.open_storage_db(&storage)?;
@@ -984,7 +985,7 @@ impl CacheManager {
     pub fn storage_db(&self, storage_id: i64) -> Result<Arc<StorageDb>, CacheError> {
         // Check if already open
         {
-            let cache = self.storage_dbs.read().unwrap();
+            let cache = self.storage_dbs.read().expect("storage_dbs lock poisoned");
             if let Some(db) = cache.get(&storage_id) {
                 return Ok(Arc::clone(db));
             }
@@ -1001,7 +1002,7 @@ impl CacheManager {
 
         // Cache it
         {
-            let mut cache = self.storage_dbs.write().unwrap();
+            let mut cache = self.storage_dbs.write().expect("storage_dbs lock poisoned");
             cache.insert(storage_id, Arc::clone(&db));
         }
 
@@ -1012,7 +1013,7 @@ impl CacheManager {
     pub fn get_or_create_storage(
         &self,
         path: &Path,
-        device_info: Option<DeviceInfo>,
+        device_info: &Option<DeviceInfo>,
     ) -> Result<(Storage, Arc<StorageDb>), CacheError> {
         let storage = self.control.get_or_create_storage(path, device_info)?;
         let db = self.storage_db(storage.id)?;
@@ -1021,13 +1022,13 @@ impl CacheManager {
 
     /// Close a cached storage database
     pub fn close_storage_db(&self, storage_id: i64) {
-        let mut cache = self.storage_dbs.write().unwrap();
+        let mut cache = self.storage_dbs.write().expect("storage_dbs lock poisoned");
         cache.remove(&storage_id);
     }
 
     /// Close all cached storage databases
     pub fn close_all_storage_dbs(&self) {
-        let mut cache = self.storage_dbs.write().unwrap();
+        let mut cache = self.storage_dbs.write().expect("storage_dbs lock poisoned");
         cache.clear();
     }
 }

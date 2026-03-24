@@ -86,7 +86,10 @@ impl SettingsView {
         let settings = Settings::load();
 
         // Mode selector (Light / Dark / System)
-        let mode_items: Vec<String> = MODE_LABELS.iter().map(|s| s.to_string()).collect();
+        let mode_items: Vec<String> = MODE_LABELS
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect();
         let mode_idx = match settings.theme_mode.as_str() {
             "light" => 0,
             "dark" => 1,
@@ -218,7 +221,7 @@ impl SettingsView {
         cx.notify();
 
         let roots = self.settings.search_roots.clone();
-        let progress = self.search.update(cx, |svc, cx| svc.rebuild(roots, cx));
+        let progress = self.search.update(cx, |svc, cx| svc.rebuild(&roots, cx));
 
         cx.emit(SettingsEvent::IndexRebuildStarted(progress.clone()));
 
@@ -269,7 +272,9 @@ impl SettingsView {
         self.reindexing_root = Some(idx);
         cx.notify();
 
-        let path = self.settings.search_roots[idx].clone();
+        let Some(path) = self.settings.search_roots.get(idx).cloned() else {
+            return;
+        };
         let path_str = path.to_string_lossy().to_string();
 
         self.search.update(cx, |svc, cx| {
@@ -310,7 +315,8 @@ impl SettingsView {
     pub(super) fn confirm_clear_index(&mut self, cx: &mut Context<Self>) {
         tracing::debug!("settings: confirm clear index");
         self.confirm_clear_index = false;
-        self.search.update(cx, |svc, cx| svc.clear(cx));
+        self.search
+            .update(cx, super::super::services::search::SearchService::clear);
         cx.notify();
     }
 

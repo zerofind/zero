@@ -124,11 +124,6 @@ impl Default for CrawlProgress {
     }
 }
 
-// SAFETY: All fields are atomic types (AtomicUsize, AtomicU64, AtomicBool)
-// which are inherently Send+Sync.
-unsafe impl Send for CrawlProgress {}
-unsafe impl Sync for CrawlProgress {}
-
 /// Error type for scanner operations
 #[derive(Debug, thiserror::Error)]
 pub enum ScanError {
@@ -157,7 +152,7 @@ pub enum ScanError {
 /// use std::path::Path;
 /// use scanner::{scan, ScanOptions};
 ///
-/// let entries = scan(Path::new("/some/path"), ScanOptions::default()).unwrap();
+/// let entries = scan(Path::new("/some/path"), &ScanOptions::default()).unwrap();
 /// for result in entries {
 ///     match result {
 ///         Ok(entry) => println!("{}: {} bytes", entry.path.display(), entry.size),
@@ -167,8 +162,8 @@ pub enum ScanError {
 /// ```
 pub fn scan(
     root: &Path,
-    options: ScanOptions,
-) -> Result<impl Iterator<Item = Result<FileEntry, ScanError>>, ScanError> {
+    options: &ScanOptions,
+) -> Result<impl Iterator<Item = Result<FileEntry, ScanError>> + use<>, ScanError> {
     scan_with_progress(root, options, None)
 }
 
@@ -200,7 +195,7 @@ pub fn scan(
 /// // Run the scan
 /// let entries = scan_with_progress(
 ///     Path::new("/some/path"),
-///     ScanOptions::default(),
+///     &ScanOptions::default(),
 ///     Some(progress),
 /// ).unwrap();
 ///
@@ -211,9 +206,9 @@ pub fn scan(
 #[instrument(skip(options, progress), fields(root = %root.display()))]
 pub fn scan_with_progress(
     root: &Path,
-    options: ScanOptions,
+    options: &ScanOptions,
     progress: Option<Arc<CrawlProgress>>,
-) -> Result<impl Iterator<Item = Result<FileEntry, ScanError>>, ScanError> {
+) -> Result<impl Iterator<Item = Result<FileEntry, ScanError>> + use<>, ScanError> {
     // Validate root path
     if !root.exists() {
         return Err(ScanError::RootNotFound(root.to_path_buf()));
@@ -352,7 +347,7 @@ pub fn scan_with_progress(
 /// Convenience function when you need all entries in memory.
 /// For large directories, prefer using `scan()` and processing entries
 /// in a streaming fashion.
-pub fn scan_collect(root: &Path, options: ScanOptions) -> Result<Vec<FileEntry>, ScanError> {
+pub fn scan_collect(root: &Path, options: &ScanOptions) -> Result<Vec<FileEntry>, ScanError> {
     scan_collect_with_progress(root, options, None)
 }
 
@@ -363,7 +358,7 @@ pub fn scan_collect(root: &Path, options: ScanOptions) -> Result<Vec<FileEntry>,
 /// entries in a streaming fashion.
 pub fn scan_collect_with_progress(
     root: &Path,
-    options: ScanOptions,
+    options: &ScanOptions,
     progress: Option<Arc<CrawlProgress>>,
 ) -> Result<Vec<FileEntry>, ScanError> {
     let iter = scan_with_progress(root, options, progress)?;

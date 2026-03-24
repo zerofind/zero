@@ -38,7 +38,10 @@ impl SplitPane {
             return;
         }
         self.history_idx -= 1;
-        self.current_path = self.history[self.history_idx].clone();
+        // history_idx validated by bounds check above
+        #[allow(clippy::indexing_slicing)]
+        self.current_path
+            .clone_from(&self.history[self.history_idx]);
     }
 
     #[allow(dead_code)]
@@ -47,6 +50,9 @@ impl SplitPane {
             return;
         }
         self.history_idx += 1;
-        self.current_path = self.history[self.history_idx].clone();
+        // history_idx validated by bounds check above
+        #[allow(clippy::indexing_slicing)]
+        self.current_path
+            .clone_from(&self.history[self.history_idx]);
     }
 }

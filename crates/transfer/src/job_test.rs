@@ -174,7 +174,7 @@ fn test_transfer_progress_percent_zero_bytes() {
 
     // With zero bytes, should return 100% or handle gracefully
     let percent = progress.percent();
-    assert!(percent >= 0.0 && percent <= 100.0);
+    assert!((0.0..=100.0).contains(&percent));
 }
 
 #[test]
@@ -217,7 +217,7 @@ fn test_transfer_options_with_verify() {
 #[test]
 fn test_transfer_error_source_not_found_display() {
     let err = TransferError::SourceNotFound(std::path::PathBuf::from("/test/path"));
-    let display = format!("{}", err);
+    let display = format!("{err}");
     assert!(display.contains("/test/path"));
 }
 

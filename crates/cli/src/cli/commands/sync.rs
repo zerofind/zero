@@ -422,9 +422,8 @@ fn matches_exclude_pattern(path: &str, patterns: &[String]) -> bool {
         if pattern.contains('*') || pattern.contains('?') {
             // Convert glob to simple matching
             let pattern_parts: Vec<&str> = pattern.split('*').collect();
-            if pattern_parts.len() == 2 {
+            if let [prefix, suffix] = pattern_parts.as_slice() {
                 // Pattern like "*.txt" or "prefix*"
-                let (prefix, suffix) = (pattern_parts[0], pattern_parts[1]);
                 if path.starts_with(prefix) && path.ends_with(suffix) {
                     return true;
                 }

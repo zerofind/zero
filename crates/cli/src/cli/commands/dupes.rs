@@ -103,7 +103,7 @@ fn cmd_dupes_scan(
         ..Default::default()
     };
 
-    let result = find_duplicates(path, options)?;
+    let result = find_duplicates(path, &options)?;
     output_results(out, args, &result, Some(path), start_time)
 }
 
@@ -117,10 +117,12 @@ fn cmd_dupes_filtered(
     // Build header message
     let mut header = format!("Finding duplicates in {}", path.display());
     if let Some(ref query) = args.query {
-        header.push_str(&format!(" matching \"{query}\""));
+        use std::fmt::Write;
+        let _ = write!(header, " matching \"{query}\"");
     }
     if let Some(type_filter) = args.type_filter {
-        header.push_str(&format!(" (type: {type_filter:?})").to_lowercase());
+        let suffix = format!(" (type: {type_filter:?})").to_lowercase();
+        header.push_str(&suffix);
     }
     out.header(&header);
     print_mode_info(out, args);
@@ -146,9 +148,8 @@ fn cmd_dupes_filtered(
         }
     };
 
-    let index = match manager.indexes().next() {
-        Some(idx) => idx,
-        None => return Ok(()),
+    let Some(index) = manager.indexes().next() else {
+        return Ok(());
     };
 
     // Search for files matching criteria
@@ -211,9 +212,8 @@ fn cmd_dupes_from_stdin(
     let mut has_sizes = false;
 
     for line in io::stdin().lock().lines() {
-        let line = match line {
-            Ok(l) => l,
-            Err(_) => continue,
+        let Ok(line) = line else {
+            continue;
         };
         let line = line.trim();
         if line.is_empty() {
@@ -365,6 +365,7 @@ fn search_files(
 }
 
 /// Find duplicates among entries with known sizes (fast path - no stat calls for grouping)
+#[allow(clippy::unnecessary_wraps)] // Returns Result for consistency with find_duplicates API
 fn find_duplicates_in_entries(
     entries: Vec<(PathBuf, u64)>,
     _args: &DupesArgs,
@@ -440,6 +441,7 @@ fn find_duplicates_in_entries(
 }
 
 /// Find duplicates among a specific set of paths (requires stat calls)
+#[allow(clippy::unnecessary_wraps)] // Returns Result for consistency with find_duplicates API
 fn find_duplicates_in_paths(paths: &[PathBuf], args: &DupesArgs) -> anyhow::Result<DedupResult> {
     use hasher::{HashAlgorithm, hash_file_with_buffer};
     use rayon::prelude::*;
@@ -534,6 +536,7 @@ fn print_mode_info(out: &Outputter, args: &DupesArgs) {
 }
 
 /// Output the dedup results
+#[allow(clippy::unnecessary_wraps)] // Returns Result for CLI command consistency
 fn output_results(
     out: &Outputter,
     args: &DupesArgs,

@@ -11,7 +11,7 @@ use std::path::Path;
 use std::time::Instant;
 use transfer::compare_permissions;
 
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub fn cmd_diff(
     out: &Outputter,
     source: &Path,
@@ -55,11 +55,11 @@ pub fn cmd_diff(
 
     // Scan both directories
     out.info("Scanning source...");
-    let source_entries = scan_collect(source, scan_options.clone())?;
+    let source_entries = scan_collect(source, &scan_options)?;
     out.indented(&format!("Found {} files", source_entries.len()));
 
     out.info("Scanning destination...");
-    let dest_entries = scan_collect(dest, scan_options)?;
+    let dest_entries = scan_collect(dest, &scan_options)?;
     out.indented(&format!("Found {} files", dest_entries.len()));
     out.newline();
 

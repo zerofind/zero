@@ -106,7 +106,7 @@ fn test_add_task_validation_error() {
         id: 0,
         list: DEFAULT_LIST.to_string(),
         status: TaskStatus::Open,
-        text: "".to_string(), // Invalid
+        text: String::new(), // Invalid
         created: 0,
         modified: 0,
         tags: vec![],
@@ -420,7 +420,7 @@ fn test_persistence() {
 }
 
 #[test]
-#[ignore] // Uses global context state - run with: cargo test test_context_operations -- --ignored
+#[ignore = "uses global context state — run with: cargo test test_context_operations -- --ignored"]
 fn test_context_operations() {
     // This test covers context save, restore, and close in sequence
     // to avoid parallel test interference with global context state

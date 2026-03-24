@@ -20,5 +20,6 @@ pub fn generate_install_id() -> String {
 
     let input = format!("{home}{os}{arch}");
     let hash = Sha256::digest(input.as_bytes());
-    hex::encode(&hash[..16])
+    let truncated = hash.get(..16).unwrap_or(&hash);
+    hex::encode(truncated)
 }

@@ -105,8 +105,8 @@ impl Element for TerminalElement {
             font: font.clone(),
             color: Hsla::default(),
             background_color: None,
-            underline: Default::default(),
-            strikethrough: Default::default(),
+            underline: Option::default(),
+            strikethrough: Option::default(),
         };
         let shaped = text_system.shape_line("m".into(), font_size, &[em_run], None);
         let cell_width = shaped.width;

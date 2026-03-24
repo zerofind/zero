@@ -108,7 +108,7 @@ const OPENAI_MODELS: &[ModelInfo] = &[
         id: "o3",
         name: "o3",
         thinking: false,
-        max_output_tokens: 100000,
+        max_output_tokens: 100_000,
     },
     ModelInfo {
         id: "o3-mini",

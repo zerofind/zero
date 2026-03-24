@@ -155,7 +155,7 @@ pub enum TodoCommands {
 
 fn cmd_open(out: &Outputter, file: &str) -> anyhow::Result<()> {
     // Ensure .todo extension
-    let file = if file.ends_with(".todo") {
+    let file = if file.to_ascii_lowercase().ends_with(".todo") {
         file.to_string()
     } else {
         format!("{file}.todo")
@@ -511,11 +511,13 @@ fn print_task(out: &Outputter, task: &Task) {
     let mut line = format!("  {} #{} {}", status_icon, task.id, task.text);
 
     if !task.tags.is_empty() {
-        line.push_str(&format!(" [{}]", task.tags.join(", ")));
+        use std::fmt::Write;
+        let _ = write!(line, " [{}]", task.tags.join(", "));
     }
 
     if let Some(ref assigned) = task.assigned {
-        line.push_str(&format!(" @{assigned}"));
+        use std::fmt::Write;
+        let _ = write!(line, " @{assigned}");
     }
 
     if task.is_overdue() {

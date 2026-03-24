@@ -282,7 +282,7 @@ pub fn run_wipe_cancellable<F, C>(
 ) -> Result<EraseResult, EraseError>
 where
     F: FnMut(EraseProgress),
-    C: Fn() -> bool + Clone,
+    C: Fn() -> bool,
 {
     run_wipe_with_resume_and_cancel(
         target,
@@ -290,7 +290,7 @@ where
         options,
         resume_state,
         progress_callback,
-        Some(is_cancelled),
+        Some(&is_cancelled),
     )
 }
 
@@ -314,7 +314,7 @@ where
         options,
         resume_state,
         progress_callback,
-        None,
+        None::<&fn() -> bool>,
     )
 }
 
@@ -330,11 +330,11 @@ fn run_wipe_with_resume_and_cancel<F, C>(
     options: &EraseOptions,
     resume_state: Option<EraseState>,
     mut progress_callback: F,
-    is_cancelled: Option<C>,
+    is_cancelled: Option<&C>,
 ) -> Result<EraseResult, EraseError>
 where
     F: FnMut(EraseProgress),
-    C: Fn() -> bool + Clone,
+    C: Fn() -> bool,
 {
     let start_time = Instant::now();
     let mut state = WipeState::new();
@@ -458,7 +458,6 @@ where
                 stage.description()
             );
 
-            let cancel_check = is_cancelled.clone();
             let fill_result = run_fill_pass_with_state_cancellable(
                 &mut *access,
                 &stage_to_run,
@@ -466,7 +465,7 @@ where
                 options.block_size,
                 &mut state,
                 resume_position,
-                cancel_check,
+                is_cancelled,
                 |wipe_state: &WipeState| {
                     // Periodic progress reporting during fill
                     let now = Instant::now();
@@ -553,7 +552,6 @@ where
             );
             let _ = persistent_state.save(&control_db);
 
-            let cancel_check = is_cancelled.clone();
             let verify_result = run_verify_pass_with_state_cancellable(
                 &mut *access,
                 &stage_to_run,
@@ -561,7 +559,7 @@ where
                 options.block_size,
                 &mut state,
                 verify_resume_position,
-                cancel_check,
+                is_cancelled,
                 |wipe_state: &WipeState| {
                     // Periodic progress reporting during verify
                     let now = Instant::now();
@@ -671,7 +669,7 @@ fn run_fill_pass_with_state_cancellable<C, P>(
     block_size: usize,
     state: &mut WipeState,
     start_position: u64,
-    is_cancelled: Option<C>,
+    is_cancelled: Option<&C>,
     mut on_progress: P,
 ) -> Result<(), EraseError>
 where
@@ -713,7 +711,7 @@ where
         // Seek to position
         access
             .seek(state.position)
-            .map_err(|e| handle_io_error(e, state, block_size, "seek"))?;
+            .map_err(|e| handle_io_error(&e, state, block_size, "seek"))?;
 
         // Write chunk
         match access.write(chunk) {
@@ -757,7 +755,7 @@ fn run_verify_pass_with_state_cancellable<C, P>(
     block_size: usize,
     state: &mut WipeState,
     start_position: u64,
-    is_cancelled: Option<C>,
+    is_cancelled: Option<&C>,
     mut on_progress: P,
 ) -> Result<(), EraseError>
 where
@@ -805,7 +803,10 @@ where
             })?;
 
         // Read chunk
-        let read_slice = &mut read_buf.as_mut_slice()[..expected.len()];
+        let read_slice = read_buf
+            .as_mut_slice()
+            .get_mut(..expected.len())
+            .expect("read buffer must be at least as large as expected data");
         let bytes_read = access
             .read(read_slice)
             .map_err(|e| EraseError::WriteFailed {
@@ -852,12 +853,12 @@ fn is_io_error(e: &std::io::Error) -> bool {
 
 /// Handle an I/O error, possibly marking a bad block
 fn handle_io_error(
-    e: std::io::Error,
+    e: &std::io::Error,
     state: &mut WipeState,
     block_size: usize,
     operation: &str,
 ) -> EraseError {
-    if is_io_error(&e) {
+    if is_io_error(e) {
         state.mark_bad_block(block_size);
         // Don't return error for bad blocks, we'll skip them
     }

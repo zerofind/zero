@@ -178,6 +178,7 @@ impl TableDelegate for CleanupDetailDelegate {
         self.rows.len()
     }
 
+    #[allow(clippy::indexing_slicing)] // col_ix provided by table framework
     fn column(&self, col_ix: usize, _cx: &App) -> &Column {
         &self.columns[col_ix]
     }
@@ -248,7 +249,7 @@ impl TableDelegate for CleanupDetailDelegate {
                     .child(
                         div()
                             .invisible()
-                            .group_hover("table-row", |s| s.visible())
+                            .group_hover("table-row", gpui::Styled::visible)
                             .child(
                                 Button::new(SharedString::from(format!("reveal-{row_ix}")))
                                     .icon(IconName::ExternalLink)

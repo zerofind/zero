@@ -100,7 +100,7 @@ impl ProgressDisplay {
         let stop_flag_clone = Arc::clone(&stop_flag);
 
         let handle = thread::spawn(move || {
-            Self::display_loop(progress, config, stop_flag_clone);
+            Self::display_loop(&progress, &config, &stop_flag_clone);
         });
 
         Self {
@@ -120,9 +120,9 @@ impl ProgressDisplay {
     }
 
     fn display_loop(
-        progress: Arc<AtomicProgress>,
-        config: DisplayConfig,
-        stop_flag: Arc<AtomicBool>,
+        progress: &Arc<AtomicProgress>,
+        config: &DisplayConfig,
+        stop_flag: &Arc<AtomicBool>,
     ) {
         let mut last_print = Instant::now();
         let mut last_bytes = 0u64;
@@ -170,7 +170,7 @@ impl ProgressDisplay {
             last_sample_time = Instant::now();
 
             let line = Self::format_progress_line_with_throughput(
-                &config,
+                config,
                 bytes_done,
                 bytes_total,
                 files_done,

@@ -35,6 +35,7 @@ impl AlacModifiers {
     }
 }
 
+#[allow(clippy::trivially_copy_pass_by_ref)] // API consistency with many callers
 pub fn to_esc_str(
     keystroke: &Keystroke,
     mode: &TermMode,
@@ -161,28 +162,28 @@ pub fn to_esc_str(
     if modifiers.any() {
         let modifier_code = modifier_code(keystroke);
         let modified_esc_str = match keystroke.key.as_ref() {
-            "up" => Some(format!("\x1b[1;{}A", modifier_code)),
-            "down" => Some(format!("\x1b[1;{}B", modifier_code)),
-            "right" => Some(format!("\x1b[1;{}C", modifier_code)),
-            "left" => Some(format!("\x1b[1;{}D", modifier_code)),
-            "f1" => Some(format!("\x1b[1;{}P", modifier_code)),
-            "f2" => Some(format!("\x1b[1;{}Q", modifier_code)),
-            "f3" => Some(format!("\x1b[1;{}R", modifier_code)),
-            "f4" => Some(format!("\x1b[1;{}S", modifier_code)),
-            "f5" => Some(format!("\x1b[15;{}~", modifier_code)),
-            "f6" => Some(format!("\x1b[17;{}~", modifier_code)),
-            "f7" => Some(format!("\x1b[18;{}~", modifier_code)),
-            "f8" => Some(format!("\x1b[19;{}~", modifier_code)),
-            "f9" => Some(format!("\x1b[20;{}~", modifier_code)),
-            "f10" => Some(format!("\x1b[21;{}~", modifier_code)),
-            "f11" => Some(format!("\x1b[23;{}~", modifier_code)),
-            "f12" => Some(format!("\x1b[24;{}~", modifier_code)),
+            "up" => Some(format!("\x1b[1;{modifier_code}A")),
+            "down" => Some(format!("\x1b[1;{modifier_code}B")),
+            "right" => Some(format!("\x1b[1;{modifier_code}C")),
+            "left" => Some(format!("\x1b[1;{modifier_code}D")),
+            "f1" => Some(format!("\x1b[1;{modifier_code}P")),
+            "f2" => Some(format!("\x1b[1;{modifier_code}Q")),
+            "f3" => Some(format!("\x1b[1;{modifier_code}R")),
+            "f4" => Some(format!("\x1b[1;{modifier_code}S")),
+            "f5" => Some(format!("\x1b[15;{modifier_code}~")),
+            "f6" => Some(format!("\x1b[17;{modifier_code}~")),
+            "f7" => Some(format!("\x1b[18;{modifier_code}~")),
+            "f8" => Some(format!("\x1b[19;{modifier_code}~")),
+            "f9" => Some(format!("\x1b[20;{modifier_code}~")),
+            "f10" => Some(format!("\x1b[21;{modifier_code}~")),
+            "f11" => Some(format!("\x1b[23;{modifier_code}~")),
+            "f12" => Some(format!("\x1b[24;{modifier_code}~")),
             _ if modifier_code == 2 => None,
-            "insert" => Some(format!("\x1b[2;{}~", modifier_code)),
-            "pageup" => Some(format!("\x1b[5;{}~", modifier_code)),
-            "pagedown" => Some(format!("\x1b[6;{}~", modifier_code)),
-            "end" => Some(format!("\x1b[1;{}F", modifier_code)),
-            "home" => Some(format!("\x1b[1;{}H", modifier_code)),
+            "insert" => Some(format!("\x1b[2;{modifier_code}~")),
+            "pageup" => Some(format!("\x1b[5;{modifier_code}~")),
+            "pagedown" => Some(format!("\x1b[6;{modifier_code}~")),
+            "end" => Some(format!("\x1b[1;{modifier_code}F")),
+            "home" => Some(format!("\x1b[1;{modifier_code}H")),
             _ => None,
         };
         if let Some(esc_str) = modified_esc_str {
@@ -201,7 +202,7 @@ pub fn to_esc_str(
             } else {
                 &keystroke.key
             };
-            return Some(Cow::Owned(format!("\x1b{}", key)));
+            return Some(Cow::Owned(format!("\x1b{key}")));
         }
     }
 

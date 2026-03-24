@@ -188,11 +188,13 @@ impl Settings {
     }
 
     /// Returns a reference to the currently active workspace.
+    #[allow(clippy::indexing_slicing)] // active_workspace always valid
     pub fn active_ws(&self) -> &Workspace {
         &self.workspaces[self.active_workspace]
     }
 
     /// Returns a mutable reference to the currently active workspace.
+    #[allow(clippy::indexing_slicing)] // active_workspace always valid
     pub fn active_ws_mut(&mut self) -> &mut Workspace {
         &mut self.workspaces[self.active_workspace]
     }

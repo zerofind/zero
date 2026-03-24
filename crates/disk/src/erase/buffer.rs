@@ -4,6 +4,8 @@
 //! the OS requires buffers to be aligned to the block size.
 //! This module provides a safe wrapper around aligned memory allocation.
 
+#![allow(unsafe_code)]
+
 use std::ptr::slice_from_raw_parts_mut;
 
 /// A buffer with memory aligned to a specific boundary
@@ -36,18 +38,17 @@ impl AlignedBuffer {
         assert!(size > 0, "Size must be greater than 0");
 
         // SAFETY: size > 0 and align is a power of two (both asserted above),
-        // satisfying Layout::from_size_align's preconditions. alloc() is
-        // checked for null — handle_alloc_error aborts on failure.
-        unsafe {
-            let layout = std::alloc::Layout::from_size_align_unchecked(size, align);
-            let ptr = std::alloc::alloc(layout);
+        // satisfying Layout::from_size_align's preconditions.
+        let layout = unsafe { std::alloc::Layout::from_size_align_unchecked(size, align) };
 
-            if ptr.is_null() {
-                std::alloc::handle_alloc_error(layout);
-            }
+        // SAFETY: layout has non-zero size (asserted above).
+        let ptr = unsafe { std::alloc::alloc(layout) };
 
-            AlignedBuffer { ptr, layout }
+        if ptr.is_null() {
+            std::alloc::handle_alloc_error(layout);
         }
+
+        AlignedBuffer { ptr, layout }
     }
 
     /// Create a new aligned buffer with default alignment (4096 bytes)

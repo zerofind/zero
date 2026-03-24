@@ -60,7 +60,7 @@ fn test_prune_max_entries() {
     let now = 1_700_000_000;
     // Insert more than MAX_ENTRIES
     for i in 0..10_050 {
-        store.record_open(&format!("/file_{}", i), now);
+        store.record_open(&format!("/file_{i}"), now);
     }
     // Should have been pruned during insert
     assert!(

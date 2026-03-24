@@ -38,7 +38,7 @@ impl TerminalView {
                     // Could play a sound or flash here
                 }
                 TerminalEvent::TitleChanged(title) => {
-                    this.title = title.clone();
+                    this.title.clone_from(title);
                     cx.notify();
                 }
             }

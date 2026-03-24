@@ -189,10 +189,10 @@ impl EditorView {
     }
 
     pub fn file_name(&self) -> String {
-        self.path
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| self.path.to_string_lossy().to_string())
+        self.path.file_name().map_or_else(
+            || self.path.to_string_lossy().to_string(),
+            |n| n.to_string_lossy().to_string(),
+        )
     }
 
     pub fn is_modified(&self) -> bool {
@@ -245,7 +245,7 @@ impl Render for EditorView {
             Some(
                 ConfirmDialog::new(
                     "Unsaved Changes",
-                    format!("Do you want to save changes to \"{}\"?", file_name),
+                    format!("Do you want to save changes to \"{file_name}\"?"),
                     move |_window, cx| {
                         save_entity.update(cx, |this, cx| {
                             this.confirm_close_save(cx);
@@ -293,6 +293,6 @@ impl Render for EditorView {
                     .bg(theme::content_bg(cx))
                     .child(content),
             )
-            .when_some(close_dialog, |el, dialog| el.child(dialog))
+            .when_some(close_dialog, gpui::ParentElement::child)
     }
 }

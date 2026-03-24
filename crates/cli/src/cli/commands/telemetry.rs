@@ -22,6 +22,7 @@ pub enum TelemetryCommands {
 }
 
 /// Handle telemetry subcommands
+#[allow(clippy::unnecessary_wraps)] // Returns Result for CLI command consistency
 pub fn cmd_telemetry(out: &Outputter, cmd: &TelemetryCommands) -> anyhow::Result<()> {
     match cmd {
         TelemetryCommands::Status => {
